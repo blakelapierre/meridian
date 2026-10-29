@@ -8,7 +8,7 @@ A bound hearth claims a 6 m radius. The binder may edit it. A stranger's certifi
 
 ## This pass
 
-Stay more than 40 m from your hearth for 60 seconds and the claim lapses. The line says `lapse`. Keys still work until then.
+While you are far from the hearth the line counts `away` in seconds. At 60 the claim still lapses.
 
 ## Proves
 

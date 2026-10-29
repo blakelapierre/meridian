@@ -25,7 +25,7 @@ import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPlaceDoor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, toggleDoor, tryPlaceDoor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -824,7 +824,7 @@ function actOn(sample) {
   if (selection.kind === "slip" && selection.cell) {
     const slip = yard.pieces.find((piece) => piece.id === "slip" && piece.at[0] === selection.cell[0] && piece.at[1] === selection.cell[1]);
     if (slip) {
-      takeTold(notes, skills, slip.text || "");
+      takeTold(notes, skills, slip.text || "", slip.by || "");
       yard.pieces = yard.pieces.filter((piece) => piece !== slip);
       report = "picked up";
       return;
@@ -949,7 +949,7 @@ function publish() {
   const boundNote = yard.bound ? " · bound" : "";
   const legNote = (vitals.left < 100 || vitals.right < 100) ? ` · L${Math.ceil(vitals.left)} R${Math.ceil(vitals.right)}` : "";
   const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${legNote}`;
-  const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}` : "";
+  const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}/${spoilCap(skills.mining.value)}` : "";
   const brushNote = slot === "bit" && brush !== "dig" ? ` · ${brush}` : "";
   const light = dayWord(tick);
   const lightNote = ` · ${light}`;
@@ -975,6 +975,7 @@ function publish() {
   const fiberNote = yard.fiber ? ` · fiber ${yard.fiber}` : "";
   const turnId = authority([...links.map((link) => link.to), meId].filter(Boolean), tick);
   const turnNote = links.length ? ` · turn ${turnId}` : "";
+  const awayNote = awayTicks > 0 ? ` · away ${Math.ceil(awayTicks / 30)}` : "";
   const pace = canvas.dataset.pace || "vsync";
   const rate = canvas.dataset.fps || "0";
   const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
@@ -994,7 +995,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -1483,9 +1484,10 @@ if (params.get("still") !== "1") {
         const hit = boltHit(bolts[bolt], wreckAt);
         if (hit && dummy.health > 0) applyDummyHit(dummy, "chest");
         const flying = bolts[bolt];
-        if (!hit && flying.position[2] < 0 && flying.velocity[2] < 0 && Math.abs(flying.velocity[0]) > Math.abs(flying.velocity[2])) {
+        if (!hit && (flying.bounces || 0) < 1 && flying.position[2] < 0 && flying.velocity[2] < 0 && Math.abs(flying.velocity[0]) > Math.abs(flying.velocity[2])) {
           flying.position[2] = 0;
           flying.velocity[2] *= -0.35;
+          flying.bounces = 1;
         } else if (hit || flying.age > 2 || flying.position[2] < -1) bolts.splice(bolt, 1);
       }
       terrain.setCell(cellId(player.position[1]));
@@ -1531,6 +1533,7 @@ if (params.get("still") !== "1") {
               pool.floor = next.floor;
               pool.key = next.key;
             }
+            if (pool.y < -190) pools.splice(pools.indexOf(pool), 1);
           }
         }
       }
@@ -1656,6 +1659,8 @@ if (params.get("still") !== "1") {
         if (!held) dragging = false;
         else sample.forward = Math.min(sample.forward, dragPace(true));
       }
+      const roadHere = yard.pieces.some((piece) => piece.id === "road" && piece.at[0] === Math.round(player.position[0] / 0.5) && piece.at[1] === Math.round(player.position[1] / 0.5));
+      if (roadHere && !dragging) sample.forward *= 1.15;
       const down = radialDown(player.position[0], player.position[1], player.position[2]);
       world.gravity = [down[0] * 9.81, down[1] * 9.81, down[2] * 9.81];
       world.drop = shellDrop(player.position[0], player.position[1]);
@@ -1759,7 +1764,10 @@ if (params.get("still") !== "1") {
     if (objectOnce) cycle(objectOnce, "object");
     if (turnEdge && slot === "hammer") {
       const mark = refreshAim(sample);
-      if (mark.inRange && (mark.kind === "wall" || mark.kind === "fin")) {
+      if (mark.inRange && mark.kind === "door") {
+        const door = toggleDoor(yard, mark.cell);
+        report = door.ok ? (door.open ? "open" : "shut") : door.reason;
+      } else if (mark.inRange && (mark.kind === "wall" || mark.kind === "fin")) {
         const turned = mark.kind === "fin" ? turnFin(yard, mark.cell) : turnWall(yard, mark.cell);
         if (turned.ok && mark.kind === "wall") {
           sendOps(encodeWall(identity, {

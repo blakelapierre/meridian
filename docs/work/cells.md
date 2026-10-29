@@ -8,7 +8,7 @@ The beach is two cells split at y = −40 m. South of that line is `atoll-0`. No
 
 ## This pass
 
-When another peer is linked, the line names whose turn it is. The turn rotates with the tick. It does not decide a hit. Cell ids are unchanged.
+Whose turn it is still does not award a hit. A pose and an edit stay on different channels.
 
 ## Proves
 

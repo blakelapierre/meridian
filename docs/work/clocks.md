@@ -8,7 +8,7 @@ Hands are the default. A strike is a contract you walk into. Leaving the volume 
 
 ## This pass
 
-The line says `hands` on the beach and `strike` inside a contract. `paid` is unchanged.
+Dominion is not a clock you can be on. The line is `hands` or `strike` and nothing else.
 
 ## Proves
 

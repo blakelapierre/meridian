@@ -6,7 +6,7 @@ Walking into the compound volume offers `atoll-skirmish`. E joins the side you e
 
 ## This pass
 
-The strike line names the channel when you are planting or defusing. `reinsert` and `paid` are unchanged.
+The channel name stays on the strike line. Planting is still the contract's own channel, not a new button.
 
 ## Proves
 

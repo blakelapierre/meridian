@@ -10,7 +10,7 @@ Integrity starts at 100. Standing on the live dummy clubs it down. Eight seconds
 
 ## This pass
 
-B, while you are not in a strike, spends one fiber. It gives back 15 blood and 8 integrity. You wake with two fiber.
+The same bandage also splints the worse leg by 20, if it is hurt. It still spends one fiber.
 
 ## Proves
 

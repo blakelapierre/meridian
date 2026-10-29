@@ -16,7 +16,7 @@ Peers meet through the lighthouse and a WebRTC data channel. Positions are unrel
 
 ## This pass
 
-A pose is not sent to a peer whose last position is outside interest. The reach is still 80 m plus mapping.
+A pose goes out on the snap channel. An edit goes out on ops. They are not the same socket.
 
 ## Proves
 

@@ -6,7 +6,7 @@ The crate starts as 30 metal, 8 stone, and one solar fin. The footing anchors pi
 
 ## This pass
 
-M with the hammer places a door for 3 metal, on support. P still places a post. The door does not open yet.
+Z on a door opens and shuts it. An open door is a thin post. M still places it.
 
 ## Proves
 

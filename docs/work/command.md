@@ -8,7 +8,7 @@ There is no war table, no overhead, and no company wallet. The AI clients are pe
 
 ## This pass
 
-The company wallet is 0. A charter can see `no spend`. You still cannot sit.
+You still cannot sit, and dominion is closed, so the empty wallet is not a table.
 
 ## Proves
 

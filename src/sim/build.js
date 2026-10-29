@@ -176,6 +176,13 @@ export function turnWall(yard, cell) {
   return { ok: true, yaw: wall.yaw };
 }
 
+export function toggleDoor(yard, cell) {
+  const door = yard.pieces.find((piece) => piece.id === "door" && sameCell(piece.at, cell));
+  if (!door) return { ok: false, reason: "none" };
+  door.open = !door.open;
+  return { ok: true, open: door.open };
+}
+
 export function turnFin(yard, cell) {
   const fin = yard.pieces.find((piece) => piece.id === "fin" && sameCell(piece.at, cell));
   if (!fin) return { ok: false, reason: "none" };

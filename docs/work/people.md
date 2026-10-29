@@ -6,7 +6,7 @@ Other clients are bodies. Tab cycles them. Backtick cycles objects. Standing ins
 
 ## This pass
 
-X while a person is targeted and within 2.2 m drags. Your pace drops to 1.6. They do not slide. X again lets go.
+Dragging still does not slide the other body. Your pace stays cut while X is held and they are close.
 
 ## Proves
 

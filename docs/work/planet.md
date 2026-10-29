@@ -8,7 +8,7 @@ The playable ground is still the Atoll tangent. Gravity is radial, toward a core
 
 ## This pass
 
-The chart readout names the sense radius beside the fix. `drop` stays on the status line when the shell is more than 2 cm down. The picture is still flat.
+The chart can dim what is outside your sense, and the world picture is still the flat tangent. `drop` is unchanged.
 
 ## Proves
 

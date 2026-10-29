@@ -6,7 +6,7 @@
 
 ## This pass
 
-The reload count is on the line while the line is locked. G still throws.
+Z opens a door as well as turning a wall or a fin. The reload count stays on the line.
 
 ## Proves
 

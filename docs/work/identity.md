@@ -8,7 +8,7 @@ Each client mints an Ed25519 key and signs proposals, shots, walls, lore, and pi
 
 ## This pass
 
-The line shows `harm` and how many salvage lines this client remembers, up to eight. O still prints the phrase.
+The harm count stays on this client. It is not yet a log an archive keeps.
 
 ## Proves
 

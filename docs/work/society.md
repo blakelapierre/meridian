@@ -8,7 +8,7 @@ Friendliness is still a score. Y offers a fellowship to the person you have targ
 
 ## This pass
 
-Two fellowships and a bound hearth put `charter` on the line. There is still no patron, so the company wallet cannot spend.
+A charter still cannot tithe. `no spend` stays on the line while the wallet is empty.
 
 ## Proves
 

@@ -113,6 +113,13 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plat
     ctx.arc(you.x, you.y, ring, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(half, half, half - 1, 0, Math.PI * 2);
+    ctx.arc(you.x, you.y, ring, 0, Math.PI * 2, true);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
+    ctx.fill("evenodd");
+    ctx.restore();
   }
   ctx.save();
   ctx.translate(you.x, you.y);
