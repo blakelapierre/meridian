@@ -18,6 +18,7 @@ import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom } from "../net/room.js";
 import { acceptShot, encodeShot } from "../net/shots.js";
 import { acceptPosition, encodePosition } from "../net/position.js";
+import { createEntry, entryLine, SMOKE, stepEntry } from "../sim/enter.js";
 
 const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
@@ -41,7 +42,9 @@ const keys = new Set();
 const peer = Boolean(params.get("id"));
 
 const atoll = await fetch("/content/atoll.json").then((response) => response.json());
-const spawn = params.get("look") === "dummy" ? atoll.placements.accuracyPad : atoll.placements.spawnFeet;
+const spawn = params.get("gate") === "1"
+  ? { x: 0, y: -11200, z: 0 }
+  : params.get("look") === "dummy" ? atoll.placements.accuracyPad : atoll.placements.spawnFeet;
 const player = createPlayer([spawn.x / 100, spawn.y / 100, spawn.z / 100]);
 const world = createPlayerWorld(player);
 world.tangentGravity = TANGENT_GRAVITY;
@@ -53,6 +56,8 @@ const terrain = createTerrain({
 });
 const dummy = createDummy();
 const yard = createYard(atoll.placements.footing);
+const entry = createEntry(atoll);
+let entryState = { joined: false, prompt: "", notice: "" };
 const seenShots = new Set();
 const seenWalls = new Set();
 let slot = params.get("look") === "dummy" ? "line" : "bit";
@@ -66,6 +71,8 @@ let trigger = false;
 let shotQueued = false;
 let cooldown = 0;
 let report = "";
+let useEdge = false;
+let buyEdge = false;
 let ops = null;
 const links = [];
 let followed = null;
@@ -88,6 +95,9 @@ addEventListener("keydown", (event) => {
   keys.add(event.code);
   if (event.code === "Digit1") slot = "line";
   if (event.code === "Digit3") slot = slot === "bit" ? "hammer" : "bit";
+  if (event.repeat) return;
+  if (event.code === "KeyE") useEdge = true;
+  if (event.code === "KeyB") buyEdge = true;
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
@@ -181,7 +191,9 @@ function publish() {
   const pace = canvas.dataset.pace || "vsync";
   const rate = canvas.dataset.fps || "0";
   const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
-  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const contract = entryState.joined ? "" : entryState.prompt;
+  const strike = entryState.joined ? entryLine(entryState) : contract;
+  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -190,6 +202,9 @@ function publish() {
   canvas.dataset.hash = terrain.hash();
   canvas.dataset.dummy = String(dummy.health);
   canvas.dataset.slot = slot;
+  canvas.dataset.prompt = entryState.prompt || "";
+  canvas.dataset.scrip = entryState.scrip == null ? "" : String(entryState.scrip);
+  canvas.dataset.body = entryState.body || "beach";
 }
 
 function paint(sample) {
@@ -437,13 +452,32 @@ if (params.get("still") !== "1") {
       if (followed) applyFollow();
       else waitFollow();
     } else {
+    let useOnce = useEdge;
+    let buyOnce = buyEdge;
+    useEdge = false;
+    buyEdge = false;
     while (bank >= 1 / 30) {
       stepDummy(dummy);
       if (cooldown > 0) cooldown -= 1;
+      entryState = stepEntry(entry, {
+        position: player.position,
+        use: useOnce,
+        buy: buyOnce,
+        yard,
+        offer: buyOnce ? (entryState.joined ? SMOKE : null) : null,
+      });
+      if (entryState.notice) report = entryState.notice;
+      useOnce = false;
+      buyOnce = false;
+      const striking = entryState.body === "strike";
       if (slot === "line" && (trigger || shotQueued) && cooldown === 0) {
         fire(sample);
         shotQueued = false;
         cooldown = 3;
+      } else if (striking && (slot === "hammer" || slot === "bit") && trigger) {
+        raising = null;
+        work = null;
+        report = "frozen";
       } else if (slot === "hammer" && trigger && aimed.inRange && aimed.kind !== "wall" && aimed.kind !== "dummy") {
         const cell = aimed.cell;
         if (!raising || raising.cell[0] !== cell[0] || raising.cell[1] !== cell[1]) {
