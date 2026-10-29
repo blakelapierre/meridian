@@ -125,7 +125,18 @@ bool crustHit(vec3 ro, vec3 rd, out float t, out vec3 p) {
   for (int i = 0; i < 64; i++) {
     p = ro + rd * t;
     float sdf = sampleMeters(p);
-    if (sdf <= 0.0) return true;
+    if (sdf <= 0.0) {
+      float hi = t;
+      float lo = max(t - 0.75, 0.0);
+      for (int r = 0; r < 5; r++) {
+        float mid = 0.5 * (lo + hi);
+        if (sampleMeters(ro + rd * mid) <= 0.0) hi = mid;
+        else lo = mid;
+      }
+      t = hi;
+      p = ro + rd * t;
+      return true;
+    }
     t += max(sdf, 0.05);
     if (t > 400.0) return false;
   }
@@ -183,12 +194,57 @@ bool blocked(vec3 from, vec3 rd) {
 }
 
 vec3 crustNormal(vec3 p) {
-  float e = 0.08;
-  return normalize(vec3(
+  float e = 0.2;
+  vec3 n = vec3(
     sampleMeters(p + vec3(e, 0.0, 0.0)) - sampleMeters(p - vec3(e, 0.0, 0.0)),
     sampleMeters(p + vec3(0.0, e, 0.0)) - sampleMeters(p - vec3(0.0, e, 0.0)),
     sampleMeters(p + vec3(0.0, 0.0, e)) - sampleMeters(p - vec3(0.0, 0.0, e))
-  ));
+  );
+  if (dot(n, n) < 1.0e-6) return vec3(0.0, 0.0, 1.0);
+  n = normalize(n);
+  if (n.z > 0.82) return vec3(0.0, 0.0, 1.0);
+  return n;
+}
+
+bool dugColumn(vec3 p) {
+  ivec2 ij = ivec2(floor(p.xy * 2.0));
+  for (int n = 0; n < ${MAX_DIGS}; n++) {
+    if (n >= uDigs) break;
+    vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
+    if (abs(dig.x - float(ij.x)) < 0.1 && abs(dig.y - float(ij.y)) < 0.1) return true;
+  }
+  return false;
+}
+
+bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
+  if (rd.z > -1.0e-4) return false;
+  t = -ro.z / rd.z;
+  if (t < 0.02 || t > 400.0) return false;
+  p = ro + rd * t;
+  p.z = 0.0;
+  if (dot(p.xy, p.xy) > 256.0 * 256.0) return false;
+  if (dugColumn(p)) return false;
+  return true;
+}
+
+vec3 skyColor(vec3 rd) {
+  vec3 sun = normalize(uSun);
+  float day = smoothstep(-0.02, 0.25, sun.z);
+  float up = clamp(rd.z * 0.85 + 0.2, 0.0, 1.0);
+  vec3 sky = mix(vec3(0.62, 0.68, 0.74), vec3(0.30, 0.50, 0.84), up);
+  sky = mix(sky * 0.12, sky, day);
+  float d = dot(rd, sun);
+  float disc = smoothstep(0.99915, 0.99955, d);
+  float glow = pow(max(d, 0.0), 220.0);
+  return sky + vec3(1.0, 0.94, 0.72) * (disc * 3.0 + glow * 0.7) * day;
+}
+
+vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
+  vec3 sun = normalize(uSun);
+  float day = smoothstep(0.0, 0.2, sun.z);
+  float ndotl = max(dot(n, sun), 0.0) * day;
+  if (ndotl > 0.0 && blocked(p + sun * 0.15, sun)) ndotl = 0.0;
+  return albedo * (vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * ndotl);
 }
 
 vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
@@ -218,7 +274,14 @@ void main() {
     bool found = false;
     float t;
     vec3 p;
-    if (crustHit(ro, rd, t, p) && t > 0.02 && t < bestT) {
+    if (sandPlane(ro, rd, t, p) && t < bestT) {
+      bestT = t;
+      bestP = p;
+      bestN = vec3(0.0, 0.0, 1.0);
+      bestRgb = vec3(0.55, 0.48, 0.32);
+      bestRef = 0.2;
+      found = true;
+    } else if (crustHit(ro, rd, t, p) && t > 0.02 && t < bestT) {
       bestT = t;
       bestP = p;
       bestN = crustNormal(p);
@@ -265,11 +328,11 @@ void main() {
       }
     }
     if (!found) {
-      accum += thru * uMiss.rgb;
+      accum += thru * skyColor(rd);
       break;
     }
     if (dot(bestN, rd) > 0.0) bestN = -bestN;
-    if (blocked(bestP + uSun * 0.08, uSun)) bestRgb *= 0.45;
+    bestRgb = sunLit(bestP, bestN, bestRgb);
     if (bounce == 0 && uWork.w > 0.5) {
       vec2 cell = uWork.xy;
       float rise = max(uWork.z, 0.08);
