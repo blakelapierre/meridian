@@ -21,7 +21,7 @@
   </head>
   <body>
     <h1>Dig check</h1>
-    <p>One voxel, already chosen: chunk 0,0,-1, sample going from solid to 500 (air). Tab A proposes it. Tab B signs the vote. Both apply that op. You do not aim this dig.</p>
+    <p>Open either tab first. The log leaves <code>waiting</code> before <code>applied</code>. <code>lighthouse failed</code> means <code>npm start</code> is not running.</p>
     <p>Pass: both pages log <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. The line <code>voxel before</code> is negative. Two different hashes, or <code>bad signature</code>, is a fail.</p>
     <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
     <pre></pre>

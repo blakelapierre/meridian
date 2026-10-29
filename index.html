@@ -24,17 +24,17 @@
 
     <h2>2. Position</h2>
     <p>Two browsers trade an unreliable position. No island is drawn.</p>
-    <p>Pass: both logs say <code>snap open</code>, then <code>remote x,y,z</code> lines that keep changing.</p>
+    <p>Pass: both logs say <code>waiting for the other tab</code> or <code>waiting for the offer</code>, then <code>offered</code> or <code>answered</code>, then <code>snap open</code> and <code>remote x,y,z</code> lines that change. Open either tab first. If a log says <code>lighthouse failed</code>, <code>npm start</code> is not running.</p>
     <p><a href="/tools/link/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/link/index.html?id=b&to=a">Tab B</a></p>
 
     <h2>3. Signed shot</h2>
     <p>A fixed shot from the accuracy pad into the dummy. You do not aim it.</p>
-    <p>Pass: tab A logs <code>verified hit</code>. Tab B logs <code>traced hit</code>.</p>
+    <p>Pass: one log says <code>offered</code>, the other <code>answered</code>, then tab A logs <code>verified hit</code> and tab B logs <code>traced hit</code>. Open either tab first.</p>
     <p><a href="/tools/shot/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/shot/index.html?id=b&to=a">Tab B</a></p>
 
     <h2>4. Certified dig</h2>
     <p>Tab A proposes one voxel. Tab B signs the vote. Both apply the same op.</p>
-    <p>Pass: both pages say <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. Before that, the voxel is solid (a negative sample).</p>
+    <p>Pass: both pages leave <code>waiting</code>, then log <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. The line <code>voxel before</code> is negative. Open either tab first.</p>
     <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a></p>
   </body>
 </html>
