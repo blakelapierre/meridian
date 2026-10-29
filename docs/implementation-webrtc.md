@@ -6,7 +6,7 @@ This spec turns the concept into buildable contracts. It does not restyle the fa
 
 Normative words: **MUST** / **MUST NOT** / **SHOULD** / **MAY**.
 
-The design this implements is [concept.md](concept.md).
+The design this implements is [concept.md](concept.md). Player-facing rules and numbers are in [game.md](game.md). This document owns packets and authority only.
 
 ---
 
@@ -401,7 +401,7 @@ The log is the game. New features are new bodies, not new transports. Each body 
 | `HearthBind` | One active hearth per pubkey. The stone is a `Place` that already exists. |
 | `Allegiance {swear or break, patron}` | One patron. Surplus mastery and tithe percents are integers. Break is unilateral. |
 | `StrikeOpen {site, rules, stake}` | Site volume, both sides’ bonds. Rules are an enum: loadout-only, friendly-fire off, timer. |
-| `StrikeJoin / StrikeResolve` | Resolve pays scrip and bonded-item outcomes. Scrip ids are scoped to `strike_id` and **MUST NOT** appear in wilderness inventory structs. |
+| `StrikeJoin / StrikeLoadout / StrikeResolve` | Join, buy-phase loadout, and resolve. Loadout spends strike scrip only. Resolve pays scrip and bonded-item outcomes. Scrip ids are scoped to `strike_id` and **MUST NOT** appear in wilderness inventory structs. |
 | `LogisticsLink {a, b, kind}` | A physical road, pipe, or cable already placed along the polyline. Streaming industry is legal only inside a connected component of these links. |
 | `FactoryQueue` | Power and metal at the site, graph connected. |
 | `HandoverOut / In / Abort` | As §6.6. |

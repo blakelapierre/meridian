@@ -2,9 +2,12 @@
 
 A peer-to-peer, browser-native, real-time raytraced open sim on a living globe. First person, field command, and planetary industry are one body at three clocks.
 
-These are design documents, not a client.
+These are design documents, not a client. Nothing in this repository is implemented yet.
 
 - [Concept](docs/concept.md) — fantasy, pillars, and what is inherited from Asheron's Call, Wurm Online, Savage, Natural Selection, Counter-Strike, and Total Annihilation.
-- [Implementation spec](docs/implementation-webrtc.md) — build contracts. The game data plane is WebRTC data channels only.
+- [Game spec](docs/game.md) — player-facing rules, numbers, content records, and the first playable slice.
+- [WebRTC spec](docs/implementation-webrtc.md) — how peers agree. Packets, quorum, and the op log.
+
+On conflict: the concept wins on fantasy, the game spec wins on rules and numbers, the WebRTC spec wins on bytes.
 
 Public repository: https://github.com/blakelapierre/meridian
