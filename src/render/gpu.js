@@ -281,7 +281,20 @@ void main() {
       bestRgb = vec3(0.55, 0.48, 0.32);
       bestRef = 0.2;
       found = true;
-    } else if (crustHit(ro, rd, t, p) && t > 0.02 && t < bestT) {
+    } else if (rd.z < -0.02) {
+      float planeT = -ro.z / rd.z;
+      vec3 guess = ro + rd * planeT;
+      bool island = planeT > 0.02 && planeT < 400.0 && dot(guess.xy, guess.xy) < 256.0 * 256.0;
+      if ((island || ro.z < 0.0) && crustHit(ro, rd, t, p) && t > 0.02 && t < bestT) {
+        bestT = t;
+        bestP = p;
+        bestN = crustNormal(p);
+        bool pit = p.z < -0.3;
+        bestRgb = pit ? vec3(0.16, 0.13, 0.10) : vec3(0.55, 0.48, 0.32);
+        bestRef = pit ? 0.04 : 0.2;
+        found = true;
+      }
+    } else if (ro.z < 0.0 && crustHit(ro, rd, t, p) && t > 0.02 && t < bestT) {
       bestT = t;
       bestP = p;
       bestN = crustNormal(p);

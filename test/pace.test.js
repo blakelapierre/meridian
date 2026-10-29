@@ -28,6 +28,16 @@ test("the pacer learns a 60Hz refresh and only resizes after a run of slow frame
   assert.equal(pacer.scale, 1);
   pacer.note(40, true);
   assert.ok(pacer.scale < 1);
+  const stalled = createPacer();
+  let slow = 0;
+  for (let frame = 0; frame < 20; frame++) {
+    slow += 16.7;
+    stalled.consider(slow, true);
+    stalled.note(1, true);
+  }
+  assert.equal(stalled.scale, 1);
+  stalled.consider(slow + 140, true);
+  assert.ok(stalled.scale < 1);
   now += 500;
   assert.equal(pacer.consider(now, false).paint, false);
   now += 500;

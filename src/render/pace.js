@@ -17,6 +17,8 @@ export function createPacer() {
   let refresh = 1000 / 60;
   let paints = [];
   let checks = 0;
+  let gap = 0;
+  let seen = 0;
   return {
     get scale() {
       return scale;
@@ -25,9 +27,11 @@ export function createPacer() {
       return refresh;
     },
     consider(now, active) {
+      seen += 1;
       if (lastNow) {
-        const delta = now - lastNow;
-        if (active && delta >= 8 && delta <= 40) refresh = refresh * 0.9 + delta * 0.1;
+        gap = now - lastNow;
+        if (active && gap >= 8 && gap <= 40) refresh = refresh * 0.9 + gap * 0.1;
+        if (active && seen > 15 && gap > 70) scale = Math.max(0.25, scale * 0.75);
       }
       lastNow = now;
       const paint = shouldPaint(active, now - lastPaint);
@@ -36,7 +40,7 @@ export function createPacer() {
     note(ms, active) {
       lastPaint = lastNow;
       if (!active) return scale;
-      paints.push(ms);
+      paints.push(Math.max(ms, gap));
       checks += 1;
       if (checks < 30) return scale;
       const average = paints.reduce((sum, value) => sum + value, 0) / paints.length;
