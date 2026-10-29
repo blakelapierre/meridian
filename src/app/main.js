@@ -3,7 +3,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
 import { createFps } from "../render/fps.js";
-import { createPacer } from "../render/pace.js";
+import { createPacer, easePixels, nativePixels, playPixels, viewStill } from "../render/pace.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
@@ -17,6 +17,8 @@ import { chaseOrigin, createCameraSpring, frameCamera, stepCamera, stepLook, CHA
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
+import { learnLore, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
+import { acceptLore, encodeLore } from "../net/lore.js";
 import { paintChart } from "../render/chart.js";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
@@ -118,7 +120,12 @@ let mapFollow = true;
 let mapCenter = [0, -150];
 let mapDrag = null;
 let lookRelease = false;
+const friends = new Map();
 const seenPeople = new Map();
+let loreNote = "";
+let stillPose = null;
+let stillFor = 0;
+let easedPixels = null;
 let orbitYaw = 0;
 let orbitPitch = 0;
 let cameraDistance = CHASE;
@@ -778,7 +785,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -897,7 +904,28 @@ function ownKeys() {
   return keys;
 }
 
-function onOps(bytes) {
+function exchangeLore() {
+  const bag = skillBag();
+  const range = shareRange(bag);
+  for (const other of otherActors()) {
+    const dist = Math.hypot(other.feet[0] - player.position[0], other.feet[1] - player.position[1]);
+    const score = nextFriend(friends.get(other.id) || 0, dist <= range);
+    friends.set(other.id, score);
+    if (dist > range) continue;
+    const offer = offerLore({
+      skills: bag,
+      friend: score,
+      ground: [...survey.ground.values()],
+      places: [...survey.places.values()],
+    });
+    if (!offer.ground.length && !offer.places.length) continue;
+    const packed = packLore(offer);
+    sendOps(encodeLore(identity, { nonce: tick, friend: score, ...packed }));
+    loreNote = `${offer.tier} ${other.id}`;
+  }
+}
+
+function onOps(bytes, from) {
   if (bytes[0] === 11) {
     const decoded = decodeBlock(bytes);
     if (!decoded.ok) return;
@@ -912,6 +940,15 @@ function onOps(bytes) {
         // A peer that already has the block will ignore the extra copy.
       }
     }
+    return;
+  }
+  if (bytes[0] === 12) {
+    const accepted = acceptLore(bytes);
+    if (!accepted.ok) return;
+    const heard = unpackLore(accepted);
+    const learned = learnLore(survey, plate, heard, skillBag(), stamp, GEO_COLOR);
+    if (from) friends.set(from, nextFriend(Math.max(friends.get(from) || 0, accepted.friend || 0), true));
+    if (learned.ground || learned.places) loreNote = `heard ${learned.ground + learned.places}`;
     return;
   }
   if (bytes[0] === 10) {
@@ -1013,7 +1050,7 @@ async function openLink(to, offer, role) {
   links.push(link);
   if (!ops) ops = channels.ops;
   channels.ops.onopen = () => shareWalls(link);
-  channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data));
+  channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data), to);
   channels.snap.onmessage = (event) => {
     const pose = acceptPosition(poses.get(to) || null, new Uint8Array(event.data));
     poses.set(to, pose);
@@ -1260,6 +1297,7 @@ if (params.get("still") !== "1") {
         skills: bag,
       });
       noteNearby(survey, player.position, landmarks(), bag);
+      if (tick % 30 === 0) exchangeLore();
       tick += 1;
       } finally {
         bank -= 1 / 30;
@@ -1295,15 +1333,30 @@ if (params.get("still") !== "1") {
       work = { x: selection.point[0], y: selection.point[1], height: 1.6, mode: 4 };
     }
     const active = windowFocused();
+    const stillSample = {
+      x: player.position[0],
+      y: player.position[1],
+      yaw,
+      pitch,
+      busy: rightDown || keys.has("KeyW") || keys.has("KeyA") || keys.has("KeyS") || keys.has("KeyD"),
+    };
+    if (viewStill(stillPose, stillSample)) stillFor += dt;
+    else stillFor = 0;
+    stillPose = stillSample;
+    const still = stillFor >= 0.45;
+    const boxW = canvas.clientWidth || window.innerWidth || 960;
+    const boxH = canvas.clientHeight || window.innerHeight || 540;
+    const targetPixels = still ? nativePixels(boxW, boxH, window.devicePixelRatio || 1) : playPixels(boxW, boxH);
+    easedPixels = easedPixels ? easePixels(easedPixels, targetPixels, dt) : targetPixels;
     const decision = quiet && !document.hidden ? pacer.considerExtra(now, primaryHolding) : pacer.consider(now, active);
     if (!quiet && paceBus) paceBus.postMessage({ role: "primary", holding: decision.holding });
     viewScale = decision.scale;
-    canvas.dataset.pace = decision.mode;
+    canvas.dataset.pace = still ? `${decision.mode} still` : decision.mode;
     if (params.get("nopaint") !== "1" && decision.paint) {
-      if (painter) fitCanvas(canvas, viewScale);
+      if (painter) fitCanvas(canvas, viewScale, easedPixels);
       const started = performance.now();
       paint(sample);
-      pacer.note(performance.now() - started, active);
+      pacer.note(performance.now() - started, active, still);
       canvas.dataset.fps = String(fps.paint(now));
     }
     flush();

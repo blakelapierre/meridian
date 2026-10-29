@@ -46,11 +46,11 @@ function texture(gl, width) {
 
 export const SPHERE_BUDGET = MAX_SPHERES;
 
-export function fitCanvas(canvas, scale = 1) {
+export function fitCanvas(canvas, scale = 1, pixels = null) {
   const boxW = canvas.clientWidth || window.innerWidth || 960;
   const boxH = canvas.clientHeight || window.innerHeight || 540;
-  const fullW = Math.min(960, Math.max(1, Math.floor(boxW)));
-  const fullH = Math.min(540, Math.max(1, Math.floor(boxH)));
+  const fullW = pixels?.width || Math.min(960, Math.max(1, Math.floor(boxW)));
+  const fullH = pixels?.height || Math.min(540, Math.max(1, Math.floor(boxH)));
   const width = Math.max(160, Math.min(fullW, Math.floor(fullW * scale)));
   const height = Math.max(90, Math.min(fullH, Math.floor(fullH * scale)));
   if (canvas.width !== width) canvas.width = width;

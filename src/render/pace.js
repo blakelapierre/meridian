@@ -1,9 +1,42 @@
-export function nextScale(scale, averageMs, refreshMs) {
+export function nextScale(scale, averageMs, refreshMs, still = false) {
   const vsync = refreshMs > 0 ? refreshMs : 1000 / 60;
   if (averageMs > 1000 / 30) return Math.max(0.25, scale * 0.75);
   if (averageMs > vsync) return Math.max(0.25, scale * 0.85);
+  if (still && averageMs <= vsync) return Math.min(1, scale * 1.06);
   if (averageMs < vsync * 0.55) return Math.min(1, scale * 1.12);
   return scale;
+}
+
+export function viewStill(previous, next) {
+  if (!previous || !next) return false;
+  if (next.busy) return false;
+  if (Math.abs(next.yaw - previous.yaw) > 0.004) return false;
+  if (Math.abs(next.pitch - previous.pitch) > 0.004) return false;
+  return Math.hypot(next.x - previous.x, next.y - previous.y) <= 0.03;
+}
+
+export function playPixels(boxW, boxH) {
+  return {
+    width: Math.min(960, Math.max(1, Math.floor(boxW))),
+    height: Math.min(540, Math.max(1, Math.floor(boxH))),
+  };
+}
+
+export function nativePixels(boxW, boxH, dpr = 1) {
+  const ratio = Math.max(1, Math.min(dpr || 1, 2));
+  return {
+    width: Math.max(1, Math.floor(boxW * ratio)),
+    height: Math.max(1, Math.floor(boxH * ratio)),
+  };
+}
+
+export function easePixels(current, target, dt) {
+  const shrinking = target.width < current.width || target.height < current.height;
+  const step = Math.min(1, Math.max(0, dt) * (shrinking ? 4 : 1.2));
+  return {
+    width: current.width + (target.width - current.width) * step,
+    height: current.height + (target.height - current.height) * step,
+  };
 }
 
 export function shouldPaint(active, elapsedMs) {
@@ -56,7 +89,7 @@ export function createPacer() {
         holding,
       };
     },
-    note(ms, active) {
+    note(ms, active, still = false) {
       lastPaint = lastNow;
       if (!active) return scale;
       paints.push(gap > refresh * 1.25 ? gap : ms);
@@ -65,7 +98,7 @@ export function createPacer() {
       const average = paints.reduce((sum, value) => sum + value, 0) / paints.length;
       paints = [];
       checks = 0;
-      scale = nextScale(scale, average, refresh);
+      scale = nextScale(scale, average, refresh, still);
       return scale;
     },
   };

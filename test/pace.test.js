@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPacer, nextScale, shouldPaint } from "../src/render/pace.js";
+import { createPacer, easePixels, nativePixels, nextScale, playPixels, shouldPaint, viewStill } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -14,6 +14,20 @@ test("resolution steps down to hold vsync, then 30fps, and steps back up when th
   assert.equal(nextScale(1, 10, 16.7), 1);
   assert.ok(nextScale(0.5, 8, 16.7) > 0.5);
   assert.equal(nextScale(0.25, 50, 16.7), 0.25);
+});
+
+test("a still view may climb to the window's own pixels", () => {
+  const moving = { x: 0, y: 0, yaw: 0, pitch: 0, busy: false };
+  assert.equal(viewStill(moving, { ...moving, yaw: 0.2 }), false);
+  assert.equal(viewStill(moving, moving), true);
+  const play = playPixels(1600, 900);
+  const native = nativePixels(1600, 900, 2);
+  assert.ok(native.width > play.width);
+  assert.equal(native.width, 3200);
+  const eased = easePixels(play, native, 0.05);
+  assert.ok(eased.width > play.width);
+  assert.ok(eased.width < native.width);
+  assert.ok(nextScale(0.5, 10, 16.7, true) > nextScale(0.5, 10, 16.7, false));
 });
 
 test("the pacer learns a 60Hz refresh and only resizes after a run of slow frames", () => {
