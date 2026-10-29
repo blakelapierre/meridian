@@ -56,112 +56,43 @@ export function tiles(availWidth, availHeight, availLeft = 0, availTop = 0) {
   ];
 }
 
+export function benchHref(href, origin = "http://127.0.0.1") {
+  const [primary, second, follow] = trio(href, origin);
+  const bench = new URL("/tools/bench/index.html", origin);
+  bench.searchParams.set("primary", primary);
+  bench.searchParams.set("second", second);
+  bench.searchParams.set("follow", follow);
+  return bench.pathname + bench.search;
+}
+
 function features(box) {
   return `popup=yes,width=${box.width},height=${box.height},left=${box.left},top=${box.top}`;
 }
 
-function place(url, name, box) {
-  let win = null;
-  try {
-    win = window.open(url, name, features(box));
-  } catch {
-    return null;
-  }
-  if (!win) return null;
-  try {
-    win.resizeTo(box.width, box.height);
-    win.moveTo(box.left, box.top);
-  } catch {
-    // some browsers ignore placement; the features string still requested it
-  }
-  return win;
-}
-
-const names = ["meridian-primary", "meridian-second", "meridian-follow"];
-
-export function openChecks(href, origin, screenBox, already = []) {
-  const urls = trio(href, origin);
-  const boxes = tiles(screenBox.width, screenBox.height, screenBox.left, screenBox.top);
-  return urls.map((url, index) => {
-    if (already[index] && !already[index].closed) return already[index];
-    return place(url, names[index], boxes[index]);
-  });
-}
-
 if (typeof document !== "undefined") {
-  let watch = 0;
-  let opened = [null, null, null];
-  let armedHref = "";
-  const screenBox = () => ({
-    width: screen.availWidth,
-    height: screen.availHeight,
-    left: screen.availLeft || 0,
-    top: screen.availTop || 0,
-  });
-  const toolLink = (event) => {
-    if (!event.isTrusted || (event.button !== undefined && event.button !== 0)) return null;
-    return event.target.closest?.("a[href^='/tools/']") || null;
-  };
-  const openNext = (link) => {
-    const href = link.getAttribute("href");
-    if (href !== armedHref) {
-      opened = [null, null, null];
-      armedHref = href;
-    }
-    const urls = trio(href, location.origin);
-    const view = screenBox();
-    const boxes = tiles(view.width, view.height, view.left, view.top);
-    for (let index = 0; index < 3; index += 1) {
-      if (opened[index] && !opened[index].closed) continue;
-      opened[index] = place(urls[index], names[index], boxes[index]);
-      return;
-    }
-  };
-  const report = () => {
-    const note = document.querySelector("#windows");
-    if (!note) return;
-    const count = opened.filter((win) => win && !win.closed).length;
-    note.textContent = count === 3
-      ? "Three windows are open. The wide one is the primary."
-      : `The browser opened ${count} of 3 windows. Allow popups for this site, then click the check again.`;
-  };
-  const watchPrimary = () => {
-    const primary = opened[0];
-    if (!primary) return;
-    clearInterval(watch);
-    let misses = 0;
-    watch = setInterval(() => {
-      if (!primary.closed) {
-        misses = 0;
-        return;
-      }
-      misses += 1;
-      if (misses < 2) return;
-      clearInterval(watch);
-      for (const extra of opened.slice(1)) {
-        if (extra && !extra.closed) extra.close();
-      }
-    }, 400);
-  };
-  let armedLink = null;
-  document.addEventListener("pointerdown", (event) => {
-    const link = toolLink(event);
-    if (!link) return;
-    armedLink = link;
-    openNext(link);
-  }, true);
-  document.addEventListener("pointerup", (event) => {
-    if (!event.isTrusted || !armedLink) return;
-    openNext(armedLink);
-    report();
-  }, true);
+  let bench = null;
   document.addEventListener("click", (event) => {
-    const link = toolLink(event) || armedLink;
-    if (!link || !event.isTrusted) return;
+    if (!event.isTrusted || (event.button !== undefined && event.button !== 0)) return;
+    const link = event.target.closest?.("a[href^='/tools/']");
+    if (!link) return;
     event.preventDefault();
-    openNext(link);
-    report();
-    watchPrimary();
-    armedLink = null;
+    const href = benchHref(link.getAttribute("href"), location.origin);
+    const width = screen.availWidth;
+    const height = screen.availHeight;
+    const left = screen.availLeft || 0;
+    const top = screen.availTop || 0;
+    const note = document.querySelector("#windows");
+    if (!bench || bench.closed) {
+      bench = window.open(href, "meridian-bench", features({ width, height, left, top }));
+    } else {
+      bench.location.replace(href);
+      bench.focus();
+    }
+    if (note) {
+      note.textContent = bench
+        ? "One window is open. The wide frame is the primary. The other client is above the follow view."
+        : "The browser blocked the window. Allow popups for this site, then click the check again.";
+    }
   }, true);
 }
+
