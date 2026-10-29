@@ -57,6 +57,8 @@ if (quiet && paceBus) {
   };
 }
 const followId = params.get("follow");
+const agendaName = params.get("ai");
+const agent = agendaName && AGENDAS[agendaName] ? createAgent(agendaName) : null;
 const keys = new Set();
 const peer = Boolean(params.get("id"));
 
@@ -119,8 +121,16 @@ const poses = new Map();
 let cameraSpring = null;
 let cameraPos = null;
 let cameraLook = null;
-const agendaName = params.get("ai");
-const agent = agendaName && AGENDAS[agendaName] ? createAgent(agendaName) : null;
+
+function windowFocused() {
+  if (document.hidden) return false;
+  if (document.hasFocus()) return true;
+  try {
+    return window.parent !== window && window.parent.document.hasFocus() && !window.parent.document.hidden;
+  } catch {
+    return false;
+  }
+}
 
 function openLinks() {
   return links.filter((link) => link.ops.readyState === "open");
@@ -1007,7 +1017,7 @@ if (params.get("still") !== "1") {
     if (!work && selection?.point) {
       work = { x: selection.point[0], y: selection.point[1], height: 1.6, mode: 4 };
     }
-    const active = !document.hidden && document.hasFocus();
+    const active = windowFocused();
     const decision = quiet && !document.hidden ? pacer.considerExtra(now, primaryHolding) : pacer.consider(now, active);
     if (!quiet && paceBus) paceBus.postMessage({ role: "primary", holding: decision.holding });
     viewScale = decision.scale;
