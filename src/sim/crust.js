@@ -86,21 +86,28 @@ export class Crust {
       });
     }
     writes.sort((a, b) => a.k - b.k || a.j - b.j || a.i - b.i);
-    const seed = Buffer.from(this.worldSeed, "utf8");
-    const cell = Buffer.from(this.cellId, "utf8");
-    const body = Buffer.alloc(16 + writes.length * 8);
-    body.writeInt32LE(chunkX, 0);
-    body.writeInt32LE(chunkY, 4);
-    body.writeInt32LE(chunkZ, 8);
-    body.writeInt32LE(writes.length, 12);
+    const seed = new TextEncoder().encode(this.worldSeed);
+    const cell = new TextEncoder().encode(this.cellId);
+    const body = new Uint8Array(16 + writes.length * 8);
+    const view = new DataView(body.buffer);
+    view.setInt32(0, chunkX, true);
+    view.setInt32(4, chunkY, true);
+    view.setInt32(8, chunkZ, true);
+    view.setInt32(12, writes.length, true);
     writes.forEach((write, index) => {
       const at = 16 + index * 8;
-      body.writeInt16LE(write.i, at);
-      body.writeInt16LE(write.j, at + 2);
-      body.writeInt16LE(write.k, at + 4);
-      body.writeInt16LE(write.sample, at + 6);
+      view.setInt16(at, write.i, true);
+      view.setInt16(at + 2, write.j, true);
+      view.setInt16(at + 4, write.k, true);
+      view.setInt16(at + 6, write.sample, true);
     });
-    return Buffer.from(blake3(Buffer.concat([seed, Buffer.from([0]), cell, Buffer.from([0]), body])));
+    const bytes = new Uint8Array(seed.length + 1 + cell.length + 1 + body.length);
+    bytes.set(seed, 0);
+    bytes[seed.length] = 0;
+    bytes.set(cell, seed.length + 1);
+    bytes[seed.length + 1 + cell.length] = 0;
+    bytes.set(body, seed.length + 1 + cell.length + 1);
+    return blake3(bytes);
   }
 }
 

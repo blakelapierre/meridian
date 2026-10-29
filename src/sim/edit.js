@@ -9,13 +9,19 @@ function dist2(a, b) {
   return dx * dx + dy * dy + dz * dz;
 }
 
+function sameBytes(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 export function acceptEdit(crust, proposal, { certified = false, localEdits = false, strike = false } = {}) {
   if (!certified && !localEdits) return { ok: false, reason: "flag" };
   if (strike) return { ok: false, reason: "strike" };
   if (dist2(proposal.eye, proposal.aim) > 160000) return { ok: false, reason: "aim" };
   if (proposal.before) {
     const hash = crust.hash(proposal.chunk[0], proposal.chunk[1], proposal.chunk[2]);
-    if (Buffer.compare(hash, proposal.before) !== 0) return { ok: false, reason: "hash" };
+    if (!sameBytes(hash, proposal.before)) return { ok: false, reason: "hash" };
   }
   if (proposal.mode === "dig" && (proposal.spoilRoom ?? 0) < proposal.writes.length) {
     return { ok: false, reason: "spoil" };

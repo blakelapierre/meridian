@@ -17,6 +17,6 @@ On conflict: the concept wins on fantasy, the game spec wins on rules, the crust
 
 License: [MIT](LICENSE).
 
-`npm start` is the only process. It serves files on port 8080 and the lighthouse on `ws://127.0.0.1:8787`. Open [http://127.0.0.1:8080/tools/view/index.html](http://127.0.0.1:8080/tools/view/index.html). Neither socket decides a hit, a dig, or a death.
+`npm start` is the only process. It serves files on port 8080 and the lighthouse on `ws://127.0.0.1:8787`. Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) for what this build should show, and how to tell a pass from a fail. Neither socket decides a hit, a dig, or a death.
 
 Public repository: https://github.com/blakelapierre/meridian

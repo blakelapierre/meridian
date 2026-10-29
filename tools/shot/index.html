@@ -3,6 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <title>Meridian shot</title>
+    <style>
+      body { margin: 24px; background: #111; color: #eee; font: 16px/1.45 sans-serif; }
+      a { color: #9cf; }
+      code { color: #fd8; }
+      pre { white-space: pre-wrap; }
+    </style>
     <script type="importmap">
       {
         "imports": {
@@ -13,6 +19,10 @@
     </script>
   </head>
   <body>
+    <h1>Shot check</h1>
+    <p>A fixed shot from the accuracy pad into the dummy. You do not aim it. Tab A signs the proposal. Tab B traces that proposal and signs the vote.</p>
+    <p>Pass: tab A logs <code>verified hit</code>. Tab B logs <code>traced hit</code>. <code>bad signature</code> or a miss is a fail.</p>
+    <p><a href="/tools/shot/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/shot/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
     <pre></pre>
     <script type="module" src="./shot.js"></script>
   </body>

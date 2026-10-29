@@ -70,7 +70,7 @@ function votesFor(op, seq) {
   const seen = new Set();
   let accepts = 0;
   for (const vote of op.votes || []) {
-    const id = Buffer.from(vote.pubkey).toString("hex");
+    const id = [...vote.pubkey].map((byte) => byte.toString(16).padStart(2, "0")).join("");
     if (seen.has(id) || !verify(vote.sig, vote.bytes, vote.pubkey)) continue;
     seen.add(id);
     const body = decode(vote.bytes);

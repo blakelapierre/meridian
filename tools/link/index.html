@@ -3,9 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <title>Meridian link</title>
+    <style>
+      body { margin: 24px; background: #111; color: #eee; font: 16px/1.45 sans-serif; }
+      a { color: #9cf; }
+      code { color: #fd8; }
+      pre { white-space: pre-wrap; }
+    </style>
   </head>
   <body>
-    <p>Unreliable position channel. Open two tabs: one with <code>?id=a&to=b&offer=1</code> and one with <code>?id=b&to=a</code>.</p>
+    <h1>Position check</h1>
+    <p>Two browsers trade an unreliable position. No island is drawn. The lighthouse only introduces them.</p>
+    <p>Pass: the log says <code>snap open</code>, then <code>remote x,y,z</code> lines that change. The other tab does the same.</p>
+    <p><a href="/tools/link/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/link/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
     <pre></pre>
     <script type="module" src="./link.js"></script>
   </body>

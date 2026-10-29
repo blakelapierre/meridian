@@ -20,7 +20,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const httpPort = Number(process.env.HTTP_PORT || 8080);
   const signalPort = Number(process.env.SIGNAL_PORT || 8787);
   startDev(root, { httpPort, signalPort }).then(({ site, lighthouse }) => {
-    console.log(`${site.url}/tools/view/index.html`);
+    console.log(`${site.url}/`);
     console.log(lighthouse.url);
   });
 }

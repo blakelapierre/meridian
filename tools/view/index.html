@@ -4,14 +4,24 @@
     <meta charset="utf-8" />
     <title>Meridian</title>
     <style>
-      html, body { margin: 0; background: #111; height: 100%; }
-      canvas { width: 100vw; height: 100vh; image-rendering: pixelated; cursor: crosshair; }
+      html, body { margin: 0; background: #111; height: 100%; color: #eee; }
+      canvas { width: 100vw; height: 100vh; image-rendering: pixelated; cursor: crosshair; display: block; }
+      aside { position: fixed; top: 12px; left: 12px; width: min(28rem, calc(100vw - 24px)); background: rgba(0,0,0,.78); padding: 12px 14px; font: 14px/1.4 sans-serif; z-index: 2; }
+      a { color: #9cf; }
+      h1 { font-size: 1rem; margin: 0 0 8px; }
+      p { margin: 0 0 8px; }
     </style>
     <script type="importmap">
       { "imports": { "@noble/hashes/blake3.js": "/node_modules/@noble/hashes/blake3.js" } }
     </script>
   </head>
   <body>
+    <aside>
+      <h1>Walk check</h1>
+      <p>You should see sand, a blue sky, and, if you walk north, a wooden compound. The picture is a 160×90 raycast.</p>
+      <p>Click the picture to look. W A S D move. A and D strafe; they do not turn you. Shift sprints. Space jumps and lands.</p>
+      <p>A hole on this page is not saved. <a href="/">All checks</a></p>
+    </aside>
     <canvas width="160" height="90"></canvas>
     <script type="module" src="/src/app/main.js"></script>
   </body>
