@@ -15,7 +15,8 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, stepCamera, CHASE, BODY_COLORS } from "../sim/body.js";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
-import { createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
+import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
+import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
 import { paintChart } from "../render/chart.js";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
@@ -111,6 +112,12 @@ let autoRun = false;
 let mapOpen = params.get("quiet") !== "1";
 const trail = [];
 const survey = createSurvey();
+const plate = createPlate();
+let mapZoom = 1;
+let mapFollow = true;
+let mapCenter = [0, -150];
+let mapDrag = null;
+let lookRelease = false;
 const seenPeople = new Map();
 let orbitYaw = 0;
 let orbitPitch = 0;
@@ -234,6 +241,11 @@ addEventListener("keydown", (event) => {
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
 canvas.addEventListener("mousedown", (event) => {
+  if (event.button === 0 && document.pointerLockElement === canvas) {
+    lookRelease = true;
+    document.exitPointerLock();
+    return;
+  }
   if (event.button === 2) {
     rightDown = true;
     rightMoved = false;
@@ -252,7 +264,13 @@ addEventListener("mouseup", (event) => {
   useRightClick();
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-canvas.addEventListener("click", () => canvas.requestPointerLock());
+canvas.addEventListener("click", () => {
+  if (lookRelease) {
+    lookRelease = false;
+    return;
+  }
+  canvas.requestPointerLock();
+});
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   turnWheel(Math.sign(event.deltaY) || 1);
@@ -471,6 +489,74 @@ function landmarks() {
   ];
 }
 
+function geographyAt(x, y) {
+  const depth = columnFloor(terrain.log.crust, x, y);
+  const cmx = x * 100;
+  const cmy = y * 100;
+  for (const prop of atoll.props) {
+    const box = prop.box;
+    if (cmx < box.min.x || cmx > box.max.x || cmy < box.min.y || cmy > box.max.y) continue;
+    return { kind: prop.material === "stone" ? "stone" : "wood", depth };
+  }
+  for (const piece of yard.pieces) {
+    const px = piece.at[0] * 0.5;
+    const py = piece.at[1] * 0.5;
+    if (Math.abs(px - x) > 0.35 || Math.abs(py - y) > 0.35) continue;
+    return { kind: piece.id === "footing" ? "stone" : "wood", depth };
+  }
+  if (depth < -0.05) return { kind: "pit", depth };
+  return { kind: "sand", depth };
+}
+
+function revealMap() {
+  const points = revealLook({
+    x: player.position[0],
+    y: player.position[1],
+    yaw,
+    pitch,
+    skills: skillBag(),
+  });
+  const brush = Math.max(1.6, cellSize(skills.mapping.value));
+  for (const point of points) {
+    const geo = geographyAt(point.x, point.y);
+    stamp(plate, point.x, point.y, GEO_COLOR[geo.kind] || GEO_COLOR.sand, brush);
+  }
+}
+
+function bindChart() {
+  const chart = document.querySelector("#chart");
+  const surface = document.querySelector("#map");
+  if (!chart || !surface || chart.dataset.bound) return;
+  chart.dataset.bound = "1";
+  chart.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const direction = Math.sign(event.deltaY) || 1;
+    mapZoom = Math.max(0.25, Math.min(8, mapZoom * (direction > 0 ? 1 / 1.18 : 1.18)));
+  }, { passive: false });
+  surface.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const center = mapFollow ? [player.position[0], player.position[1]] : mapCenter.slice();
+    mapFollow = false;
+    mapCenter = center;
+    mapDrag = { x: event.clientX, y: event.clientY, center };
+    surface.setPointerCapture?.(event.pointerId);
+  });
+  surface.addEventListener("pointermove", (event) => {
+    if (!mapDrag) return;
+    const rect = surface.getBoundingClientRect();
+    const span = mapSpan(skills.mapping.value, mapZoom);
+    mapCenter = dragCenter(mapDrag.center, event.clientX - mapDrag.x, event.clientY - mapDrag.y, span, rect.width || surface.width);
+  });
+  const endDrag = () => {
+    mapDrag = null;
+  };
+  surface.addEventListener("pointerup", endDrag);
+  surface.addEventListener("pointercancel", endDrag);
+}
+
 function showChart() {
   const chart = document.querySelector("#chart");
   if (chart) chart.classList.toggle("open", mapOpen);
@@ -500,6 +586,8 @@ function drawChart() {
     return;
   }
   if (chart) chart.classList.add("open");
+  bindChart();
+  if (mapFollow) mapCenter = [player.position[0], player.position[1]];
   const ability = mapAbilities(skills.mapping.value);
   const objects = listObjects({
     dummy: atoll.placements.dummy,
@@ -523,6 +611,9 @@ function drawChart() {
     skill: skills.mapping.value,
     marks: plotted.marks,
     radius: ability.radius,
+    plate,
+    center: mapCenter,
+    span: mapSpan(skills.mapping.value, mapZoom),
   });
 }
 
@@ -1182,6 +1273,7 @@ if (params.get("still") !== "1") {
     }
     showSight(aimed);
     aimCamera(sample, dt);
+    revealMap();
     drawChart();
     if (selection?.kind === "player") {
       const live = otherActors().find((actor) => actor.id === selection.id);

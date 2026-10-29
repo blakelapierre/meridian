@@ -1,4 +1,5 @@
-import { abilityLine, formatFix, placeMark } from "../sim/map.js";
+import { abilityLine, formatFix } from "../sim/map.js";
+import { placeOnView, worldToPixel } from "../sim/plate.js";
 
 function cssColor(color, fallback) {
   if (!color) return fallback;
@@ -8,19 +9,47 @@ function cssColor(color, fallback) {
   return `rgb(${red}, ${green}, ${blue})`;
 }
 
-export function paintChart(canvas, read, { self, yaw, skill, marks, radius }) {
-  if (read) read.textContent = `${formatFix(self[0], self[1], yaw)}  ·  ${abilityLine(skill)}  ·  ${Math.round(radius)} m`;
+function plateImage(plate) {
+  if (!plate.image) {
+    plate.image = document.createElement("canvas");
+    plate.image.width = plate.size;
+    plate.image.height = plate.size;
+  }
+  if (plate.dirty) {
+    const image = new ImageData(plate.data, plate.size, plate.size);
+    plate.image.getContext("2d").putImageData(image, 0, 0);
+    plate.dirty = false;
+  }
+  return plate.image;
+}
+
+export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plate, center, span }) {
+  const here = center || self;
+  const across = span || radius * 2;
+  if (read) read.textContent = `${formatFix(self[0], self[1], yaw)}  ·  ${abilityLine(skill)}  ·  ${Math.round(across)} m`;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const size = canvas.width;
   const half = size / 2;
   ctx.clearRect(0, 0, size, size);
-  ctx.fillStyle = "rgba(8, 14, 18, 0.9)";
+  ctx.save();
   ctx.beginPath();
   ctx.arc(half, half, half - 1, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.clip();
+  ctx.fillStyle = "rgba(8, 14, 18, 0.94)";
+  ctx.fillRect(0, 0, size, size);
+  if (plate) {
+    const image = plateImage(plate);
+    const [cx, cy] = worldToPixel(plate, here[0], here[1]);
+    const mpp = plate.meters / plate.size;
+    const sw = across / mpp;
+    ctx.drawImage(image, cx - sw / 2, cy - sw / 2, sw, sw, 0, 0, size, size);
+  }
+  ctx.restore();
   ctx.strokeStyle = "#3d6a7a";
   ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(half, half, half - 1, 0, Math.PI * 2);
   ctx.stroke();
   ctx.strokeStyle = "rgba(120, 170, 180, 0.25)";
   ctx.lineWidth = 1;
@@ -35,12 +64,10 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius }) {
   ctx.textAlign = "center";
   ctx.fillText("N", half, 16);
   for (const mark of marks) {
-    const at = placeMark(self, mark.point, radius, size);
-    if (mark.kind === "sand" || mark.kind === "pit") {
-      if (!at.inside) continue;
-      ctx.fillStyle = mark.kind === "pit" ? "#3d5c72" : "#c2a56a";
-      ctx.fillRect(at.x - 4, at.y - 4, 8, 8);
-    } else if (mark.kind === "place") {
+    if (mark.kind === "sand" || mark.kind === "pit" || mark.kind === "trail") continue;
+    const at = placeOnView(here, mark.point, across, size);
+    if (!mark.point) continue;
+    if (mark.kind === "place") {
       ctx.fillStyle = "#fc8";
       ctx.beginPath();
       ctx.moveTo(at.x, at.y - 5);
@@ -54,10 +81,6 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius }) {
         ctx.font = "10px sans-serif";
         ctx.fillText(mark.name, at.x, at.y - 8);
       }
-    } else if (mark.kind === "trail") {
-      if (!at.inside) continue;
-      ctx.fillStyle = "rgba(160, 190, 200, 0.45)";
-      ctx.fillRect(at.x - 1.5, at.y - 1.5, 3, 3);
     } else if (mark.kind === "object") {
       if (!at.inside) continue;
       ctx.fillStyle = "#c9a";
@@ -79,14 +102,11 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius }) {
       ctx.beginPath();
       ctx.arc(at.x, at.y, at.inside ? 6 : 4, 0, Math.PI * 2);
       ctx.stroke();
-      if (!at.inside) {
-        ctx.fillStyle = "#9f9";
-        ctx.fillRect(at.x - 1.5, at.y - 1.5, 3, 3);
-      }
     }
   }
+  const you = placeOnView(here, self, across, size);
   ctx.save();
-  ctx.translate(half, half);
+  ctx.translate(you.x, you.y);
   ctx.rotate(yaw);
   ctx.fillStyle = "#9cf";
   ctx.beginPath();
