@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiHrefs, benchHref, tiles, trio } from "../tools/launch.js";
+import { aiHrefs, benchHref, bootOrder, tiles, trio } from "../tools/launch.js";
 
 test("a check opens a primary, the other client, and a follow view", () => {
   const [primary, second, follow] = trio("/tools/view/index.html?look=dummy");
@@ -36,6 +36,21 @@ test("a check is one window whose frames are the three clients", () => {
   assert.match(bench.searchParams.get("follow"), /follow=a/);
   assert.equal(aiHrefs("a").length, 4);
 });
+test("the bench starts the primary, then the follow, then each AI", () => {
+  const href = benchHref("/tools/view/index.html?look=dummy");
+  const bench = new URL(href, "http://127.0.0.1");
+  const order = bootOrder({
+    primary: bench.searchParams.get("primary"),
+    follow: bench.searchParams.get("follow"),
+    second: bench.searchParams.get("second") || "",
+    ais: bench.searchParams.getAll("ai"),
+  });
+  assert.deepEqual(order.map((item) => item.slot), ["primary", "follow", "ai", "ai", "ai", "ai"]);
+  assert.match(order[2].src, /ai=surveyor/);
+  assert.match(order[5].src, /ai=builder|ai=marksman/);
+  assert.match(order[5].src, /ai=marksman/);
+});
+
 test("the primary pane is widescreen and the three panes do not overlap", () => {
   const boxes = tiles(1920, 1080, 0, 0);
   const aspect = boxes[0].width / boxes[0].height;
