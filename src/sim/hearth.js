@@ -101,3 +101,8 @@ export function stepDown(vitals, seconds = 1 / 30) {
 export function finOutput(tick) {
   return finFluxPerMin([0, 0, 1], sunDirection(tick));
 }
+
+export function fallHurt(integrity, speedDown) {
+  if (speedDown > -9) return integrity;
+  return Math.max(0, integrity - 8);
+}

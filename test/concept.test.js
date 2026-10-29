@@ -10,7 +10,16 @@ import { lithoTick } from "../src/sim/litho.js";
 import { notePool } from "../src/sim/pool.js";
 import { separate } from "../src/sim/separate.js";
 import { radialDown, shellDrop } from "../src/sim/shell.js";
-import { createIdentity, exportKey, importKey } from "../src/net/identity.js";
+import { drainPool } from "../src/sim/pool.js";
+import { createSkills, claimSpecialty } from "../src/sim/skills.js";
+import { sporeMetal } from "../src/sim/litho.js";
+import { quorum, inInterest } from "../src/sim/cell.js";
+import { overheadPoint } from "../src/sim/clocks.js";
+import { fallHurt } from "../src/sim/hearth.js";
+import { grantKey } from "../src/sim/deed.js";
+import { standWhere } from "../src/sim/command.js";
+import { createVein, tapVein } from "../src/sim/vein.js";
+import { createIdentity, exportKey, importKey, keyPhrase } from "../src/net/identity.js";
 
 test("the concept slices that are pure stay small and strict", () => {
   assert.ok(shellDrop(0, 0) === 0);
@@ -66,3 +75,31 @@ test("the concept slices that are pure stay small and strict", () => {
   assert.equal(back.pubkey.length, key.pubkey.length);
   assert.equal(back.secret.length, key.secret.length);
 });
+
+test("the next slice of each open note is a small rule", () => {
+  assert.equal(drainPool([{ key: "1,2" }], { x: 1, y: 2, floor: 0 }), true);
+  const skills = createSkills();
+  skills.mining.value = 40;
+  assert.equal(claimSpecialty(skills), "mining");
+  assert.equal(claimSpecialty(skills), null);
+  assert.equal(sporeMetal(5, { beach: false, wood: true, nearest: 30 }), 4);
+  assert.equal(sporeMetal(5, { beach: true, wood: true, nearest: 30 }), 5);
+  assert.equal(quorum(2, 3), true);
+  assert.equal(quorum(1, 3), false);
+  assert.equal(inInterest(90), false);
+  assert.deepEqual(overheadPoint(3, 4), { x: 3, y: 4 });
+  assert.equal(fallHurt(100, -4), 100);
+  assert.equal(fallHurt(100, -12), 92);
+  const keys = new Set();
+  grantKey(keys, "them");
+  const deed = deedVolume([0, 0], "me");
+  assert.equal(mayEdit(deed, 1, 0, "them", keys), true);
+  assert.equal(standWhere({ integrity: 0, at: [1, 2] })[0], 1);
+  assert.equal(standWhere({ integrity: 10, at: [1, 2] }), null);
+  const vein = createVein([0, 0], 3);
+  assert.equal(tapVein(vein, 0, 0), 2);
+  assert.equal(vein.metal, 1);
+  const phrase = keyPhrase(createIdentity());
+  assert.equal(importKey(phrase).pubkey.length, 32);
+});
+

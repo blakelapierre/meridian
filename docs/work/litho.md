@@ -8,7 +8,7 @@ Nothing on the beach answers when you dig. A pit stays a pit. Off the beach, a p
 
 ## This pass
 
-`lithoTick`. The beach passes `beach: true` and the piece is left alone.
+Off the beach, unattended wood eats one metal. The beach still does not.
 
 ## Proves
 

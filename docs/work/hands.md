@@ -6,7 +6,7 @@
 
 ## This pass
 
-C cycles dig, fill, and smooth. Z turns the wall under the hammer by 90°. R stays the optic. The turn is sent with the wall.
+G throws one stone. It costs a stone from the crate and flies as a bolt. Z still turns a wall, and now a fin.
 
 ## Proves
 

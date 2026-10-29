@@ -10,7 +10,7 @@ Integrity starts at 100. Standing on the live dummy clubs it down. Eight seconds
 
 ## This pass
 
-Legs are left and right. The club wears the leg on the side of the dummy you are standing. One leg under 50 is × 0.6. Both under 50 is × 0.35, and sprint will not engage. The line shows `L` and `R`.
+Hitting the ground faster than 9 m/s costs 8 integrity. The legs are unchanged.
 
 ## Proves
 

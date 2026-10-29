@@ -105,6 +105,15 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plat
     }
   }
   const you = placeOnView(here, self, across, size);
+  if (radius > 0 && across > 0) {
+    const ring = (radius / across) * size;
+    ctx.strokeStyle = "rgba(180, 210, 190, 0.45)";
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(you.x, you.y, ring, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   ctx.save();
   ctx.translate(you.x, you.y);
   ctx.rotate(yaw);

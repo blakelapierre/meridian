@@ -8,7 +8,7 @@ The playable ground is still the Atoll tangent. Gravity is radial, toward a core
 
 ## This pass
 
-`shellDrop` and `radialDown`. The body is pulled on that vector, and the floor follows the drop. Near the crate the drop is too small to see.
+The floor follows the shell drop, and a pool lifts you. The picture is still the tangent plane.
 
 ## Proves
 

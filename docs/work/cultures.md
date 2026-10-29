@@ -8,7 +8,7 @@ Everyone wakes in a culture. The default is Holds. `?culture=hosts` starts with 
 
 ## This pass
 
-`firstCrate`. Holds 20 metal and 12 stone. Hosts 40 and 4. Veil 16 and 4.
+The first skill to reach 40 can be a specialty, and a second one after it. A third cannot. The crate is unchanged.
 
 ## Proves
 

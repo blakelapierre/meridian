@@ -8,7 +8,7 @@ There is no narrator and no quest line. The names in the world are Cairn, Atoll,
 
 ## This pass
 
-A sentence someone told you is drawn in a cooler color than a sentence you wrote. It is still a memory, not a prompt.
+The slip on the ground is a sentence that exists because someone wrote it. The notebook color for a told line is unchanged.
 
 ## Proves
 
