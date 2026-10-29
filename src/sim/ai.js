@@ -1,4 +1,4 @@
-export const AI_ORDER = ["surveyor", "miner", "mason", "marksman"];
+export const AI_ORDER = ["surveyor", "miner", "builder", "marksman"];
 
 export const AGENDAS = {
   surveyor: {
@@ -13,8 +13,8 @@ export const AGENDAS = {
     home: [6, -152],
     dig: [6, -148],
   },
-  mason: {
-    title: "Mason",
+  builder: {
+    title: "Builder",
     agenda: "Raise a wall, salvage it, and raise another.",
     home: [4, -140],
     work: [1.2, -140],
@@ -70,7 +70,7 @@ export function stepAgenda(name, agent, sense) {
     const there = steer.dist < 1.2;
     return { ...idle(steer), forward: there ? 0 : steer.forward, pitch: there ? -1.05 : -0.4, slot: "bit", hold: there };
   }
-  if (name === "mason") {
+  if (name === "builder") {
     const steer = steerTo([sense.x, sense.y], sense.yaw, agenda.work);
     const there = steer.dist < 1.4;
     const salvage = there && !!sense.wall;

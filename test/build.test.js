@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { cast } from "../src/engine/cast.js";
 import { acceptWall, encodeWall } from "../src/net/walls.js";
 import { createIdentity } from "../src/net/identity.js";
-import { adoptSalvage, adoptWall, cellOnGround, createYard, pieceBoxes, tryPlaceWall, trySalvage } from "../src/sim/build.js";
+import { adoptSalvage, adoptWall, cellOnGround, createYard, pieceBoxes, pieceIntegrity, placeTicks, tryPlaceWall, trySalvage } from "../src/sim/build.js";
 import { lookDirection } from "../src/sim/hands.js";
 
 const atoll = JSON.parse(readFileSync(new URL("../content/atoll.json", import.meta.url)));
@@ -37,6 +37,20 @@ test("the other browser adopts the wall without paying", () => {
   assert.equal(adoptWall(witness, accepted.cell).ok, true);
   assert.equal(witness.metal, 30);
   assert.equal(witness.pieces.length, 2);
+});
+
+test("building skill shortens the raise and starts the wall stronger", () => {
+  assert.equal(placeTicks(0), 12 * 30);
+  assert.equal(placeTicks(140), Math.round(12 * 30 * 0.6));
+  assert.equal(pieceIntegrity(0), 80);
+  assert.equal(pieceIntegrity(140), 120);
+  const yard = createYard(atoll.placements.footing);
+  const cell = [yard.pieces[0].at[0] + 1, yard.pieces[0].at[1]];
+  assert.equal(tryPlaceWall(yard, cell, 140).ok, true);
+  assert.equal(yard.pieces.at(-1).integrity, 120);
+  const frame = encodeWall(createIdentity(), { nonce: 2, cell, integrity: 120 });
+  const accepted = acceptWall(frame);
+  assert.equal(accepted.integrity, 120);
 });
 
 test("salvage returns the metal and a wall that lost its footing falls", () => {

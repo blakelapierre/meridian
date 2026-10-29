@@ -9,7 +9,7 @@ import { DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
+import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPlaceWall, trySalvage } from "../sim/build.js";
 import { lookDirection, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
@@ -682,7 +682,7 @@ function onOps(bytes) {
   if (bytes[0] === 9) {
     const accepted = acceptWall(bytes);
     if (!accepted.ok || seenWalls.has(accepted.nonce)) return;
-    const placed = adoptWall(yard, accepted.cell);
+    const placed = adoptWall(yard, accepted.cell, accepted.integrity);
     if (!placed.ok) return;
     seenWalls.add(accepted.nonce);
     report = "wall";
@@ -925,22 +925,27 @@ if (params.get("still") !== "1") {
           raising = { cell, ticks: 0 };
         }
         if (raising) {
+          const need = placeTicks(skills.building.value);
           raising.ticks += 1;
           work = {
             x: raising.cell[0] * 0.5,
             y: raising.cell[1] * 0.5,
-            height: 0.15 + (raising.ticks / (12 * 30)) * 2.05,
+            height: 0.15 + (raising.ticks / need) * 2.05,
             mode: 1,
           };
           report = `work ${Math.floor(raising.ticks / 30)}s`;
-          if (raising.ticks >= 12 * 30) {
-            const placed = tryPlaceWall(yard, raising.cell);
+          if (raising.ticks >= need) {
+            const placed = tryPlaceWall(yard, raising.cell, skills.building.value);
             report = placed.ok ? "wall" : placed.reason;
             if (placed.ok) {
-              grantUse(skills, "masonry", { tick });
+              grantUse(skills, "building", { tick });
               const nonce = Math.floor(tick);
               seenWalls.add(nonce);
-              const frame = encodeWall(identity, { nonce, cell: raising.cell });
+              const frame = encodeWall(identity, {
+                nonce,
+                cell: raising.cell,
+                integrity: pieceIntegrity(skills.building.value),
+              });
               sendOps(frame);
             }
             raising = null;
