@@ -121,7 +121,7 @@ export function crustMarch(origin, direction, field, maxDistance = 400) {
         t,
         point: p,
         object: { type: "crust" },
-        color: field.color || [0.45, 0.42, 0.32, 1],
+        color: p[2] < -0.3 ? [0.16, 0.13, 0.1, 1] : (field.color || [0.55, 0.48, 0.32, 1]),
       };
     }
     t += Math.max(sample, 0.05);

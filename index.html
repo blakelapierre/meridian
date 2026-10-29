@@ -19,7 +19,7 @@
     <h2>1. Walk</h2>
     <p>You stand on the south beach, looking north. The picture is 160×90, scaled up. The ground is the integer crust. The sky is blue because the sun is up.</p>
     <p>Click the picture, then look with the mouse. W A S D move. A and D strafe; they do not turn you. Shift sprints. Space jumps and lands. Walk north and the wooden compound gets closer.</p>
-    <p>This page does not save a hole.</p>
+    <p>Look down and hold the left mouse for about a second. Pass: a darker pit opens in the sand, and the line reads <code>voxel 500</code> plus a hash.</p>
     <p><a href="/tools/view/index.html">Open the walk</a></p>
 
     <h2>2. Position</h2>
@@ -36,5 +36,10 @@
     <p>Tab A proposes one voxel. Tab B signs the vote. Both apply the same op.</p>
     <p>Pass: both pages leave <code>waiting</code>, then log <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. The line <code>voxel before</code> is negative. Open either tab first.</p>
     <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a></p>
+
+    <h2>5. Shared pit</h2>
+    <p>The same walk, in two tabs. Tab A looks down and holds the left mouse. Tab B looks down at the same sand.</p>
+    <p>Pass: both lines show <code>voxel 500</code> and the same hash. The darker pit is in both pictures. Open either tab first.</p>
+    <p><a href="/tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?id=b&to=a">Tab B</a></p>
   </body>
 </html>
