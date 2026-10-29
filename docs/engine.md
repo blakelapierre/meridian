@@ -1,7 +1,7 @@
 # MERIDIAN
 ## Engine basis
 
-The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `e4c14f70cd6db37e9f36761bd4e0fb73666db62c` (`pen.js`). That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
+The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `4698794ab1b3c170163ba9bce1f746c9269945fe` (`pen.js`). That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
 
 This file wins over [engineering.md](engineering.md) on what draws the frame and what integrates motion. It does not win on damage numbers, the keymap, the chunk hash, or packet layout.
 

@@ -1,4 +1,5 @@
 import { cameraBasis } from "../engine/cast.js";
+import { ATLAS, SAND_TILE, WOOD_TILE, blitTexture, rectFor, sandTexture, woodTexture } from "./texture.js";
 
 const MAX_SPHERES = 8;
 const MAX_BOXES = 32;
@@ -10,6 +11,9 @@ const boxMin = new Float32Array(MAX_BOXES * 4);
 const boxMax = new Float32Array(MAX_BOXES * 4);
 const boxColor = new Float32Array(MAX_BOXES * 4);
 const digData = new Float32Array(MAX_DIGS * 4);
+const RECT_SLOTS = 10;
+const rectData = new Float32Array(RECT_SLOTS * 4);
+const atlasData = new Uint8Array(ATLAS * ATLAS * 4);
 
 function fail(canvas, reason) {
   canvas.dataset.gpuError = reason;
@@ -92,7 +96,23 @@ uniform sampler2D uBoxMin;
 uniform sampler2D uBoxMax;
 uniform sampler2D uBoxColor;
 uniform sampler2D uDigTex;
+uniform sampler2D uTexRects;
+uniform sampler2D uAtlas;
 out vec4 fragColor;
+
+vec3 tiled(int tile, vec2 uv, vec3 fallback) {
+  vec4 rect = texelFetch(uTexRects, ivec2(tile, 0), 0);
+  if (rect.w < 0.5) return fallback;
+  float pad = 0.5 / ${ATLAS}.0;
+  vec2 st = rect.xy + vec2(pad) + fract(uv) * (rect.z - pad * 2.0);
+  return texture(uAtlas, st).rgb;
+}
+
+vec3 sphereAlbedo(vec3 n, int i, vec3 fallback) {
+  float u = atan(n.z, n.x) * 0.15915494309189535 + 0.5;
+  float v = asin(clamp(n.y, -1.0, 1.0)) * 0.3183098861837907 + 0.5;
+  return tiled(i, vec2(u, v), fallback);
+}
 
 bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
   if (rd.z > -1.0e-4) return false;
@@ -285,7 +305,7 @@ void main() {
         bestT = t;
         bestP = p;
         bestN = faceN;
-        bestRgb = vec3(0.16, 0.13, 0.10);
+        bestRgb = tiled(${SAND_TILE}, bestP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * (floor ? 0.55 : 0.4);
         bestRef = 0.04;
         found = true;
       }
@@ -294,14 +314,14 @@ void main() {
       bestT = sandT;
       bestP = vec3(sandP.xy, mouthFloor);
       bestN = vec3(0.0, 0.0, 1.0);
-      bestRgb = vec3(0.16, 0.13, 0.10);
+      bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55;
       bestRef = 0.04;
       found = true;
     } else if (sand && !openMouth && sandT < bestT) {
       bestT = sandT;
       bestP = sandP;
       bestN = vec3(0.0, 0.0, 1.0);
-      bestRgb = vec3(0.55, 0.48, 0.32);
+      bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.55, 0.48, 0.32));
       bestRef = 0.2;
       found = true;
     }
@@ -314,7 +334,8 @@ void main() {
       bestP = ro + rd * t;
       bestN = boxNormal(bestP, bmin, bmax);
       vec4 col = texelFetch(uBoxColor, ivec2(i, 0), 0);
-      bestRgb = col.rgb;
+      vec2 woodUv = abs(bestN.z) > 0.5 ? bestP.xy : (abs(bestN.x) > 0.5 ? bestP.yz : bestP.xz);
+      bestRgb = tiled(${WOOD_TILE}, woodUv * 0.5, col.rgb);
       bestRef = col.a;
       found = true;
     }
@@ -326,7 +347,7 @@ void main() {
       bestP = ro + rd * t;
       bestN = normalize(bestP - sphere.xyz);
       vec4 col = texelFetch(uSphereColor, ivec2(i, 0), 0);
-      bestRgb = col.rgb;
+      bestRgb = sphereAlbedo(bestN, i, col.rgb);
       bestRef = col.a;
       found = true;
     }
@@ -407,6 +428,8 @@ void main() {
   let boxMaxTex;
   let boxColorTex;
   let digTex;
+  let rectTex;
+  let atlasTex;
   try {
     sphereTex = texture(gl, MAX_SPHERES);
     sphereColorTex = texture(gl, MAX_SPHERES);
@@ -414,6 +437,19 @@ void main() {
     boxMaxTex = texture(gl, MAX_BOXES);
     boxColorTex = texture(gl, MAX_BOXES);
     digTex = texture(gl, MAX_DIGS);
+    rectTex = texture(gl, RECT_SLOTS);
+    atlasTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    blitTexture(atlasData, SAND_TILE, sandTexture());
+    blitTexture(atlasData, WOOD_TILE, woodTexture());
+    rectData.set(rectFor(SAND_TILE), SAND_TILE * 4);
+    rectData.set(rectFor(WOOD_TILE), WOOD_TILE * 4);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ATLAS, ATLAS, 0, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
   } catch {
     return null;
   }
@@ -425,6 +461,8 @@ void main() {
   gl.uniform1i(loc("uBoxMax"), 3);
   gl.uniform1i(loc("uBoxColor"), 4);
   gl.uniform1i(loc("uDigTex"), 5);
+  gl.uniform1i(loc("uTexRects"), 6);
+  gl.uniform1i(loc("uAtlas"), 7);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   const upload = (unit, tex, width, data) => {
@@ -432,6 +470,8 @@ void main() {
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, 1, gl.RGBA, gl.FLOAT, data);
   };
+  const boundTex = new Array(MAX_SPHERES);
+  let atlasDirty = false;
   return {
     paint(scene) {
       sphereData.fill(0);
@@ -454,6 +494,16 @@ void main() {
           sphereColor[at + 1] = object.color[1];
           sphereColor[at + 2] = object.color[2];
           sphereColor[at + 3] = object.reflectivity || 0;
+          if (object.texture) {
+            rectData.set(rectFor(spheres), spheres * 4);
+            if (boundTex[spheres] !== object.texture) {
+              blitTexture(atlasData, spheres, object.texture);
+              boundTex[spheres] = object.texture;
+              atlasDirty = true;
+            }
+          } else {
+            rectData[spheres * 4 + 3] = 0;
+          }
           spheres += 1;
         } else if (object.type === "box" && boxes < MAX_BOXES) {
           const at = boxes * 4;
@@ -495,6 +545,13 @@ void main() {
       upload(3, boxMaxTex, MAX_BOXES, boxMax);
       upload(4, boxColorTex, MAX_BOXES, boxColor);
       upload(5, digTex, MAX_DIGS, digData);
+      upload(6, rectTex, RECT_SLOTS, rectData);
+      if (atlasDirty) {
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ATLAS, ATLAS, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
+        atlasDirty = false;
+      }
       gl.uniform3f(loc("uOrigin"), scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
       gl.uniform3f(loc("uForward"), basis.forward[0], basis.forward[1], basis.forward[2]);
       gl.uniform3f(loc("uRight"), basis.right[0], basis.right[1], basis.right[2]);
