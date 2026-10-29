@@ -194,7 +194,10 @@ function paint(sample) {
   const color = hit.color || scene.miss;
   canvas.dataset.center = `${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)}`;
   showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
-  if (painter && painter.paint(scene)) return scene;
+  if (painter) {
+    if (!painter.paint(scene)) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
+    return scene;
+  }
   if (!context) {
     painter = null;
     canvas.width = 160;
@@ -356,6 +359,7 @@ if (params.get("still") !== "1") {
   let last = performance.now();
   let bank = 0;
   const frame = (now) => {
+    try {
     bank += Math.min(0.1, (now - last) / 1000);
     last = now;
     const sample = input();
@@ -434,6 +438,9 @@ if (params.get("still") !== "1") {
       canvas.dataset.fps = String(fps.paint(now));
     }
     flush();
+    } catch {
+      report = "frame";
+    }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
