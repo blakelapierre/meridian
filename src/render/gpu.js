@@ -40,10 +40,12 @@ function texture(gl, width) {
   return tex;
 }
 
-export function fitCanvas(canvas) {
+export function fitCanvas(canvas, scale = 1) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const width = Math.max(640, Math.min(1920, Math.floor((canvas.clientWidth || window.innerWidth) * dpr)));
-  const height = Math.max(360, Math.min(1080, Math.floor((canvas.clientHeight || window.innerHeight) * dpr)));
+  const fullW = Math.min(1920, Math.max(1, Math.floor((canvas.clientWidth || window.innerWidth) * dpr)));
+  const fullH = Math.min(1080, Math.max(1, Math.floor((canvas.clientHeight || window.innerHeight) * dpr)));
+  const width = Math.max(160, Math.min(fullW, Math.floor(fullW * scale)));
+  const height = Math.max(90, Math.min(fullH, Math.floor(fullH * scale)));
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
 }

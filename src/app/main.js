@@ -2,6 +2,7 @@ import { paintFrame } from "../engine/frame.js";
 import { cast, project } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
+import { createPacer } from "../render/pace.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { stepHands } from "../sim/hands.js";
 import { bitAim } from "../sim/bit.js";
@@ -100,7 +101,8 @@ function publish() {
   const body = dummy.health === 0 ? "dummy dead" : `dummy ${dummy.health}`;
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
-  if (bit) bit.textContent = `${slot} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground}`;
+  const pace = canvas.dataset.pace || "vsync";
+  if (bit) bit.textContent = `${slot} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${pace} ${canvas.width}×${canvas.height}`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = voxel === null ? "" : String(voxel);
@@ -110,7 +112,6 @@ function publish() {
 }
 
 function paint(sample) {
-  if (painter) fitCanvas(canvas);
   const scene = buildScene({
     feet: player.position,
     yaw,
@@ -269,15 +270,18 @@ async function link() {
 }
 
 const first = input();
+if (painter) fitCanvas(canvas, 1);
 paint(first);
 publish();
 canvas.dataset.ready = "1";
+canvas.dataset.pace = "vsync";
 
 if (params.get("still") !== "1") {
   if (peer) link().catch((error) => {
     const linkLine = document.querySelector("#link");
     if (linkLine) linkLine.textContent = String(error);
   });
+  const pacer = createPacer();
   let last = performance.now();
   let bank = 0;
   const frame = (now) => {
@@ -324,7 +328,15 @@ if (params.get("still") !== "1") {
       tick += 1;
       bank -= 1 / 30;
     }
-    if (params.get("nopaint") !== "1") paint(sample);
+    const active = !document.hidden && document.hasFocus();
+    const decision = pacer.consider(now, active);
+    canvas.dataset.pace = decision.mode;
+    if (params.get("nopaint") !== "1" && decision.paint) {
+      if (painter) fitCanvas(canvas, pacer.scale);
+      const started = performance.now();
+      paint(sample);
+      pacer.note(performance.now() - started, active);
+    }
     flush();
     requestAnimationFrame(frame);
   };
