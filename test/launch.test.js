@@ -21,13 +21,14 @@ test("a check opens a primary, the other client, and a follow view", () => {
   assert.match(behind, /follow=b/);
 });
 
-test("the three windows sit side by side without overlap", () => {
-  const boxes = tiles(1800, 1000, 12, 40);
-  assert.equal(boxes.length, 3);
+test("the primary window is widescreen and the three do not overlap", () => {
+  const boxes = tiles(1920, 1080, 0, 0);
+  const aspect = boxes[0].width / boxes[0].height;
+  assert.ok(Math.abs(aspect - 16 / 9) < 0.02, String(aspect));
   assert.equal(boxes[0].left + boxes[0].width, boxes[1].left);
-  assert.equal(boxes[1].left + boxes[1].width, boxes[2].left);
-  assert.equal(boxes[0].top, 40);
-  assert.equal(boxes[2].top, 40);
-  assert.equal(boxes[0].height, 1000);
-  assert.ok(boxes[0].width + boxes[1].width + boxes[2].width <= 1800);
+  assert.equal(boxes[1].left, boxes[2].left);
+  assert.equal(boxes[1].top + boxes[1].height, boxes[2].top);
+  assert.ok(boxes[2].left + boxes[2].width <= 1920);
+  assert.ok(boxes[2].top + boxes[2].height <= 1080);
+  assert.ok(boxes[0].top + boxes[0].height <= 1080);
 });

@@ -39,41 +39,102 @@ export function trio(href, origin = "http://127.0.0.1") {
 }
 
 export function tiles(availWidth, availHeight, availLeft = 0, availTop = 0) {
-  const width = Math.max(1, Math.floor(availWidth / 3));
-  const height = Math.max(1, availHeight);
-  return [0, 1, 2].map((index) => ({
-    left: availLeft + index * width,
-    top: availTop,
-    width,
-    height,
-  }));
+  const column = Math.max(320, Math.round(availWidth * 0.28));
+  const widthBudget = Math.max(640, availWidth - column);
+  let height = Math.round(widthBudget * 9 / 16);
+  let width = widthBudget;
+  if (height > availHeight) {
+    height = availHeight;
+    width = Math.round(height * 16 / 9);
+  }
+  const rest = Math.max(1, availWidth - width);
+  const half = Math.floor(availHeight / 2);
+  return [
+    { left: availLeft, top: availTop, width, height },
+    { left: availLeft + width, top: availTop, width: rest, height: half },
+    { left: availLeft + width, top: availTop + half, width: rest, height: availHeight - half },
+  ];
+}
+
+function features(box) {
+  return `popup=yes,width=${box.width},height=${box.height},left=${box.left},top=${box.top}`;
 }
 
 function place(url, name, box) {
-  return window.open(url, name, `width=${box.width},height=${box.height},left=${box.left},top=${box.top}`);
+  const win = window.open(url, name, features(box));
+  if (!win) return null;
+  try {
+    win.resizeTo(box.width, box.height);
+    win.moveTo(box.left, box.top);
+  } catch {
+    // some browsers ignore placement; the features string still requested it
+  }
+  return win;
+}
+
+function clickOpen(url, name) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = name;
+  link.rel = "opener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  const win = window.open("", name);
+  if (!win) return null;
+  try {
+    if (win.location.href === "about:blank") {
+      win.close();
+      return null;
+    }
+  } catch {
+    // a cross-origin handle is still a real window
+  }
+  return win;
+}
+
+export function openChecks(href, origin, screenBox) {
+  const urls = trio(href, origin);
+  const boxes = tiles(screenBox.width, screenBox.height, screenBox.left, screenBox.top);
+  const names = ["meridian-primary", "meridian-second", "meridian-follow"];
+  return urls.map((url, index) => place(url, names[index], boxes[index]) || clickOpen(url, names[index]));
 }
 
 if (typeof document !== "undefined") {
   let watch = 0;
-  addEventListener("DOMContentLoaded", () => {
-    for (const link of document.querySelectorAll('a[href^="/tools/"]')) {
-      link.addEventListener("click", (event) => {
-        event.preventDefault();
-        const urls = trio(link.getAttribute("href"), location.origin);
-        const boxes = tiles(screen.availWidth, screen.availHeight, screen.availLeft || 0, screen.availTop || 0);
-        const names = ["meridian-primary", "meridian-second", "meridian-follow"];
-        const opened = urls.map((url, index) => place(url, names[index], boxes[index]));
-        const primary = opened[0];
-        if (!primary) return;
-        clearInterval(watch);
-        watch = setInterval(() => {
-          if (!primary.closed) return;
-          clearInterval(watch);
-          for (const extra of opened.slice(1)) {
-            if (extra && !extra.closed) extra.close();
-          }
-        }, 300);
-      });
+  const onClick = (event) => {
+    const link = event.target.closest?.("a[href^='/tools/']");
+    if (!link) return;
+    event.preventDefault();
+    const opened = openChecks(link.getAttribute("href"), location.origin, {
+      width: screen.availWidth,
+      height: screen.availHeight,
+      left: screen.availLeft || 0,
+      top: screen.availTop || 0,
+    });
+    const note = document.querySelector("#windows");
+    const openedCount = opened.filter(Boolean).length;
+    if (note) {
+      note.textContent = openedCount === 3
+        ? "Three windows are open. The wide one is the primary."
+        : `The browser opened ${openedCount} of 3 windows. Allow popups for this site, then click the check again.`;
     }
-  });
+    const primary = opened[0];
+    if (!primary) return;
+    clearInterval(watch);
+    let misses = 0;
+    watch = setInterval(() => {
+      if (!primary.closed) {
+        misses = 0;
+        return;
+      }
+      misses += 1;
+      if (misses < 2) return;
+      clearInterval(watch);
+      for (const extra of opened.slice(1)) {
+        if (extra && !extra.closed) extra.close();
+      }
+    }, 400);
+  };
+  document.addEventListener("click", onClick, true);
 }
