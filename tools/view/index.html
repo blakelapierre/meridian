@@ -17,6 +17,8 @@
       #sight.hot { filter: drop-shadow(0 0 5px #fff); }
       #sight.cold { opacity: 0.35; }
       aside { position: fixed; top: 12px; left: 12px; width: min(28rem, calc(100vw - 24px)); background: rgba(0,0,0,.78); padding: 12px 14px; font: 14px/1.4 sans-serif; z-index: 2; }
+      html.quiet aside > :not(#bit):not(#link) { display: none; }
+      html.quiet aside { width: auto; max-width: calc(100% - 16px); padding: 6px 8px; }
       a { color: #9cf; }
       h1 { font-size: 1rem; margin: 0 0 8px; }
       p { margin: 0 0 8px; }
@@ -29,6 +31,9 @@
           "@noble/hashes/blake3.js": "/node_modules/@noble/hashes/blake3.js"
         }
       }
+    </script>
+    <script>
+      if (new URLSearchParams(location.search).get("quiet") === "1") document.documentElement.classList.add("quiet");
     </script>
   </head>
   <body>
