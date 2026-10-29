@@ -10,7 +10,7 @@ function unit(values) {
 
 export function encodeShot(identity, { nonce, origin, dir, hitbox }) {
   const body = {
-    nonce,
+    nonce: Math.floor(nonce),
     origin: origin.map((value) => Math.round(value * 100)),
     dir: unit(dir).map((value) => Math.round(value * 32767)),
     hitbox: hitbox || "miss",

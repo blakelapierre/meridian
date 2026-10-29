@@ -2,11 +2,11 @@ import { packetValid, packFrame, signBytes, unpackFrame } from "./identity.js";
 import { decode, encode } from "../sim/cbor.js";
 
 export function encodeWall(identity, { nonce, cell }) {
-  return packFrame(9, signBytes(identity, encode({ nonce, cell })));
+  return packFrame(9, signBytes(identity, encode({ nonce: Math.floor(nonce), cell })));
 }
 
 export function encodeSalvage(identity, { nonce, cell }) {
-  return packFrame(10, signBytes(identity, encode({ nonce, cell })));
+  return packFrame(10, signBytes(identity, encode({ nonce: Math.floor(nonce), cell })));
 }
 
 export function acceptSalvage(frame) {
