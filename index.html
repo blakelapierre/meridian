@@ -16,37 +16,43 @@
     <p>Newest check first. <code>npm start</code> only serves these files and introduces browsers. It does not decide a hit, a dig, or a death.</p>
     <p>Pass means the sentence under the check actually happens. A red error, two different results, or a page that stays on “waiting” is a fail.</p>
 
-    <h2>1. Wall on the ruin</h2>
+    <h2>1. Pace</h2>
+    <p>Open the walk and leave this window focused. The line ends in <code>vsync</code> and a pixel size, and the picture follows the screen.</p>
+    <p>Click another window so the walk is still visible but not focused. Pass: the line changes to <code>1fps</code> and the picture updates about once a second. Click the walk again and it returns to <code>vsync</code>.</p>
+    <p>If a frame takes longer than the screen, the pixel size steps down until the picture keeps up. It steps down further if that is what it takes to stay near 30 fps, and steps back up when the frames are short. The floor is a quarter of the window.</p>
+    <p><a href="/tools/view/index.html">Open the walk</a></p>
+
+    <h2>2. Wall on the ruin</h2>
     <p>Press 3 until the line says <code>hammer</code>. Walk north to the stone slab. Look at the ground beside it and hold the left mouse. The line counts <code>work</code> for 12 seconds.</p>
     <p>Pass: a wooden wall stands on the slab, and the line says <code>wall</code> and <code>metal 24</code>. The same hold on empty sand says <code>support</code> and the metal does not change. The other tab, if it is connected, shows the same wall and still has <code>metal 30</code>.</p>
     <p><a href="/tools/view/index.html">Open the walk</a></p>
 
-    <h2>2. Shared shot</h2>
+    <h2>3. Shared shot</h2>
     <p>Two walk tabs, both opened from the pad. Wait until one says <code>offered</code> and the other <code>answered</code>. Tab A clicks the dummy.</p>
     <p>Pass: both lines say <code>chest 28</code> and <code>dummy 72</code>. <code>split</code> means the other tab did not see the same hit, and that shot does not count.</p>
     <p><a href="/tools/view/index.html?look=dummy&id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?look=dummy&id=b&to=a">Tab B</a></p>
 
-    <h2>3. Shared pit</h2>
+    <h2>4. Shared pit</h2>
     <p>The same walk, in two tabs. Press 3 until the line says <code>bit</code>. Tab A looks down and holds the left mouse. Tab B looks down at the same sand.</p>
     <p>Pass: both lines show <code>voxel 500</code> and the same hash. The darker pit is in both pictures. Open either tab first.</p>
     <p><a href="/tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?id=b&to=a">Tab B</a></p>
 
-    <h2>4. Certified dig</h2>
+    <h2>5. Certified dig</h2>
     <p>Tab A proposes one voxel. Tab B signs the vote. Both apply the same op. You do not aim it.</p>
     <p>Pass: both pages leave <code>waiting</code>, then log <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. The line <code>voxel before</code> is negative. Open either tab first.</p>
     <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a></p>
 
-    <h2>5. Signed shot</h2>
+    <h2>6. Signed shot</h2>
     <p>A fixed shot from the accuracy pad into the dummy. You do not aim it.</p>
     <p>Pass: one log says <code>offered</code>, the other <code>answered</code>, then tab A logs <code>verified hit</code> and tab B logs <code>traced hit</code>. Open either tab first.</p>
     <p><a href="/tools/shot/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/shot/index.html?id=b&to=a">Tab B</a></p>
 
-    <h2>6. Position</h2>
+    <h2>7. Position</h2>
     <p>Two browsers trade an unreliable position. No island is drawn.</p>
     <p>Pass: both logs say <code>waiting for the other tab</code> or <code>waiting for the offer</code>, then <code>offered</code> or <code>answered</code>, then <code>snap open</code> and <code>remote x,y,z</code> lines that change. Open either tab first. <code>lighthouse failed</code> means <code>npm start</code> is not running.</p>
     <p><a href="/tools/link/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/link/index.html?id=b&to=a">Tab B</a></p>
 
-    <h2>7. Walk</h2>
+    <h2>8. Walk</h2>
     <p>You stand on the south beach, looking north. The ground is the integer crust. The sky is blue because the sun is up. With WebGL2 the picture is sharp. Without it, you get the coarse 160×90 fallback.</p>
     <p>Click the picture, then look with the mouse. W A S D move. A and D strafe; they do not turn you. Shift sprints. Space jumps and lands. Walk north and the wooden compound gets closer.</p>
     <p>Press 3 until the line says <code>bit</code>. Look down and hold the left mouse. Pass: a darker pit opens, and the line reads <code>voxel 500</code>.</p>

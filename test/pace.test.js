@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createPacer, nextScale, shouldPaint } from "../src/render/pace.js";
+
+test("an inactive window paints once a second and the focused one paints every frame", () => {
+  assert.equal(shouldPaint(true, 0), true);
+  assert.equal(shouldPaint(false, 999), false);
+  assert.equal(shouldPaint(false, 1000), true);
+});
+
+test("resolution steps down to hold vsync, then 30fps, and steps back up when there is room", () => {
+  assert.ok(nextScale(1, 20, 16.7) < 1);
+  assert.ok(nextScale(1, 40, 16.7) < nextScale(1, 20, 16.7));
+  assert.equal(nextScale(1, 10, 16.7), 1);
+  assert.ok(nextScale(0.5, 8, 16.7) > 0.5);
+  assert.equal(nextScale(0.25, 50, 16.7), 0.25);
+});
+
+test("the pacer learns a 60Hz refresh and only resizes after a run of slow frames", () => {
+  const pacer = createPacer();
+  let now = 0;
+  for (let frame = 0; frame < 10; frame++) {
+    now += 16.7;
+    pacer.consider(now, true);
+  }
+  assert.ok(Math.abs(pacer.refresh - 16.7) < 1);
+  for (let frame = 0; frame < 29; frame++) pacer.note(40, true);
+  assert.equal(pacer.scale, 1);
+  pacer.note(40, true);
+  assert.ok(pacer.scale < 1);
+  now += 500;
+  assert.equal(pacer.consider(now, false).paint, false);
+  now += 500;
+  assert.equal(pacer.consider(now, false).mode, "1fps");
+  assert.equal(pacer.consider(now, false).paint, true);
+});
