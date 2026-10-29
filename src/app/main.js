@@ -11,6 +11,7 @@ import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
 import { lookDirection, stepHands } from "../sim/hands.js";
+import { chaseOrigin, createCameraSpring, stepCamera } from "../sim/body.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { createIdentity } from "../net/identity.js";
@@ -83,6 +84,9 @@ let buyEdge = false;
 let ops = null;
 const links = [];
 let followed = null;
+const poses = new Map();
+let cameraSpring = null;
+let cameraPos = null;
 
 function openLinks() {
   return links.filter((link) => link.ops.readyState === "open");
@@ -132,7 +136,10 @@ addEventListener("keydown", (event) => {
   if (event.repeat) return;
   if (event.code === "KeyE") useEdge = true;
   if (event.code === "KeyB") buyEdge = true;
-  if (event.code === "KeyV") view = view === "third" ? "first" : "third";
+  if (event.code === "KeyV" && !followId) {
+    view = view === "third" ? "first" : "third";
+    cameraSpring = null;
+  }
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
@@ -187,9 +194,27 @@ function eyeOf(sample) {
   ];
 }
 
-function remoteActor() {
-  if (!followed || followed.yaw === undefined) return null;
-  return { feet: [followed.x, followed.y, followed.z], yaw: followed.yaw };
+function otherActors() {
+  const list = [];
+  for (const pose of poses.values()) {
+    if (pose.yaw === undefined) continue;
+    list.push({ feet: [pose.x, pose.y, pose.z], yaw: pose.yaw });
+  }
+  return list;
+}
+
+function aimCamera(sample, dt) {
+  if (!followId && view === "first") {
+    cameraSpring = null;
+    cameraPos = null;
+    return;
+  }
+  const feet = followId && followed && followed.yaw !== undefined
+    ? [followed.x, followed.y, followed.z]
+    : player.position;
+  const ideal = chaseOrigin(feet, sample.yaw ?? yaw, sample.pitch ?? pitch, followId ? false : !!sample.crouch);
+  if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
+  cameraPos = stepCamera(cameraSpring, ideal, dt);
 }
 
 function sceneFor(sample, width, height) {
@@ -204,8 +229,10 @@ function sceneFor(sample, width, height) {
     pieces: yard.pieces,
     width,
     height,
-    view,
-    remote: remoteActor(),
+    view: followId ? "third" : view,
+    self: !followId && view === "third",
+    others: otherActors(),
+    cameraOrigin: cameraPos,
   });
 }
 
@@ -247,7 +274,8 @@ function publish() {
   const archives = links.filter((link) => link.role === "archive" && link.ops.readyState === "open").length;
   const official = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "";
   const chainNote = `block ${tip.height}${official ? ` ${official}` : ""}`;
-  if (bit) bit.textContent = `${view} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const seen = poses.size;
+  if (bit) bit.textContent = `${view} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -445,8 +473,9 @@ async function openLink(to, offer, role) {
   if (!ops) ops = channels.ops;
   channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data));
   channels.snap.onmessage = (event) => {
-    if (to !== followId) return;
-    followed = acceptPosition(followed, new Uint8Array(event.data));
+    const pose = acceptPosition(poses.get(to) || null, new Uint8Array(event.data));
+    poses.set(to, pose);
+    if (to === followId) followed = pose;
   };
   const linkLine = document.querySelector("#link");
   try {
@@ -527,7 +556,7 @@ function applyFollow() {
   player.velocity[2] = 0;
   work = null;
   const linkLine = document.querySelector("#link");
-  if (linkLine) linkLine.textContent = `following ${followId} from ${FOLLOW_M} m behind`;
+  if (linkLine) linkLine.textContent = `following ${followId}`;
 }
 
 function waitFollow() {
@@ -549,7 +578,8 @@ if (params.get("still") !== "1") {
   let bank = 0;
   const frame = (now) => {
     try {
-    bank += Math.min(0.1, (now - last) / 1000);
+    const dt = Math.min(0.1, (now - last) / 1000);
+    bank += dt;
     last = now;
     const sample = input();
     const aimed = refreshAim(sample);
@@ -649,6 +679,7 @@ if (params.get("still") !== "1") {
       }
     }
     showSight(aimed);
+    aimCamera(sample, dt);
     const active = !document.hidden && document.hasFocus();
     const decision = pacer.consider(now, active);
     viewScale = pacer.scale;

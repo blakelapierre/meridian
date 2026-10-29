@@ -13,7 +13,7 @@ export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", remote = null }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -41,15 +41,19 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     body: "dummy",
     texture: dummyTexture(),
   });
-  if (view === "third") {
+  if (view === "third" && self) {
     for (const part of playerParts(feet, yaw, crouch, { self: true })) objects.push(part);
   }
-  if (remote) {
-    for (const part of playerParts(remote.feet, remote.yaw, !!remote.crouch, { self: false, color: OTHER })) objects.push(part);
+  for (const other of others) {
+    for (const part of playerParts(other.feet, other.yaw, !!other.crouch, { self: false, color: OTHER })) objects.push(part);
   }
   const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
   const dir = lookDirection(yaw, pitch);
-  const origin = view === "third" ? chaseOrigin(feet, yaw, pitch, crouch) : [feet[0], feet[1], feet[2] + eye];
+  const origin = cameraOrigin
+    ? cameraOrigin.slice()
+    : view === "third"
+      ? chaseOrigin(feet, yaw, pitch, crouch)
+      : [feet[0], feet[1], feet[2] + eye];
   return {
     sun,
     miss: [0.42 * day, 0.58 * day, 0.82 * day, 1],
