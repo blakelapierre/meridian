@@ -5,7 +5,7 @@ The primary renderer and the primary physics are the ones in [blakelapierre/nbod
 
 This file wins over [engineering.md](engineering.md) on what draws the frame and what integrates motion. It does not win on damage numbers, the keymap, the chunk hash, or packet layout.
 
-Nothing here is ported yet.
+Nothing in the pinned pen is imported at runtime. The port in `src/engine` is the copy this file describes.
 
 ---
 
@@ -61,7 +61,7 @@ Surface gravity is then 9.81 m/s² from the pairwise pass. There is no second gr
 
 The demo calls `centerOn` and subtracts a target position from every body. The game scene **MUST NOT**. That recenter exists so a toy sun stays on screen.
 
-The demo `Clock` advances from `Date`. Meridian does not. One sim tick at 30 Hz calls `tick` once with `ticksPerStep = 1`. If any body is faster than **50 m/s**, that sim tick calls `tick` four times instead. The rule is fixed. It is still ephemeral motion, not a hashed op.
+The demo `Clock` advances from `Date`. Meridian does not. One sim tick at 30 Hz calls `tick` once with `ticksPerStep = 30`, so the step is 1/30 s. `ticksPerStep = 1` would advance a full second and is not the game frame. If any body is faster than **50 m/s**, that sim tick calls `tick` four times instead. The rule is fixed. It is still ephemeral motion, not a hashed op.
 
 `createRunner`, `inputEvents`, and `eevents` are the pattern for "something happened": an absorbed body, a spawned mass, a changed `G`. Game commits stay on the op log. They may enqueue an `eevent` so the float scene notices. The event must not be the authority for a dig, a claim, or a kill.
 
