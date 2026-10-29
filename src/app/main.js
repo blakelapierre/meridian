@@ -4,6 +4,7 @@ import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
 import { createFps } from "../render/fps.js";
 import { createPacer } from "../render/pace.js";
+import { createDetail } from "../render/detail.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
@@ -22,6 +23,9 @@ const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
+const focus = createDetail();
+let lastCost = 16;
+let frameGap = 16;
 if (painter) {
   fitCanvas(canvas, viewScale);
   canvas.style.imageRendering = "auto";
@@ -165,7 +169,8 @@ function publish() {
   const pace = canvas.dataset.pace || "vsync";
   const rate = canvas.dataset.fps || "0";
   const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
-  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const detail = canvas.dataset.detail || "0";
+  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height} · detail ${detail}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -174,6 +179,19 @@ function publish() {
   canvas.dataset.hash = terrain.hash();
   canvas.dataset.dummy = String(dummy.health);
   canvas.dataset.slot = slot;
+}
+
+function viewSignature(sample) {
+  return [
+    player.position[0].toFixed(2),
+    player.position[1].toFixed(2),
+    player.position[2].toFixed(2),
+    yaw.toFixed(3),
+    pitch.toFixed(3),
+    sample.crouch ? 1 : 0,
+    terrain.voxel() ?? "0",
+    yard.pieces.length,
+  ].join(":");
 }
 
 function paint(sample) {
@@ -191,6 +209,8 @@ function paint(sample) {
   });
   scene.work = work;
   scene.time = tick / 30;
+  scene.detail = focus.sample(viewSignature(sample), Math.max(lastCost, frameGap));
+  canvas.dataset.detail = String(Math.round(scene.detail.level * 100));
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
   const color = hit.color || scene.miss;
@@ -346,7 +366,8 @@ async function link() {
 }
 
 const first = input();
-if (painter) fitCanvas(canvas, viewScale);
+if (painter) fitCanvas(canvas, 1);
+else fitCanvas(canvas, viewScale);
 paint(first);
 publish();
 canvas.dataset.ready = "1";
@@ -363,6 +384,7 @@ if (params.get("still") !== "1") {
   const frame = (now) => {
     try {
     bank += Math.min(0.1, (now - last) / 1000);
+    frameGap = now - last;
     last = now;
     const sample = input();
     const aimed = refreshAim(sample);
@@ -439,9 +461,11 @@ if (params.get("still") !== "1") {
     viewScale = pacer.scale;
     canvas.dataset.pace = decision.mode;
     if (params.get("nopaint") !== "1" && decision.paint) {
-      if (painter) fitCanvas(canvas, viewScale);
+      if (painter) fitCanvas(canvas, 1);
+      else fitCanvas(canvas, viewScale);
       const started = performance.now();
       paint(sample);
+      lastCost = performance.now() - started;
       pacer.note(performance.now() - started, active);
       canvas.dataset.fps = String(fps.paint(now));
     }
