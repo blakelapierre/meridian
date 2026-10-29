@@ -106,6 +106,7 @@ let selectEdge = false;
 let actEdge = false;
 let cycleEdge = 0;
 let objectEdge = 0;
+let rightEdge = false;
 let autoRun = false;
 let mapOpen = params.get("quiet") !== "1";
 const trail = [];
@@ -200,14 +201,9 @@ const shotFrames = [];
 
 addEventListener("keydown", (event) => {
   keys.add(event.code);
-  if (event.code === "Digit1") slot = "line";
-  if (event.code === "Digit3") slot = slot === "bit" ? "hammer" : "bit";
   if (event.code === "Tab" || event.code === "Backquote") event.preventDefault();
   if (event.repeat) return;
-  if (event.code === "KeyE") {
-    if (entryState.prompt) useEdge = true;
-    else selectEdge = true;
-  }
+  playerPress(event.code);
   if (event.code === "KeyB") buyEdge = true;
   if (event.code === "KeyU") actEdge = true;
   if (event.code === "Tab") cycleEdge = event.shiftKey ? -1 : 1;
@@ -221,7 +217,7 @@ addEventListener("keydown", (event) => {
     mapOpen = false;
     showChart();
   }
-  if (event.code === "KeyV" && !followId && !agent) {
+  if (event.code === "KeyV" && !followId) {
     if (view === "third") {
       view = "first";
       zoom = { ...zoom, first: true, forced: true, blend: 1 };
@@ -252,28 +248,14 @@ addEventListener("mouseup", (event) => {
   if (event.button !== 2) return;
   const orbiting = rightMoved;
   rightDown = false;
-  if (orbiting || followId || slot !== "hammer") return;
-  const mark = refreshAim(input());
-  if (!mark.inRange) {
-    report = "far";
-    return;
-  }
-  const saved = trySalvage(yard, mark.cell);
-  report = saved.ok ? "salvage" : saved.reason;
-  if (!saved.ok) return;
-  const nonce = Math.floor(tick);
-  const frame = encodeSalvage(identity, { nonce, cell: mark.cell });
-  sendOps(frame);
+  if (orbiting) return;
+  useRightClick();
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("click", () => canvas.requestPointerLock());
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
-  const before = zoom.level;
-  const wasFirst = zoom.first;
-  zoom = stepZoom(zoom, Math.sign(event.deltaY) || 1, skills.eyesight.value, optics);
-  cameraDistance = zoom.distance;
-  if ((zoom.first && !wasFirst) || zoom.level > before) grantUse(skills, "eyesight", { tick, gap: 30 });
+  turnWheel(Math.sign(event.deltaY) || 1);
 }, { passive: false });
 addEventListener("mousemove", (event) => {
   if (document.pointerLockElement !== canvas) return;
@@ -307,34 +289,53 @@ function input() {
   };
 }
 
+function playerPress(code) {
+  if (code === "Digit1") slot = "line";
+  if (code === "Digit3") slot = slot === "bit" ? "hammer" : "bit";
+  if (code === "KeyE") {
+    if (entryState.prompt) useEdge = true;
+    else selectEdge = true;
+  }
+}
+
+function turnWheel(direction) {
+  const before = zoom.level;
+  const wasFirst = zoom.first;
+  zoom = stepZoom(zoom, direction, skills.eyesight.value, optics);
+  cameraDistance = zoom.distance;
+  if ((zoom.first && !wasFirst) || zoom.level > before) grantUse(skills, "eyesight", { tick, gap: 30 });
+}
+
+function useRightClick() {
+  if (followId || slot !== "hammer") return;
+  const mark = refreshAim(input());
+  if (!mark.inRange || mark.kind !== "wall") {
+    if (agent) agent.salvage = false;
+    report = "far";
+    return;
+  }
+  const saved = trySalvage(yard, mark.cell);
+  report = saved.ok ? "salvage" : saved.reason;
+  if (!saved.ok) return;
+  const nonce = Math.floor(tick);
+  const frame = encodeSalvage(identity, { nonce, cell: mark.cell });
+  sendOps(frame);
+}
+
 function applyAgenda(command) {
   for (const code of ["KeyW", "KeyA", "KeyS", "KeyD"]) keys.delete(code);
   if (command.forward > 0) keys.add("KeyW");
   if (command.forward < 0) keys.add("KeyS");
   yaw = command.yaw;
   if (command.pitch != null) pitch = command.pitch;
-  if (command.slot) slot = command.slot;
-  if (command.identify) selectEdge = true;
+  if (command.slot === "line") playerPress("Digit1");
+  else if ((command.slot === "bit" || command.slot === "hammer") && slot !== command.slot) playerPress("Digit3");
+  if (command.identify) playerPress("KeyE");
   trigger = !!command.hold;
   if (command.shot) shotQueued = true;
-  if (command.zoom) {
-    const before = zoom.level;
-    const wasFirst = zoom.first;
-    zoom = stepZoom(zoom, command.zoom, skills.eyesight.value, optics);
-    cameraDistance = zoom.distance;
-    if ((zoom.first && !wasFirst) || zoom.level > before) grantUse(skills, "eyesight", { tick, gap: 30 });
-  }
-  if (command.salvage) {
-    const wall = yard.pieces.find((piece) => piece.id === "wall");
-    if (wall && !agent.salvage) {
-      const saved = trySalvage(yard, wall.at);
-      report = saved.ok ? "salvage" : saved.reason;
-      if (saved.ok) sendOps(encodeSalvage(identity, { nonce: Math.floor(tick), cell: wall.at }));
-    }
-    agent.salvage = true;
-  } else if (agent) {
-    agent.salvage = false;
-  }
+  if (command.zoom) turnWheel(command.zoom);
+  if (command.salvage && slot === "hammer" && !agent.salvage) rightEdge = true;
+  agent.salvage = !!(command.salvage && slot === "hammer");
 }
 
 function eyeOf(sample) {
@@ -1030,6 +1031,15 @@ if (params.get("still") !== "1") {
     const dt = Math.min(0.1, (now - last) / 1000);
     bank += dt;
     last = now;
+    if (agent) {
+      applyAgenda(stepAgenda(agendaName, agent, {
+        x: player.position[0],
+        y: player.position[1],
+        yaw,
+        tick,
+        wall: yard.pieces.some((piece) => piece.id === "wall"),
+      }));
+    }
     const sample = input();
     const selectOnce = selectEdge;
     const actOnce = actEdge;
@@ -1040,6 +1050,10 @@ if (params.get("still") !== "1") {
     cycleEdge = 0;
     objectEdge = 0;
     const aimed = refreshAim(sample);
+    if (rightEdge) {
+      rightEdge = false;
+      useRightClick();
+    }
     if (followId) {
       bank = 0;
       if (followed) applyFollow();
@@ -1123,16 +1137,7 @@ if (params.get("still") !== "1") {
           work = null;
         }
       }
-      if (agent) {
-        applyAgenda(stepAgenda(agendaName, agent, {
-          x: player.position[0],
-          y: player.position[1],
-          yaw,
-          tick,
-          wall: yard.pieces.some((piece) => piece.id === "wall"),
-        }));
-      }
-      const moved = stepHands(world, player, stamina, agent ? input() : sample, jump, skills.jump.value);
+      const moved = stepHands(world, player, stamina, sample, jump, skills.jump.value);
       if (moved.jump) grantUse(skills, "jump", { tick });
       if (moved.running) grantUse(skills, "run", { tick, gap: 30 });
       if (mapOpen) grantUse(skills, "mapping", { tick, gap: 15 });
