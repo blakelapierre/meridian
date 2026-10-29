@@ -422,7 +422,7 @@ These are requirements the protocol cannot patch around.
 
 **Structures.** The hashed object is the support graph and the SDF samples. The rendered mesh is derived. Collapse commits a `TerrainEdit` plus debris spawn ids. It does not stream triangles.
 
-**Gravity.** Acceleration is `-g * normalize(ecef)` with `g = 9.81`. Vehicles, shells, and water probes use it. The character controller is a capsule on that up-vector, kinematic enough to stop and peek, dynamic enough to be shoved by a committed impulse.
+**Gravity.** Comes from the pairwise N-body step in [engine.md](engine.md). At Cairn's surface that magnitude is 9.81 m/s² toward the center. There is no second gravity formula. Vehicles, shells, and water probes are bodies in that same step. The character is a body with a `separate` collision policy: physical enough that slopes and explosions move them, constrained enough that the stop-window in the game spec still holds. Pure ragdoll infantry would wreck the CS clock. We will not do it.
 
 **Dayline.** Flux at a site is a function of the sun direction and the horizon mask of the SDF. Sun direction is `tick → rotation`, shared. No replication of “is it night” as a boolean a client can flip.
 
@@ -456,7 +456,7 @@ render, every frame:
   never read the socket
 ```
 
-The GPU path in the concept is hybrid: raster primary, ray-traced shadows and reflections. **The Atoll slice does not build that.** Until the Atoll acceptance tests pass, the renderer is raster only, as [engineering.md](engineering.md) locks. After that, a chunk-hash change may rebuild a ray-tracing structure, and that rebuild is allowed to be a frame late. The hash is not.
+The picture is the software raycaster pinned in [engine.md](engine.md): one primary ray per pixel through `cast`, plus at most one sun ray. GPU ray tracing is a later backend of that same `cast`, not the Atoll renderer. A chunk-hash change updates the field the march reads, and that update is allowed to be a frame late. The hash is not.
 
 ---
 

@@ -7,12 +7,13 @@ These are design documents, not a client. Nothing in this repository is implemen
 - [Concept](docs/concept.md) — fantasy, pillars, and what is inherited from Asheron's Call, Wurm Online, Savage, Natural Selection, Counter-Strike, and Total Annihilation.
 - [Game spec](docs/game.md) — player-facing rules, numbers, and the Atoll slice.
 - [WebRTC spec](docs/implementation-webrtc.md) — how peers agree. Packets, quorum, and the op log.
-- [Engineering locks](docs/engineering.md) — raster slice, kinematic capsule, where code goes, how tests run.
+- [Engine basis](docs/engine.md) — the nbody-raycaster commit that is the renderer and the physics.
+- [Engineering locks](docs/engineering.md) — where code goes, and how tests run.
 - [Integer crust](docs/crust.md) — the dig brush and the chunk hash.
 - [Keymap](docs/keymap.md)
 - [Atoll](content/atoll.json) — the island, in centimeters.
 
-On conflict: the concept wins on fantasy, the game spec wins on rules, the crust doc wins on voxels, the engineering doc wins on how the slice is built, the WebRTC spec wins on bytes.
+On conflict: the concept wins on fantasy, the game spec wins on rules, the crust doc wins on voxels, the engine doc wins on the renderer and the integrator, the engineering doc wins on layout and tests, the WebRTC spec wins on bytes.
 
 License: [MIT](LICENSE).
 

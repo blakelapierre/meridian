@@ -1,0 +1,19 @@
+{
+  "source": "https://github.com/blakelapierre/nbody-raycaster",
+  "commit": "e4c14f70cd6db37e9f36761bd4e0fb73666db62c",
+  "file": "pen.js",
+  "renderer": [
+    "project",
+    "cast",
+    "paintFrame",
+    "sphereRayIntersection",
+    "syncSceneObjects"
+  ],
+  "physics": [
+    "Mass",
+    "tick",
+    "createUniverse",
+    "createRunner",
+    "Clock"
+  ]
+}
