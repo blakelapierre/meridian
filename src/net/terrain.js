@@ -174,11 +174,27 @@ export function createTerrain({ identity, leader }) {
     return { ok: false, reason: "kind" };
   }
 
+  function openEdits() {
+    const packets = [remote, proposed, ...waiting].filter(Boolean);
+    return packets.map((packet) => {
+      const body = decode(packet.bytes).body;
+      return {
+        eye: body.eye,
+        aim: body.aim,
+        chunk: body.chunk,
+        before: body.before,
+        mode: body.mode,
+        writes: body.writes,
+      };
+    });
+  }
+
   return {
     log,
     dig,
     receive,
     take,
+    openEdits,
     voxel: () => (last ? log.crust.sampleIndex(last.i, last.j, last.k) : null),
     write: () => last,
     hash: () => (last ? hex(log.crust.hash(...chunkOf(last))) : ""),

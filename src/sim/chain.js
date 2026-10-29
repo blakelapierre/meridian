@@ -208,3 +208,51 @@ export function blocksByMiner(chain, miner) {
   }
   return count;
 }
+
+export function coveredWrites(chain) {
+  const keys = new Set();
+  let cursor = chain.tip;
+  while (cursor) {
+    const node = chain.blocks.get(cursor);
+    if (!node || node.block.height === 0) break;
+    for (const op of node.block.ops) {
+      for (const write of op.writes) keys.add(`${write[0]},${write[1]},${write[2]}`);
+    }
+    cursor = node.parent;
+  }
+  return keys;
+}
+
+export function chainEdits(chain, edits) {
+  const covered = coveredWrites(chain);
+  const next = [];
+  let seq = tipOf(chain).block.seq;
+  for (const edit of edits) {
+    const fresh = edit.writes.every((write) => !covered.has(`${write[0]},${write[1]},${write[2]}`));
+    if (!fresh) continue;
+    seq += 1;
+    next.push({ ...edit, seq });
+    for (const write of edit.writes) covered.add(`${write[0]},${write[1]},${write[2]}`);
+  }
+  return next;
+}
+
+export function installTip(crust, chain, fromChain, ownKeys = new Set()) {
+  const tip = chain.crusts.get(chain.tip);
+  const kept = new Map();
+  for (const [key, sample] of crust.overrides) {
+    if (!fromChain.has(key) || ownKeys.has(key)) kept.set(key, sample);
+  }
+  for (const key of fromChain) {
+    if (!tip.overrides.has(key) && !ownKeys.has(key)) crust.overrides.delete(key);
+  }
+  fromChain.clear();
+  for (const [key, sample] of tip.overrides) {
+    crust.overrides.set(key, sample);
+    fromChain.add(key);
+  }
+  for (const [key, sample] of kept) {
+    if (!fromChain.has(key)) crust.overrides.set(key, sample);
+  }
+  return tipOf(chain).block;
+}

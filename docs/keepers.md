@@ -3,7 +3,7 @@
 
 A keeper is a client with no body and no picture. It mines a proof-of-work chain. That chain is what makes a hole official. A vote can show the pit early. The block is the decision.
 
-The client is [tools/archive/index.html](../tools/archive/index.html). `npm start`, then open [http://127.0.0.1:8080/tools/archive/](http://127.0.0.1:8080/tools/archive/). It announces `role: archive` on the lighthouse. A walk tab answers. Digs are still predicted locally. When the archive finds a block, the walk line changes from `provisional` to `official`.
+The client is [tools/archive/index.html](../tools/archive/index.html). `npm start`, then open [http://127.0.0.1:8080/tools/archive/](http://127.0.0.1:8080/tools/archive/). It announces `role: archive` on the lighthouse. A walk tab answers. Digs are still predicted locally. The archive mines a checked proposal even before the vote seals. When the block arrives, every linked client draws that tip, including one that never voted. A heavier chain replaces it. A hole you dug yourself stays on your screen until a block includes it. The walk line changes from `provisional` to `official`.
 
 A block commits the edits since the previous tip, the chunk hash those edits produce, and a nonce. The hash of that block must have **16** leading zero bits. A heavier chain wins. Weight is `2^(bits - 8)`, so one harder block can outrank several easier ones. Ties break toward the lower block id. An empty block, a skipped seq, or a hash that does not replay is refused. The lighthouse still does not see the blocks.
 
