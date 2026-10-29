@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { paintFrame } from "../src/engine/frame.js";
+import { project } from "../src/engine/cast.js";
 import { buildScene } from "../src/render/scene.js";
 import { loadCatalog } from "../src/sim/catalog.js";
 import { stepHands } from "../src/sim/hands.js";
@@ -37,6 +38,19 @@ test("holding back from a sprint still stops inside the window", () => {
     if (crossed === null && speed < 0.8) crossed = step / 30;
   }
   assert.ok(crossed >= 0.14 && crossed <= 0.18, crossed);
+});
+
+test("looking level keeps the sky up and mouse-right to the right", () => {
+  const level = { dir: [0, 1, 0], fov: 70, aspect: 1, planeDistance: 1 };
+  const sky = project(0.5, 0.25, level);
+  const ground = project(0.5, 0.75, level);
+  const east = project(0.75, 0.5, level);
+  const west = project(0.25, 0.5, level);
+  assert.ok(sky[2] > ground[2]);
+  assert.ok(east[0] > west[0]);
+  const facingEast = { dir: [1, 0, 0], fov: 70, aspect: 1, planeDistance: 1 };
+  assert.ok(project(0.75, 0.5, facingEast)[1] < project(0.25, 0.5, facingEast)[1]);
+  assert.ok(project(0.5, 0.25, facingEast)[2] > project(0.5, 0.75, facingEast)[2]);
 });
 
 test("the center pixel on the pad is the dummy", () => {
