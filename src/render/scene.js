@@ -25,6 +25,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       min: [box.min.x / 100, box.min.y / 100, box.min.z / 100],
       max: [box.max.x / 100, box.max.y / 100, box.max.z / 100],
       color: WOOD,
+      reflectivity: 0.08,
     });
   }
   const dummy = atoll.placements.dummy;
@@ -33,6 +34,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     origin: [dummy.x / 100, dummy.y / 100, 0.9],
     radius: 0.35,
     color: DUMMY,
+    reflectivity: 0.45,
     body: "dummy",
   });
   const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;

@@ -182,6 +182,23 @@ bool blocked(vec3 from, vec3 rd) {
   return false;
 }
 
+vec3 crustNormal(vec3 p) {
+  float e = 0.08;
+  return normalize(vec3(
+    sampleMeters(p + vec3(e, 0.0, 0.0)) - sampleMeters(p - vec3(e, 0.0, 0.0)),
+    sampleMeters(p + vec3(0.0, e, 0.0)) - sampleMeters(p - vec3(0.0, e, 0.0)),
+    sampleMeters(p + vec3(0.0, 0.0, e)) - sampleMeters(p - vec3(0.0, 0.0, e))
+  ));
+}
+
+vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
+  vec3 q = (p - (bmin + bmax) * 0.5) / max((bmax - bmin) * 0.5, vec3(0.001));
+  vec3 a = abs(q);
+  if (a.x > a.y && a.x > a.z) return vec3(sign(q.x), 0.0, 0.0);
+  if (a.y > a.z) return vec3(0.0, sign(q.y), 0.0);
+  return vec3(0.0, 0.0, sign(q.z));
+}
+
 void main() {
   float uu = gl_FragCoord.x / uRes.x;
   float vv = 1.0 - gl_FragCoord.y / uRes.y;
@@ -189,60 +206,106 @@ void main() {
   float px = (uu * 2.0 - 1.0) * uAspect * halfAngle;
   float py = (1.0 - vv * 2.0) * halfAngle;
   vec3 rd = normalize(uRight * px + uUp * py + uForward * uPlane);
-  float bestT = 1.0e30;
-  vec3 bestP = vec3(0.0);
-  vec4 bestColor = uMiss;
-  float t;
-  vec3 p;
-  if (crustHit(uOrigin, rd, t, p) && t < bestT) {
-    bestT = t;
-    bestP = p;
-    bestColor = p.z < -0.3 ? vec4(0.16, 0.13, 0.10, 1.0) : vec4(0.55, 0.48, 0.32, 1.0);
-  }
-  for (int i = 0; i < ${MAX_BOXES}; i++) {
-    if (i >= uBoxes) break;
-    vec3 bmin = texelFetch(uBoxMin, ivec2(i, 0), 0).xyz;
-    vec3 bmax = texelFetch(uBoxMax, ivec2(i, 0), 0).xyz;
-    if (!boxHit(uOrigin, rd, bmin, bmax, t) || t >= bestT) continue;
-    bestT = t;
-    bestP = uOrigin + rd * t;
-    bestColor = texelFetch(uBoxColor, ivec2(i, 0), 0);
-  }
-  for (int i = 0; i < ${MAX_SPHERES}; i++) {
-    if (i >= uSpheres) break;
-    vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
-    if (!sphereHit(uOrigin, rd, sphere, t) || t >= bestT) continue;
-    bestT = t;
-    bestP = uOrigin + rd * t;
-    bestColor = texelFetch(uSphereColor, ivec2(i, 0), 0);
-  }
-  if (bestT < 1.0e20 && blocked(bestP + uSun * 0.08, uSun)) bestColor.rgb *= 0.45;
-  if (uWork.w > 0.5) {
-    vec2 cell = uWork.xy;
-    float rise = max(uWork.z, 0.08);
-    float gt;
-    float wide = rise < 0.4 ? 0.42 : 0.24;
-    float deep = rise < 0.4 ? 0.42 : 0.08;
-    vec3 bmin = vec3(cell.x - wide, cell.y - deep, 0.0);
-    vec3 bmax = vec3(cell.x + wide, cell.y + deep, rise);
-    bool piece = uWork.w > 3.5;
-    bool rising = uWork.w < 1.5;
-    vec3 tint = piece ? vec3(1.0, 0.72, 0.28) : vec3(0.2, 0.9, 1.0);
-    if ((rising || piece) && boxHit(uOrigin, rd, bmin, bmax, gt) && gt < bestT) {
-      vec3 gp = uOrigin + rd * gt;
-      float band = 0.55 + 0.45 * sin(gp.z * 16.0 - uTime * 8.0);
-      float lip = smoothstep(rise - 0.12, rise, gp.z);
-      bestColor = vec4(mix(tint * band, vec3(1.0, 0.95, 0.7), lip), 1.0);
-    } else if (bestT < 1.0e20) {
-      float dist = length(bestP.xy - cell);
-      float ring = 0.28 + 0.05 * sin(uTime * 3.0);
-      float mark = smoothstep(0.07, 0.0, abs(dist - ring));
-      float pad = smoothstep(0.34, 0.08, dist);
-      float scan = 0.55 + 0.45 * sin(uTime * 6.0 + dist * 20.0);
-      bestColor.rgb += tint * (mark * 0.95 + pad * 0.35 * scan);
+  vec3 ro = uOrigin;
+  vec3 accum = vec3(0.0);
+  float thru = 1.0;
+  for (int bounce = 0; bounce < 5; bounce++) {
+    float bestT = 1.0e30;
+    vec3 bestP = ro;
+    vec3 bestN = vec3(0.0, 0.0, 1.0);
+    vec3 bestRgb = uMiss.rgb;
+    float bestRef = 0.0;
+    bool found = false;
+    float t;
+    vec3 p;
+    if (crustHit(ro, rd, t, p) && t > 0.02 && t < bestT) {
+      bestT = t;
+      bestP = p;
+      bestN = crustNormal(p);
+      bool pit = p.z < -0.3;
+      bestRgb = pit ? vec3(0.16, 0.13, 0.10) : vec3(0.55, 0.48, 0.32);
+      bestRef = pit ? 0.04 : 0.2;
+      found = true;
     }
+    for (int i = 0; i < ${MAX_BOXES}; i++) {
+      if (i >= uBoxes) break;
+      vec3 bmin = texelFetch(uBoxMin, ivec2(i, 0), 0).xyz;
+      vec3 bmax = texelFetch(uBoxMax, ivec2(i, 0), 0).xyz;
+      if (!boxHit(ro, rd, bmin, bmax, t) || t <= 0.02 || t >= bestT) continue;
+      bestT = t;
+      bestP = ro + rd * t;
+      bestN = boxNormal(bestP, bmin, bmax);
+      vec4 col = texelFetch(uBoxColor, ivec2(i, 0), 0);
+      bestRgb = col.rgb;
+      bestRef = col.a;
+      found = true;
+    }
+    for (int i = 0; i < ${MAX_SPHERES}; i++) {
+      if (i >= uSpheres) break;
+      vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
+      if (!sphereHit(ro, rd, sphere, t) || t <= 0.02 || t >= bestT) continue;
+      bestT = t;
+      bestP = ro + rd * t;
+      bestN = normalize(bestP - sphere.xyz);
+      vec4 col = texelFetch(uSphereColor, ivec2(i, 0), 0);
+      bestRgb = col.rgb;
+      bestRef = col.a;
+      found = true;
+    }
+    if (rd.z < -0.001) {
+      float waterT = (0.0 - ro.z) / rd.z;
+      vec3 waterP = ro + rd * waterT;
+      if (waterT > 0.02 && waterT < bestT && dot(waterP.xy, waterP.xy) > 256.0 * 256.0) {
+        bestT = waterT;
+        bestP = waterP;
+        bestN = vec3(0.0, 0.0, 1.0);
+        bestRgb = vec3(0.08, 0.22, 0.38);
+        bestRef = 0.45;
+        found = true;
+      }
+    }
+    if (!found) {
+      accum += thru * uMiss.rgb;
+      break;
+    }
+    if (dot(bestN, rd) > 0.0) bestN = -bestN;
+    if (blocked(bestP + uSun * 0.08, uSun)) bestRgb *= 0.45;
+    if (bounce == 0 && uWork.w > 0.5) {
+      vec2 cell = uWork.xy;
+      float rise = max(uWork.z, 0.08);
+      float gt;
+      float wide = rise < 0.4 ? 0.42 : 0.24;
+      float deep = rise < 0.4 ? 0.42 : 0.08;
+      vec3 bmin = vec3(cell.x - wide, cell.y - deep, 0.0);
+      vec3 bmax = vec3(cell.x + wide, cell.y + deep, rise);
+      bool piece = uWork.w > 3.5;
+      bool rising = uWork.w < 1.5;
+      vec3 tint = piece ? vec3(1.0, 0.72, 0.28) : vec3(0.2, 0.9, 1.0);
+      if ((rising || piece) && boxHit(ro, rd, bmin, bmax, gt) && gt < bestT) {
+        bestT = gt;
+        bestP = ro + rd * gt;
+        bestN = vec3(0.0, 0.0, 1.0);
+        float band = 0.55 + 0.45 * sin(bestP.z * 16.0 - uTime * 8.0);
+        float lip = smoothstep(rise - 0.12, rise, bestP.z);
+        bestRgb = mix(tint * band, vec3(1.0, 0.95, 0.7), lip);
+        bestRef = 0.0;
+      } else {
+        float dist = length(bestP.xy - cell);
+        float ring = 0.28 + 0.05 * sin(uTime * 3.0);
+        float mark = smoothstep(0.07, 0.0, abs(dist - ring));
+        float pad = smoothstep(0.34, 0.08, dist);
+        float scan = 0.55 + 0.45 * sin(uTime * 6.0 + dist * 20.0);
+        bestRgb += tint * (mark * 0.95 + pad * 0.35 * scan);
+      }
+    }
+    float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
+    accum += thru * bestRgb * (1.0 - mirror);
+    thru *= mirror;
+    if (thru <= 0.001) break;
+    rd = normalize(reflect(rd, bestN));
+    ro = bestP + bestN * 0.05;
   }
-  fragColor = bestColor;
+  fragColor = vec4(accum, 1.0);
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
   const fs = compile(gl, gl.FRAGMENT_SHADER, frag);
@@ -305,13 +368,17 @@ void main() {
           sphereData[at + 1] = object.origin[1];
           sphereData[at + 2] = object.origin[2];
           sphereData[at + 3] = object.radius;
-          sphereColor.set(object.color, at);
+          sphereColor[at] = object.color[0];
+          sphereColor[at + 1] = object.color[1];
+          sphereColor[at + 2] = object.color[2];
+          sphereColor[at + 3] = object.reflectivity || 0;
           spheres += 1;
         } else if (object.type === "box" && boxes < MAX_BOXES) {
           const at = boxes * 4;
           boxMin.set(object.min, at);
           boxMax.set(object.max, at);
           boxColor.set(object.color, at);
+          boxColor[at + 3] = object.reflectivity || 0;
           boxes += 1;
         } else if (object.type === "crust" && object.field) {
           for (const [key, sample] of object.field.overrides) {

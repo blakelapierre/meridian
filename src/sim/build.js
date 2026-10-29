@@ -111,6 +111,7 @@ export function pieceBoxes(pieces) {
         min: [x - 0.4, y - 0.4, 0],
         max: [x + 0.4, y + 0.4, 0.2],
         color: STONE,
+        reflectivity: 0.16,
       };
     }
     return {
@@ -118,6 +119,7 @@ export function pieceBoxes(pieces) {
       min: [x - 0.25, y - 0.08, 0],
       max: [x + 0.25, y + 0.08, 2.2],
       color: WOOD,
+      reflectivity: 0.12,
     };
   });
 }
