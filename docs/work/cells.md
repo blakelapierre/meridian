@@ -4,23 +4,15 @@ From the concept. The globe is tiled. Your machine simulates the bubble around y
 
 ## In the build
 
-There is one flat cell, `atoll-0`. Peers in it see each other's poses and the ops they are sent. A keeper with no body can mine the chain that makes a dig official. The lighthouse introduces peers. It does not see the blocks and it does not award hits. Interest is "everyone in the room."
+The beach is two cells split at y = −40 m. South of that line is `atoll-0`. North of it is `atoll-1`. A certified dig is stamped with the cell you were standing in. A dig from the other cell is not applied to the crust you are standing on. Poses still cross the line.
 
-The keeper rules live in [keepers.md](../keepers.md).
+## This pass
 
-## Not in this build
+`cellId` and the terrain log's cell check.
 
-- Geodesic cells a few kilometers across. A thin strategic view of cells your company claims.
-- A hit counts only if a quorum of witnesses in the cell agrees. The shooter is never the sole authority.
-- Authority rotates with presence and with how often your past attestations matched. One machine does not own a valley for a month.
-- If no sensor you have can know a person, their transform is not in your packet.
-- When the last peer leaves, neighbors and archives pin the log. If every copy dies, seed geology returns and that work is gone.
+## Proves
 
-Lockstep is wrong for gunfights and right for the slow economic tick. The rifle stays off the slow clock.
-
-## Next when this opens
-
-A second cell id you can walk into. Ops from the cell you left are not applied as if they were here. Poses still cross the boundary until interest exists.
+`test/concept.test.js`.
 
 ## Later
 

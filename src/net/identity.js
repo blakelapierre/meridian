@@ -7,6 +7,25 @@ hashes.sha512 = sha512;
 const text = new TextEncoder();
 const textOut = new TextDecoder();
 
+export function exportKey(identity) {
+  const bytes = new Uint8Array(identity.secret.length + identity.pubkey.length);
+  bytes.set(identity.secret, 0);
+  bytes.set(identity.pubkey, identity.secret.length);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function importKey(hex) {
+  if (!hex || hex.length < 4 || hex.length % 2) return null;
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    const value = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    if (Number.isNaN(value)) return null;
+    bytes[i] = value;
+  }
+  if (bytes.length < 64) return null;
+  return { secret: bytes.slice(0, 32), pubkey: bytes.slice(32, 64) };
+}
+
 export function createIdentity() {
   const { secretKey, publicKey } = keygen();
   return { secret: secretKey, pubkey: publicKey };

@@ -83,7 +83,7 @@ function collapse(yard) {
   const dropped = [];
   for (let i = yard.pieces.length - 1; i >= 0; i--) {
     if (yard.pieces[i].anchors) continue;
-    if (yard.pieces[i].id === "crate") continue;
+    if (yard.pieces[i].id === "crate" || yard.pieces[i].id === "wreck") continue;
     if (grounded(yard.pieces, i)) continue;
     dropped.push(yard.pieces[i].at.slice());
     yard.pieces.splice(i, 1);
@@ -107,10 +107,16 @@ export function trySalvage(yard, cell) {
     return { ok: true, metal: yard.metal, fallen };
   }
   const crate = yard.pieces.findIndex((piece) => piece.id === "crate" && sameCell(piece.at, cell));
-  if (crate < 0) return { ok: false, reason: "none" };
-  yard.pieces.splice(crate, 1);
-  yard.metal += 3;
-  yard.spoil = Math.max(0, (yard.spoil || 0) - 3);
+  if (crate >= 0) {
+    yard.pieces.splice(crate, 1);
+    yard.metal += 3;
+    yard.spoil = Math.max(0, (yard.spoil || 0) - 3);
+    return { ok: true, metal: yard.metal, fallen: 0 };
+  }
+  const wreck = yard.pieces.findIndex((piece) => piece.id === "wreck" && sameCell(piece.at, cell));
+  if (wreck < 0) return { ok: false, reason: "none" };
+  yard.pieces.splice(wreck, 1);
+  yard.metal += 12;
   return { ok: true, metal: yard.metal, fallen: 0 };
 }
 
@@ -172,6 +178,16 @@ export function pieceBoxes(pieces) {
         max: [x + 0.05, y + 0.45, 1.8],
         color: [0.25, 0.32, 0.38, 1],
         reflectivity: 0.4,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "wreck") {
+      return {
+        type: "box",
+        min: [x - 0.3, y - 0.3, 0],
+        max: [x + 0.3, y + 0.3, 0.45],
+        color: [0.25, 0.18, 0.16, 1],
+        reflectivity: 0.1,
         piece: piece.id,
       };
     }

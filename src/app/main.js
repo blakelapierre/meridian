@@ -45,7 +45,15 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { createIdentity } from "../net/identity.js";
+import { createIdentity, exportKey, importKey } from "../net/identity.js";
+import { firstCrate } from "../sim/culture.js";
+import { createPools, notePool } from "../sim/pool.js";
+import { deedVolume, mayEdit } from "../sim/deed.js";
+import { bondOpen, hearBond, offerBond } from "../sim/fellowship.js";
+import { boltHit, startBolt, stepBolt } from "../sim/bolt.js";
+import { cellId } from "../sim/cell.js";
+import { separate } from "../sim/separate.js";
+import { radialDown, shellDrop } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom } from "../net/room.js";
 import { acceptShot, encodeShot } from "../net/shots.js";
@@ -102,13 +110,19 @@ const player = createPlayer([spawn.x / 100, spawn.y / 100, spawn.z / 100]);
 const world = createPlayerWorld(player);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
-const identity = createIdentity();
+const identity = importKey(params.get("key") || "") || createIdentity();
+const culture = firstCrate(params.get("culture") || "holds");
+const pools = createPools();
+const bonds = new Map();
+const bolts = [];
 const terrain = createTerrain({
   identity,
   leader: params.get("offer") === "1" || !peer,
 });
 const dummy = createDummy();
 const yard = createYard(atoll.placements.footing);
+yard.metal = culture.metal;
+yard.stone = culture.stone;
 const worldChain = createChain();
 const fromChain = new Set();
 const entry = createEntry(atoll);
@@ -295,6 +309,11 @@ addEventListener("keydown", (event) => {
     brush = brush === "dig" ? "fill" : brush === "fill" ? "smooth" : "dig";
   }
   if (event.code === "KeyZ" && !event.repeat) turnEdge = true;
+  if (event.code === "KeyY" && !event.repeat && selection?.kind === "player") {
+    offerBond(bonds, selection.id);
+    report = bonds.get(selection.id) === "both" ? "fellowship" : "offered";
+  }
+  if (event.code === "KeyO" && !event.repeat) report = exportKey(identity);
   if (event.code === "KeyK" && !event.repeat) listener.toggle();
   if (event.code === "Space") event.preventDefault();
 });
@@ -386,7 +405,7 @@ function turnWheel(direction) {
 function useRightClick() {
   if (followId || slot !== "hammer") return;
   const mark = refreshAim(input());
-  if (!mark.inRange || (mark.kind !== "wall" && mark.kind !== "crate")) {
+  if (!mark.inRange || (mark.kind !== "wall" && mark.kind !== "crate" && mark.kind !== "wreck")) {
     if (agent) agent.salvage = false;
     report = "far";
     return;
@@ -512,6 +531,8 @@ function sceneFor(sample, width, height) {
     cameraDir: cameraLook,
     fov: aim.fov,
     smoke: smokeTicks > 0 ? player.position : null,
+    pools,
+    bolts,
   });
 }
 
@@ -982,7 +1003,11 @@ function fire(sample) {
     hitbox: shot.hitbox || "miss",
   });
   sendOps(frame);
-  if (selection?.kind === "player") friends.set(selection.id, -1);
+  if (selection?.kind === "player") {
+    friends.set(selection.id, -1);
+    bonds.delete(selection.id);
+  }
+  if (!shot.hitbox) bolts.push(startBolt(eye, shot.dir));
   hear("shot", shot.hitbox ? 1 : 0.35);
 }
 
@@ -1002,10 +1027,11 @@ function exchangeLore() {
     const dist = Math.hypot(other.feet[0] - player.position[0], other.feet[1] - player.position[1]);
     const score = nextFriend(friends.get(other.id) || 0, dist <= range);
     friends.set(other.id, score);
+    if (bonds.get(other.id) === "ours" && (score >= 12 || other.id.startsWith("ai-"))) hearBond(bonds, other.id);
     if (dist > range) continue;
     const offer = offerLore({
       skills: bag,
-      friend: score,
+      friend: bondOpen(bonds, other.id, true) ? Math.max(score, 40) : score,
       ground: [...survey.ground.values()],
       places: [...survey.places.values()],
     });
@@ -1320,6 +1346,30 @@ if (params.get("still") !== "1") {
     while (bank >= 1 / 30) {
       try {
       stepDummy(dummy);
+      const wreckAt = [atoll.placements.dummy.x / 100, atoll.placements.dummy.y / 100, 0.9];
+      const wreckCell = [Math.round(wreckAt[0] / 0.5), Math.round(wreckAt[1] / 0.5)];
+      if (dummy.health === 0) {
+        if (!yard.pieces.some((piece) => piece.id === "wreck")) {
+          yard.pieces.push({ id: "wreck", at: wreckCell, anchors: true });
+        }
+      } else {
+        const wreck = yard.pieces.findIndex((piece) => piece.id === "wreck");
+        if (wreck >= 0) yard.pieces.splice(wreck, 1);
+      }
+      for (let bolt = bolts.length - 1; bolt >= 0; bolt -= 1) {
+        stepBolt(bolts[bolt], 1 / 30);
+        const hit = boltHit(bolts[bolt], wreckAt);
+        if (hit && dummy.health > 0) applyDummyHit(dummy, "chest");
+        if (hit || bolts[bolt].age > 2 || bolts[bolt].position[2] < -1) bolts.splice(bolt, 1);
+      }
+      terrain.setCell(cellId(player.position[1]));
+      const holder = pubkeyHex(identity.pubkey);
+      terrain.setDeed(yard.bound ? {
+        allow(x, y, proposer) {
+          const who = proposer instanceof Uint8Array ? pubkeyHex(proposer) : "";
+          return mayEdit(deedVolume(yard.bound, holder), x, y, who);
+        },
+      } : null);
       if (cooldown > 0) cooldown -= 1;
       entryState = stepEntry(entry, {
         position: player.position,
@@ -1413,7 +1463,9 @@ if (params.get("still") !== "1") {
         raising = null;
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
-          terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush });
+          terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush, cell: cellId(player.position[1]) });
+          const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
+          notePool(pools, { x: player.position[0], y: player.position[1], floor });
           hear(brush === "fill" ? "fill" : "dig");
           grantUse(skills, "mining", { tick, gap: 30 });
           writeNote(notes, skills, brush === "fill" ? "fill" : "dig");
@@ -1423,9 +1475,17 @@ if (params.get("still") !== "1") {
       }
       if (vitals.down > 0) sample.forward = 0;
       sample.limp = limpFactor(vitals);
+      const down = radialDown(player.position[0], player.position[1], player.position[2]);
+      world.gravity = [down[0] * 9.81, down[1] * 9.81, down[2] * 9.81];
+      world.drop = shellDrop(player.position[0], player.position[1]);
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, sample, jump, skills.jump.value);
+      if (vitals.down <= 0) {
+        const pushed = separate(player.position, otherActors().map((actor) => actor.feet));
+        player.position[0] = pushed[0];
+        player.position[1] = pushed[1];
+      }
       if (vitals.down > 0) {
         if (stepDown(vitals, 1 / 30)) {
           const back = recallPoint(yard, [atoll.placements.spawnFeet.x / 100, atoll.placements.spawnFeet.y / 100, 0]);
