@@ -17,14 +17,14 @@
     <p>Pass means the sentence under the check actually happens. A red error, two different results, or a page that stays on “waiting” is a fail.</p>
 
     <h2>1. Pace</h2>
-    <p>Open the walk and leave this window focused. The line ends in <code>vsync</code> and a pixel size, and the picture follows the screen.</p>
-    <p>Click another window so the walk is still visible but not focused. Pass: the line changes to <code>1fps</code> and the picture updates about once a second. Click the walk again and it returns to <code>vsync</code>.</p>
+    <p>Open the walk and leave this window focused. The corner reads a frame rate, and the line ends in <code>vsync</code> and a pixel size. The picture follows the screen.</p>
+    <p>Click another window so the walk is still visible but not focused. Pass: the corner falls to about <code>1 fps</code> and the line says <code>1fps</code>. Click the walk again and the corner climbs back with the screen.</p>
     <p>If a frame takes longer than the screen, the pixel size steps down until the picture keeps up. It steps down further if that is what it takes to stay near 30 fps, and steps back up when the frames are short. The floor is a quarter of the window.</p>
     <p><a href="/tools/view/index.html">Open the walk</a></p>
 
     <h2>2. Wall on the ruin</h2>
-    <p>Press 3 until the line says <code>hammer</code>. Walk north to the stone slab. Look at the ground beside it and hold the left mouse. The line counts <code>work</code> for 12 seconds.</p>
-    <p>Pass: a wooden wall stands on the slab, and the line says <code>wall</code> and <code>metal 24</code>. The same hold on empty sand says <code>support</code> and the metal does not change. The other tab, if it is connected, shows the same wall and still has <code>metal 30</code>.</p>
+    <p>Press 3 until the line says <code>hammer</code>. Walk north to the stone slab. Look at the ground beside it and hold the left mouse. Pass: a cyan column rises on that cell, with a bright lip at the top, and the line counts <code>work</code> for 12 seconds. Then the wooden wall stands and the line says <code>wall</code> and <code>metal 24</code>.</p>
+    <p>Right-click the wall. Pass: it says <code>salvage</code>, the wall is gone, and the metal is <code>30</code>. The same hold on empty sand says <code>support</code> and the metal does not change. The other tab, if it is connected, shows the same wall and still has <code>metal 30</code>.</p>
     <p><a href="/tools/view/index.html">Open the walk</a></p>
 
     <h2>3. Shared shot</h2>

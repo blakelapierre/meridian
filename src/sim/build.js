@@ -65,6 +65,35 @@ export function tryPlaceWall(yard, cell) {
   return { ok: true, metal: yard.metal };
 }
 
+function collapse(yard) {
+  let fallen = 0;
+  for (let i = yard.pieces.length - 1; i >= 0; i--) {
+    if (yard.pieces[i].anchors) continue;
+    if (grounded(yard.pieces, i)) continue;
+    yard.pieces.splice(i, 1);
+    fallen += 1;
+  }
+  return fallen;
+}
+
+export function trySalvage(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  const index = yard.pieces.findIndex((piece) => piece.id === "wall" && sameCell(piece.at, cell));
+  if (index < 0) return { ok: false, reason: "none" };
+  yard.pieces.splice(index, 1);
+  yard.metal += 6;
+  const fallen = collapse(yard);
+  return { ok: true, metal: yard.metal, fallen };
+}
+
+export function adoptSalvage(yard, cell) {
+  const index = yard.pieces.findIndex((piece) => piece.id === "wall" && sameCell(piece.at, cell));
+  if (index < 0) return { ok: true, metal: yard.metal, fallen: 0 };
+  yard.pieces.splice(index, 1);
+  const fallen = collapse(yard);
+  return { ok: true, metal: yard.metal, fallen };
+}
+
 export function adoptWall(yard, cell) {
   if (yard.pieces.some((piece) => sameCell(piece.at, cell))) return { ok: true, metal: yard.metal };
   if (!support(yard.pieces, cell)) return { ok: false, reason: "support" };
