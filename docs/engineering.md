@@ -1,9 +1,13 @@
 # MERIDIAN
-## Engineering locks (pre-implementation)
+## Engineering locks
 
 Decisions that have to be true before the first client commit. Player rules stay in [game.md](game.md). Packets stay in [implementation-webrtc.md](implementation-webrtc.md). The island numbers are [content/atoll.json](../content/atoll.json). The dig brush is [crust.md](crust.md). Keys are [keymap.md](keymap.md). The renderer and the motion integrator are [engine.md](engine.md).
 
-Nothing in this repository is implemented.
+Implementation has started under these locks: `src/` holds the engine port, sim, net, and render code for the Atoll slice, and `test/` holds the Node test suite. See the README status table.
+
+**Running tests.** `npm install`, then `npm test` (Node's built-in `node --test`). Five two-browser tests (`link`, `dig-link`, `shot-link`, `view`) need a headless Chromium; set `MERIDIAN_CHROME` to its path, otherwise they skip. As of 29 Oct 2026: 57 tests, 52 pass, 5 skip without Chromium.
+
+Note: `src/render/gpu.js` adds a WebGL2 ray pass with the software raycaster as fallback. §1 still lists WebGL as forbidden as the *primary* path; reconcile §1 with that commit.
 
 On conflict about **how the slice is built**, this document wins, except that [engine.md](engine.md) wins on what draws the frame and what integrates motion. Neither overrides a damage number or a packet field.
 
