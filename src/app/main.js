@@ -1,4 +1,7 @@
 import { paintFrame } from "../engine/frame.js";
+import { hearStep } from "../audio/cues.js";
+import { createListener } from "../audio/play.js";
+import { createErrands, errandLine, noteErrand } from "../sim/errands.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
@@ -141,6 +144,19 @@ const seenPeople = new Map();
 const vitals = createVitals();
 let loreNote = "";
 let brush = "dig";
+const listener = createListener();
+const errands = createErrands();
+let stepAt = null;
+const heardAt = new Map();
+
+function hear(name) {
+  if (quiet || !name) return;
+  const now = performance.now();
+  const wait = name === "step" ? 160 : name === "hurt" ? 700 : 40;
+  if (now - (heardAt.get(name) || 0) < wait) return;
+  heardAt.set(name, now);
+  listener.play(name);
+}
 let stillPose = null;
 let stillFor = 0;
 let easedPixels = null;
@@ -268,6 +284,7 @@ addEventListener("keydown", (event) => {
     optics = OPTICS[(OPTICS.indexOf(optics) + 1) % OPTICS.length];
   }
   if (event.code === "KeyC" && !event.repeat) brush = brush === "dig" ? "fill" : "dig";
+  if (event.code === "KeyK" && !event.repeat) listener.toggle();
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
@@ -364,6 +381,7 @@ function useRightClick() {
     return;
   }
   const saved = trySalvage(yard, mark.cell);
+  if (saved.ok) hear("salvage");
   report = saved.ok ? "salvage" : saved.reason;
   if (!saved.ok) return;
   const nonce = Math.floor(tick);
@@ -717,6 +735,7 @@ function actOn(sample) {
       return;
     }
     const saved = trySalvage(yard, selection.cell);
+    if (saved.ok) hear("salvage");
     report = saved.ok ? "salvage" : saved.reason;
     if (!saved.ok) return;
     sendOps(encodeSalvage(identity, { nonce: Math.floor(tick), cell: selection.cell }));
@@ -800,6 +819,9 @@ function publish() {
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}` : "";
   const brushNote = slot === "bit" && brush === "fill" ? " · fill" : "";
   const lightNote = ` · ${dayWord(tick)}`;
+  const paper = errandLine(errands);
+  const errandNote = paper ? ` · ${paper}` : "";
+  const muteNote = listener.muted ? " · muted" : "";
   const friendNote = selection?.kind === "player" && friends.has(selection.id)
     ? ` · ${friendTier(friends.get(selection.id))} ${friends.get(selection.id)}`
     : "";
@@ -822,7 +844,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${errandNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -930,6 +952,7 @@ function fire(sample) {
     hitbox: shot.hitbox || "miss",
   });
   sendOps(frame);
+  hear("shot");
 }
 
 function ownKeys() {
@@ -1255,6 +1278,7 @@ if (params.get("still") !== "1") {
         offer: buyOnce ? (entryState.joined ? SMOKE : null) : null,
       });
       if (entryState.notice) report = entryState.notice;
+      if (entryState.joined) noteErrand(errands, "strike");
       useOnce = false;
       buyOnce = false;
       const striking = entryState.body === "strike";
@@ -1299,6 +1323,8 @@ if (params.get("still") !== "1") {
                 : tryPlaceWall(yard, raising.cell, skills.building.value);
             report = placed.ok ? job : placed.reason;
             if (placed.ok) {
+              hear("place");
+              if (job === "fin") noteErrand(errands, "fin");
               grantUse(skills, "building", { tick });
               const nonce = Math.floor(tick);
               if (job === "wall") {
@@ -1335,6 +1361,8 @@ if (params.get("still") !== "1") {
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
           terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush });
+          hear(brush === "fill" ? "fill" : "dig");
+          if (brush === "dig") noteErrand(errands, "dig");
           grantUse(skills, "mining", { tick, gap: 30 });
         } else if (!raising) {
           work = null;
@@ -1355,6 +1383,7 @@ if (params.get("still") !== "1") {
           player.velocity[1] = 0;
           player.velocity[2] = 0;
           bruise(vitals);
+          hear("recall");
           report = yard.bound ? "bruised" : "no hearth";
         } else {
           report = `down ${Math.ceil(vitals.down)}`;
@@ -1364,12 +1393,18 @@ if (params.get("still") !== "1") {
         const nearDummy = Math.hypot(player.position[0] - dummyAt[0], player.position[1] - dummyAt[1]) < 1.6;
         if (nearDummy && dummy.health > 0) {
           const hit = clubHit(vitals, 1 / 30);
-          if (hit.dead) report = "down";
+          if (hit.dead) {
+            report = "down";
+            hear("hurt");
+          }
         }
       }
       coolPain(vitals, 1 / 30);
       if (moved.jump) grantUse(skills, "jump", { tick });
       if (moved.running) grantUse(skills, "run", { tick, gap: 30 });
+      const stride = hearStep(stepAt, player.position, !!sample.sprint);
+      stepAt = stride.at;
+      hear(stride.cue);
       if (mapOpen) grantUse(skills, "mapping", { tick, gap: 15 });
       const step = player.position;
       const lastFix = trail[trail.length - 1];
@@ -1423,6 +1458,10 @@ if (params.get("still") !== "1") {
     if (objectOnce) cycle(objectOnce, "object");
     if (selectOnce && selection?.kind === "hearth") {
       const bound = bindHearth(yard, selection.cell);
+      if (bound.ok) {
+        hear("bind");
+        noteErrand(errands, "bind");
+      }
       report = bound.ok ? "bound" : bound.reason;
     } else if (selectOnce) identify(sample);
     if (actOnce) actOn(sample);

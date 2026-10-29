@@ -4,7 +4,7 @@
 
 Beach notes are live. Each implementation pass rewrites **This pass** on every beach note, then the code is brought up to those sections. A beach note does not describe work that is not in the build.
 
-Concept notes are the rest of the logline. They say what is absent, and the first slice to build when that area opens. They are not a promise that the slice is in the client.
+Concept notes are the rest of the logline. The prose for the world is in [docs/lore](../lore/README.md). The errands are in [docs/quests](../quests/README.md).
 
 ## Beach
 
@@ -20,6 +20,9 @@ Concept notes are the rest of the logline. They say what is absent, and the firs
 | [light.md](light.md) | Sun and the fin |
 | [picture.md](picture.md) | Resolution and frame pace |
 | [wire.md](wire.md) | What peers actually exchange |
+| [audio.md](audio.md) | Cues and the mute key |
+| [lore.md](lore.md) | What the beach is allowed to say |
+| [quests.md](quests.md) | The atoll paper |
 
 ## Concept
 
