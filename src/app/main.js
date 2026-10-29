@@ -81,13 +81,40 @@ function openLinks() {
   return links.filter((link) => link.ops.readyState === "open");
 }
 
+const lanes = new Map();
+
+function enqueue(link, frames) {
+  if (!frames.length) return;
+  let queue = lanes.get(link);
+  if (!queue) {
+    queue = [];
+    lanes.set(link, queue);
+  }
+  for (const frame of frames) queue.push(new Uint8Array(frame));
+  pump(link);
+}
+
+function pump(link) {
+  const queue = lanes.get(link);
+  const channel = link.ops;
+  if (!queue || !queue.length || channel.readyState !== "open") return;
+  while (queue.length && channel.bufferedAmount < 65536) {
+    try {
+      channel.send(queue[0]);
+    } catch {
+      return;
+    }
+    queue.shift();
+  }
+}
+
 function sendOps(frame) {
   const open = openLinks();
   if (!open.length) {
     if (peer) shotFrames.push(frame);
     return;
   }
-  for (const link of open) link.ops.send(frame);
+  for (const link of open) enqueue(link, [frame]);
 }
 const shotFrames = [];
 
@@ -334,13 +361,10 @@ function onOps(bytes) {
 function flush() {
   const open = openLinks();
   if (open.length) {
-    const frames = terrain.take();
-    const shots = shotFrames.splice(0);
-    for (const link of open) {
-      for (const frame of frames) link.ops.send(frame);
-      for (const frame of shots) link.ops.send(frame);
-    }
+    const frames = [...terrain.take(), ...shotFrames.splice(0)];
+    for (const link of open) enqueue(link, frames);
   }
+  for (const link of links) pump(link);
   publish();
 }
 

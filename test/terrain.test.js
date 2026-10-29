@@ -45,3 +45,38 @@ test("the other browser applies the same dig", () => {
   assert.equal(witness.voxel(), 500);
   assert.equal(leader.hash(), witness.hash());
 });
+
+test("a second witness voting late does not stall the later pits", () => {
+  const leader = createTerrain({ identity: createIdentity(), leader: true });
+  const second = createTerrain({ identity: createIdentity(), leader: false });
+  const follow = createTerrain({ identity: createIdentity(), leader: false });
+  const aim = bitAim([0, -150, 0], 0, -1.2);
+  for (let step = 0; step < 160; step++) {
+    const shift = step * 40;
+    leader.dig(
+      [aim.eye[0] + shift, aim.eye[1], aim.eye[2]],
+      [aim.aim[0] + shift, aim.aim[1], aim.aim[2]],
+      { peer: true },
+    );
+  }
+  const nodes = [leader, second, follow];
+  for (let turn = 0; turn < 80; turn++) {
+    let moved = false;
+    for (const node of nodes) {
+      const frames = node.take();
+      if (!frames.length) continue;
+      moved = true;
+      for (const other of nodes) {
+        if (other === node) continue;
+        for (const frame of frames) other.receive(frame);
+      }
+    }
+    if (!moved) break;
+  }
+  const dug = (terrain) => [...terrain.log.crust.overrides.keys()].sort().join("|");
+  assert.ok(leader.log.crust.overrides.size >= 3);
+  assert.equal(dug(second), dug(leader));
+  assert.equal(dug(follow), dug(leader));
+  assert.equal(second.log.seq, leader.log.seq);
+  assert.equal(follow.log.seq, leader.log.seq);
+});
