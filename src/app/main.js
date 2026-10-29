@@ -10,6 +10,20 @@ import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPlaceWall, trySalvage } from "../sim/build.js";
+import {
+  adoptPiece,
+  bindHearth,
+  bruise,
+  clubHit,
+  craftNeed,
+  createVitals,
+  finNeed,
+  finOutput,
+  recallPoint,
+  stepDown,
+  tryFinishFin,
+  tryFinishHearth,
+} from "../sim/hearth.js";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
@@ -18,7 +32,7 @@ import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
 import { learnLore, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
-import { acceptLore, encodeLore } from "../net/lore.js";
+import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { paintChart } from "../render/chart.js";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
@@ -122,6 +136,7 @@ let mapDrag = null;
 let lookRelease = false;
 const friends = new Map();
 const seenPeople = new Map();
+const vitals = createVitals();
 let loreNote = "";
 let stillPose = null;
 let stillFor = 0;
@@ -168,6 +183,11 @@ function shareWalls(link) {
       cell: piece.at,
       integrity: Math.round(piece.integrity || 80),
     })]);
+    nonce += 1;
+  }
+  for (const piece of yard.pieces) {
+    if (piece.id !== "hearth" && piece.id !== "fin") continue;
+    enqueue(link, [encodePiece(identity, { nonce, cell: piece.at, id: piece.id })]);
     nonce += 1;
   }
 }
@@ -766,6 +786,9 @@ function publish() {
   const body = dummy.health === 0 ? "dummy dead" : `dummy ${dummy.health}`;
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
+  const flux = yard.pieces.some((piece) => piece.id === "fin") ? ` · flux ${finOutput(tick)}` : "";
+  const boundNote = yard.bound ? " · bound" : "";
+  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}`;
   const pace = canvas.dataset.pace || "vsync";
   const rate = canvas.dataset.fps || "0";
   const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
@@ -785,7 +808,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known} · ${slot}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0} · walls ${walls}${boundNote}${flux}${hurt}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -940,6 +963,13 @@ function onOps(bytes, from) {
         // A peer that already has the block will ignore the extra copy.
       }
     }
+    return;
+  }
+  if (bytes[0] === 13) {
+    const accepted = acceptPiece(bytes);
+    if (!accepted.ok) return;
+    adoptPiece(yard, accepted.cell, accepted.id);
+    report = accepted.id;
     return;
   }
   if (bytes[0] === 12) {
@@ -1224,11 +1254,21 @@ if (params.get("still") !== "1") {
         report = "frozen";
       } else if (slot === "hammer" && trigger && aimed.inRange && aimed.kind !== "wall" && aimed.kind !== "dummy") {
         const cell = aimed.cell;
-        if (!raising || raising.cell[0] !== cell[0] || raising.cell[1] !== cell[1]) {
-          raising = { cell, ticks: 0 };
+        const has = (id) => yard.pieces.some((piece) => piece.id === id);
+        const job = aimed.kind === "footing" && !has("hearth")
+          ? "hearth"
+          : aimed.kind === "hearth" && yard.fins > 0 && !has("fin")
+            ? "fin"
+            : "wall";
+        if (job === "wall" && (aimed.kind === "footing" || aimed.kind === "hearth" || aimed.kind === "fin")) {
+          raising = null;
+          work = null;
+          report = aimed.kind;
+        } else if (!raising || raising.job !== job || raising.cell[0] !== cell[0] || raising.cell[1] !== cell[1]) {
+          raising = { cell, ticks: 0, job };
         }
         if (raising) {
-          const need = placeTicks(skills.building.value);
+          const need = job === "hearth" ? craftNeed(skills.building.value) : job === "fin" ? finNeed(skills.building.value) : placeTicks(skills.building.value);
           raising.ticks += 1;
           work = {
             x: raising.cell[0] * 0.5,
@@ -1238,24 +1278,37 @@ if (params.get("still") !== "1") {
           };
           report = `work ${Math.floor(raising.ticks / 30)}s`;
           if (raising.ticks >= need) {
-            const placed = tryPlaceWall(yard, raising.cell, skills.building.value);
-            report = placed.ok ? "wall" : placed.reason;
+            const placed = job === "hearth"
+              ? tryFinishHearth(yard, raising.cell)
+              : job === "fin"
+                ? tryFinishFin(yard, raising.cell)
+                : tryPlaceWall(yard, raising.cell, skills.building.value);
+            report = placed.ok ? job : placed.reason;
             if (placed.ok) {
               grantUse(skills, "building", { tick });
               const nonce = Math.floor(tick);
-              seenWalls.add(wallSeen(nonce, raising.cell));
-              const frame = encodeWall(identity, {
-                nonce,
-                cell: raising.cell,
-                integrity: pieceIntegrity(skills.building.value),
-              });
-              sendOps(frame);
-              notePlace(survey, {
-                id: `wall:${raising.cell[0]}:${raising.cell[1]}`,
-                kind: "wall",
-                name: "wall",
-                point: [raising.cell[0] * 0.5, raising.cell[1] * 0.5],
-              }, skillBag());
+              if (job === "wall") {
+                seenWalls.add(wallSeen(nonce, raising.cell));
+                sendOps(encodeWall(identity, {
+                  nonce,
+                  cell: raising.cell,
+                  integrity: pieceIntegrity(skills.building.value),
+                }));
+                notePlace(survey, {
+                  id: `wall:${raising.cell[0]}:${raising.cell[1]}`,
+                  kind: "wall",
+                  name: "wall",
+                  point: [raising.cell[0] * 0.5, raising.cell[1] * 0.5],
+                }, skillBag());
+              } else {
+                sendOps(encodePiece(identity, { nonce, cell: raising.cell, id: job }));
+                notePlace(survey, {
+                  id: `${job}:${raising.cell[0]}:${raising.cell[1]}`,
+                  kind: job,
+                  name: job,
+                  point: [raising.cell[0] * 0.5, raising.cell[1] * 0.5],
+                }, skillBag());
+              }
             }
             raising = null;
             work = null;
@@ -1273,7 +1326,31 @@ if (params.get("still") !== "1") {
           work = null;
         }
       }
-      const moved = stepHands(world, player, stamina, sample, jump, skills.jump.value);
+      const moved = vitals.down > 0
+        ? { jump: false, running: false }
+        : stepHands(world, player, stamina, sample, jump, skills.jump.value);
+      if (vitals.down > 0) {
+        if (stepDown(vitals, 1 / 30)) {
+          const back = recallPoint(yard, [atoll.placements.spawnFeet.x / 100, atoll.placements.spawnFeet.y / 100, 0]);
+          player.position[0] = back[0];
+          player.position[1] = back[1];
+          player.position[2] = back[2];
+          player.velocity[0] = 0;
+          player.velocity[1] = 0;
+          player.velocity[2] = 0;
+          bruise(vitals);
+          report = yard.bound ? "bruised" : "no hearth";
+        } else {
+          report = `down ${Math.ceil(vitals.down)}`;
+        }
+      } else if (!striking) {
+        const dummyAt = [atoll.placements.dummy.x / 100, atoll.placements.dummy.y / 100];
+        const nearDummy = Math.hypot(player.position[0] - dummyAt[0], player.position[1] - dummyAt[1]) < 1.6;
+        if (nearDummy && dummy.health > 0) {
+          const hit = clubHit(vitals, 1 / 30);
+          if (hit.dead) report = "down";
+        }
+      }
       if (moved.jump) grantUse(skills, "jump", { tick });
       if (moved.running) grantUse(skills, "run", { tick, gap: 30 });
       if (mapOpen) grantUse(skills, "mapping", { tick, gap: 15 });
@@ -1327,7 +1404,10 @@ if (params.get("still") !== "1") {
     drawChart();
     if (cycleOnce) cycle(cycleOnce, "player");
     if (objectOnce) cycle(objectOnce, "object");
-    if (selectOnce) identify(sample);
+    if (selectOnce && selection?.kind === "hearth") {
+      const bound = bindHearth(yard, selection.cell);
+      report = bound.ok ? "bound" : bound.reason;
+    } else if (selectOnce) identify(sample);
     if (actOnce) actOn(sample);
     if (!work && selection?.point) {
       work = { x: selection.point[0], y: selection.point[1], height: 1.6, mode: 4 };

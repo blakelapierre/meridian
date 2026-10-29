@@ -24,8 +24,12 @@ export function listTargets({ dummy = null, others = [], pieces = [], props = []
     });
   }
   for (const piece of pieces) {
-    if (piece.id !== "wall" && piece.id !== "footing") continue;
-    const subject = piece.id === "wall" ? SUBJECTS.wall : SUBJECTS.footing;
+    if (piece.id !== "wall" && piece.id !== "footing" && piece.id !== "hearth" && piece.id !== "fin") continue;
+    const subject = piece.id === "wall"
+      ? SUBJECTS.wall
+      : piece.id === "footing"
+        ? SUBJECTS.footing
+        : { name: piece.id === "hearth" ? "Hearth stone" : "Solar fin", material: "placed", action: piece.id === "hearth" ? "bind with E" : "it drinks the sun", detail: "yard work", difficulty: 4 };
     list.push({
       id: `${piece.id}:${piece.at[0]}:${piece.at[1]}`,
       ...subject,

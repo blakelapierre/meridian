@@ -8,6 +8,9 @@ export function footingCell(placement) {
 export function createYard(footing, metal = 30) {
   return {
     metal,
+    stone: 8,
+    fins: 1,
+    bound: null,
     pieces: [{ id: "footing", at: footingCell(footing), anchors: true }],
   };
 }
@@ -122,6 +125,26 @@ export function pieceBoxes(pieces) {
         max: [x + 0.4, y + 0.4, 0.2],
         color: STONE,
         reflectivity: 0.16,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "hearth") {
+      return {
+        type: "box",
+        min: [x - 0.28, y - 0.28, 0.2],
+        max: [x + 0.28, y + 0.28, 0.7],
+        color: [0.55, 0.28, 0.18, 1],
+        reflectivity: 0.08,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "fin") {
+      return {
+        type: "box",
+        min: [x - 0.05, y - 0.45, 0.7],
+        max: [x + 0.05, y + 0.45, 1.8],
+        color: [0.25, 0.32, 0.38, 1],
+        reflectivity: 0.4,
         piece: piece.id,
       };
     }
