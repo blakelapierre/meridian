@@ -8,7 +8,7 @@ The beach is two cells split at y = −40 m. South of that line is `atoll-0`. No
 
 ## This pass
 
-A certified edit still has to be in your cell. A hit is a quorum only as a rule: more than half of the present witnesses. Shots are not yet held to it.
+The interest radius above is how far a pose is allowed to matter. Quorum is still not applied to shots. Cell ids are unchanged.
 
 ## Proves
 

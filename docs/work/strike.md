@@ -6,7 +6,7 @@ Walking into the compound volume offers `atoll-skirmish`. E joins the side you e
 
 ## This pass
 
-If you walked out and you are back inside the volume, E puts the strike body on again. Scrip is not refunded.
+Walking back in and pressing E says `reinsert`. A round you stayed for says `paid`.
 
 ## Proves
 

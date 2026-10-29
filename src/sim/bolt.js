@@ -22,6 +22,11 @@ export function stepBolt(bolt, dt, gravity = 9.81, wind = null) {
   return bolt;
 }
 
+export function penFactor(armor = 0, pen = 1) {
+  if (armor <= 0) return 1;
+  return Math.max(0.2, 1 - armor / (armor + pen * 10));
+}
+
 export function boltHit(bolt, point, radius = 0.8) {
   return Math.hypot(bolt.position[0] - point[0], bolt.position[1] - point[1], bolt.position[2] - point[2]) <= radius;
 }

@@ -8,7 +8,7 @@ The line is a hitscan against the dummy when it connects. A miss becomes a bolt.
 
 ## This pass
 
-Bolts take a small wind from the west. A miss still flies and drops.
+Armor would reduce a bolt. The dummy has none, so the factor is 1. Wind is unchanged.
 
 ## Proves
 

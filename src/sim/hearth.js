@@ -106,3 +106,9 @@ export function fallHurt(integrity, speedDown) {
   if (speedDown > -9) return integrity;
   return Math.max(0, integrity - 8);
 }
+
+export function bleed(vitals, seconds = 1 / 30) {
+  if ((vitals.integrity ?? 100) >= 40) return vitals.blood ?? 100;
+  vitals.blood = Math.max(0, (vitals.blood ?? 100) - 4 * seconds);
+  return vitals.blood;
+}

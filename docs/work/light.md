@@ -6,7 +6,7 @@ The sun is a direction on a 72-minute day. The picture brightens when the sun is
 
 ## This pass
 
-Z turns a fin the same way it turns a wall. Dawn and dusk are unchanged.
+A hit at night practices marksmanship a second time. Z still turns the fin.
 
 ## Proves
 

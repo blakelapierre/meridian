@@ -16,7 +16,7 @@ Peers meet through the lighthouse and a WebRTC data channel. Positions are unrel
 
 ## This pass
 
-A pose farther than 80 m is dropped. The catalog hash rule is unchanged.
+Interest reaches 80 m plus a tenth of a meter per point of mapping. Farther poses are still dropped.
 
 ## Proves
 

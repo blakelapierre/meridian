@@ -8,7 +8,7 @@ Hands are the default. A strike is a contract you walk into. Leaving the volume 
 
 ## This pass
 
-The overhead is the same x and y as your feet. It is not a second map. The round still pays 8 metal if you stayed.
+The line says `paid` when the 8 metal arrives. The overhead is still your own coordinates.
 
 ## Proves
 
