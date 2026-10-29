@@ -1,3 +1,5 @@
+import { useGain } from "./skills.js";
+
 export const SUBJECTS = {
   sand: {
     name: "Sand",
@@ -55,7 +57,7 @@ export function appraise(skill, subject) {
 }
 
 export function appraisalGain(skill) {
-  return 1 / (1 + skill / 20);
+  return useGain(skill, false);
 }
 
 export function subjectFromHit(hit, pieces = []) {

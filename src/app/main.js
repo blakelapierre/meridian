@@ -11,8 +11,10 @@ import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
 import { lookDirection, stepHands } from "../sim/hands.js";
+import { createJump } from "../sim/jump.js";
+import { createSkills, grantUse } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, stepCamera } from "../sim/body.js";
-import { appraise, appraisalGain, subjectFromHit } from "../sim/appraise.js";
+import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { createIdentity } from "../net/identity.js";
@@ -84,8 +86,9 @@ let useEdge = false;
 let buyEdge = false;
 let selectEdge = false;
 let actEdge = false;
-let appraisal = 0;
 let selection = null;
+const skills = createSkills();
+const jump = createJump();
 let ops = null;
 const links = [];
 let followed = null;
@@ -261,8 +264,8 @@ function identify(sample) {
     report = "nothing to identify";
     return;
   }
-  const result = appraise(appraisal, subject);
-  if (result.known) appraisal += appraisalGain(appraisal);
+  const result = appraise(skills.appraisal.value, subject);
+  if (result.known) grantUse(skills, "appraisal", { tick });
   selection = { ...subject, line: result.line, canAct: result.canAct };
   report = result.line;
 }
@@ -285,6 +288,7 @@ function actOn(sample) {
       return;
     }
     terrain.dig(eye, point, { peer: witnessed() });
+    grantUse(skills, "mining", { tick, gap: 30 });
     report = "dig";
     return;
   }
@@ -321,6 +325,7 @@ function actOn(sample) {
       return;
     }
     const applied = applyDummyHit(dummy, shot.hitbox);
+    grantUse(skills, "marksmanship", { tick });
     report = `${applied.hitbox} ${applied.damage}`;
     return;
   }
@@ -359,7 +364,12 @@ function publish() {
   const chainNote = `block ${tip.height}${official ? ` ${official}` : ""}`;
   const seen = poses.size;
   const known = selection ? ` · ${selection.line}` : "";
-  if (bit) bit.textContent = `${view} · appraise ${Math.floor(appraisal)}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const skillNote = Object.entries(skills)
+    .filter(([, skill]) => skill.value > 0)
+    .map(([name, skill]) => `${name} ${Math.floor(skill.value)}`)
+    .join(" ");
+  const charge = jump.lift ? " · rising" : "";
+  if (bit) bit.textContent = `${view} · ${skillNote || "skills 0"}${charge}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -426,6 +436,7 @@ function fire(sample) {
     report = "miss";
   } else {
     const applied = applyDummyHit(dummy, shot.hitbox);
+    grantUse(skills, "marksmanship", { tick });
     report = `${applied.hitbox} ${applied.damage}`;
   }
   const frame = encodeShot(identity, {
@@ -721,6 +732,7 @@ if (params.get("still") !== "1") {
             const placed = tryPlaceWall(yard, raising.cell);
             report = placed.ok ? "wall" : placed.reason;
             if (placed.ok) {
+              grantUse(skills, "masonry", { tick });
               const nonce = Math.floor(tick);
               seenWalls.add(nonce);
               const frame = encodeWall(identity, { nonce, cell: raising.cell });
@@ -737,11 +749,13 @@ if (params.get("still") !== "1") {
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
           terrain.dig(aim.eye, aim.aim, { peer: witnessed() });
+          grantUse(skills, "mining", { tick, gap: 30 });
         } else if (!raising) {
           work = null;
         }
       }
-      stepHands(world, player, stamina, sample);
+      const moved = stepHands(world, player, stamina, sample, jump, skills.jump.value);
+      if (moved.jump) grantUse(skills, "jump", { tick });
       const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
       if (floor < -0.01 && player.position[2] <= 0.02) {
         player.position[2] = floor;

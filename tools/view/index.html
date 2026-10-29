@@ -40,8 +40,8 @@
     <aside>
       <h1>Walk check</h1>
       <p>The camera sits directly behind your body, not off a shoulder. It is on a spring: when you run or turn it stretches, then it catches up. Press V for the eyes, and V again to come back out. The line starts with <code>third</code>.</p>
-      <p>Press F to identify what the crosshair is on. That becomes your action target, and a column marks it. At appraisal 0 you can name sand. A dummy is harder: the line says you cannot tell until the skill rises. Press F on sand a few times. When the line includes an action, press U to do it. Another client shows your body, and the line says <code>seen 1</code>. The follow frame draws only the player it is chasing.</p>
-      <p>Click the picture to look. W A S D move. A and D strafe. Shift sprints. Space jumps and lands. While this window is focused the line ends in <code>vsync</code>. Click another window and it changes to <code>1fps</code>. The pixel size steps down if a frame misses the screen, and steps back up when there is room.</p>
+      <p>Press F to identify what the crosshair is on. That becomes your action target, and a column marks it. At appraisal 0 you can name sand. A dummy is harder: the line says you cannot tell until the skill rises. Press F on sand a few times. When the line includes an action, press U to do it. A successful identify, jump, dig, hit, or finished wall adds experience to that skill. The line shows the skills that have risen, starting from <code>skills 0</code>. Another client shows your body, and the line says <code>seen 1</code>. The follow frame draws only the player it is chasing.</p>
+      <p>Click the picture to look. W A S D move. A and D strafe. Shift sprints. Tap Space for a short hop. Hold Space to rise higher, up to the jump skill. The line says <code>rising</code> while you are still climbing. While this window is focused the line ends in <code>vsync</code>. Click another window and it changes to <code>1fps</code>. The pixel size steps down if a frame misses the screen, and steps back up when there is room.</p>
       <p>Press 3 until the line says <code>hammer</code>. The amber square is the hammer sight. Press 3 again for the bit. The cyan cross is the bit sight. A bright sight means the target is in reach and it lights up. A dim sight means it is too far, and nothing lights.</p>
       <p>With the hammer, walk north to the stone slab and look at the ground beside it. The cell lights amber when it is in reach. Hold the left mouse. A cyan column rises while the line counts <code>work</code>. After 12 seconds it says <code>wall</code> and <code>metal 24</code>. Look at that wall, right-click, and it says <code>salvage</code> with the metal back at <code>30</code>. Empty sand says <code>support</code>.</p>
       <p>With the bit, look down at the sand. The cross goes bright and the voxel lights up when it is in reach. Hold the left mouse. A pit opens under you, the line reads <code>voxel 500</code>, and you drop to the floor. The hole is only a lower floor. It does not grow a wall.</p>
@@ -55,6 +55,6 @@
     <canvas width="160" height="90"></canvas>
     <div id="sight"></div>
     <div id="fps">0 fps</div>
-    <script type="module" src="/src/app/main.js?v=23"></script>
+    <script type="module" src="/src/app/main.js?v=24"></script>
   </body>
 </html>
