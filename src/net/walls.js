@@ -2,8 +2,8 @@ import { packetValid, packFrame, signBytes, unpackFrame } from "./identity.js";
 import { decode, encode } from "../sim/cbor.js";
 
 export function encodeWall(identity, { nonce, cell, integrity = null }) {
-  const body = { nonce: Math.floor(nonce), cell };
-  if (integrity != null) body.integrity = integrity;
+  const body = { nonce: Math.floor(nonce), cell: [Math.floor(cell[0]), Math.floor(cell[1])] };
+  if (integrity != null) body.integrity = Math.round(integrity);
   return packFrame(9, signBytes(identity, encode(body)));
 }
 

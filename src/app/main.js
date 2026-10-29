@@ -139,6 +139,23 @@ function windowFocused() {
   }
 }
 
+function wallSeen(nonce, cell) {
+  return `${Math.floor(nonce)}:${Math.floor(cell[0])}:${Math.floor(cell[1])}`;
+}
+
+function shareWalls(link) {
+  let nonce = Math.max(1, Math.floor(tick));
+  for (const piece of yard.pieces) {
+    if (piece.id !== "wall") continue;
+    enqueue(link, [encodeWall(identity, {
+      nonce,
+      cell: piece.at,
+      integrity: Math.round(piece.integrity || 80),
+    })]);
+    nonce += 1;
+  }
+}
+
 function openLinks() {
   return links.filter((link) => link.ops.readyState === "open");
 }
@@ -776,10 +793,10 @@ function onOps(bytes) {
   }
   if (bytes[0] === 9) {
     const accepted = acceptWall(bytes);
-    if (!accepted.ok || seenWalls.has(accepted.nonce)) return;
+    if (!accepted.ok || seenWalls.has(wallSeen(accepted.nonce, accepted.cell))) return;
     const placed = adoptWall(yard, accepted.cell, accepted.integrity);
     if (!placed.ok) return;
-    seenWalls.add(accepted.nonce);
+    seenWalls.add(wallSeen(accepted.nonce, accepted.cell));
     report = "wall";
     return;
   }
@@ -859,6 +876,7 @@ async function openLink(to, offer, role) {
   const link = { to, role, ops: channels.ops, snap: channels.snap };
   links.push(link);
   if (!ops) ops = channels.ops;
+  channels.ops.onopen = () => shareWalls(link);
   channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data));
   channels.snap.onmessage = (event) => {
     const pose = acceptPosition(poses.get(to) || null, new Uint8Array(event.data));
@@ -878,6 +896,7 @@ async function openLink(to, offer, role) {
         if (linkLine && !followed) linkLine.textContent = role === "archive" ? `archive ${line}` : line;
       },
     });
+    if (channels.ops.readyState === "open") shareWalls(link);
   } catch (error) {
     opening.delete(to);
     const index = links.indexOf(link);
@@ -1038,7 +1057,7 @@ if (params.get("still") !== "1") {
             if (placed.ok) {
               grantUse(skills, "building", { tick });
               const nonce = Math.floor(tick);
-              seenWalls.add(nonce);
+              seenWalls.add(wallSeen(nonce, raising.cell));
               const frame = encodeWall(identity, {
                 nonce,
                 cell: raising.cell,
