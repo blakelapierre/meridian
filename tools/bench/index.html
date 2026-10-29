@@ -12,6 +12,9 @@
       section { flex: 1; }
       section.second { border-color: #fc8; }
       section.follow { border-color: #c9f; }
+      section.ais { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; border: 0; background: transparent; }
+      section.ais[hidden], section.second[hidden] { display: none; }
+      section.ais iframe { border: 2px solid #fc8; min-height: 0; }
       header { flex: 0 0 auto; padding: 4px 8px; font: 12px/1.2 sans-serif; letter-spacing: 0.04em; background: #0c0c0c; }
       main header { color: #9f9; }
       section.second header { color: #fc8; }
@@ -25,10 +28,11 @@
       <iframe id="primary" title="Primary"></iframe>
     </main>
     <aside>
-      <section class="second">
+      <section class="second" id="second-wrap">
         <header>Second</header>
         <iframe id="second" title="Second"></iframe>
       </section>
+      <section class="ais" id="ais" hidden></section>
       <section class="follow">
         <header>Follow</header>
         <iframe id="follow" title="Follow"></iframe>
@@ -41,6 +45,19 @@
         url.searchParams.set("quiet", "1");
         return url.pathname + url.search;
       };
+      const ais = params.getAll("ai");
+      if (ais.length) {
+        document.querySelector("#second-wrap").hidden = true;
+        const host = document.querySelector("#ais");
+        host.hidden = false;
+        for (const src of ais) {
+          const url = new URL(src, location.origin);
+          const frame = document.createElement("iframe");
+          frame.title = url.searchParams.get("ai") || "ai";
+          frame.src = src;
+          host.append(frame);
+        }
+      }
       for (const id of ["primary", "second", "follow"]) {
         const frame = document.querySelector("#" + id);
         const src = params.get(id);

@@ -15,7 +15,8 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, stepCamera, CHASE } from "../sim/body.js";
 import { cycleTarget, listTargets } from "../sim/target.js";
-import { OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
+import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
+import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
@@ -60,7 +61,10 @@ const keys = new Set();
 const peer = Boolean(params.get("id"));
 
 const atoll = await fetch("/content/atoll.json").then((response) => response.json());
-const spawn = params.get("gate") === "1"
+const home = agent ? AGENDAS[agendaName].home : null;
+const spawn = home
+  ? { x: home[0] * 100, y: home[1] * 100, z: 0 }
+  : params.get("gate") === "1"
   ? { x: 0, y: -11200, z: 0 }
   : params.get("look") === "dummy" ? atoll.placements.accuracyPad : atoll.placements.spawnFeet;
 const player = createPlayer([spawn.x / 100, spawn.y / 100, spawn.z / 100]);
@@ -103,7 +107,7 @@ let cameraDistance = CHASE;
 let rightDown = false;
 let rightMoved = false;
 let optics = "none";
-let zoom = { distance: CHASE, first: false, level: 0, forced: false };
+let zoom = { distance: CHASE, first: false, level: 0, forced: false, blend: 0 };
 let rangeText = "";
 let selection = null;
 const skills = createSkills();
@@ -114,6 +118,9 @@ let followed = null;
 const poses = new Map();
 let cameraSpring = null;
 let cameraPos = null;
+let cameraLook = null;
+const agendaName = params.get("ai");
+const agent = agendaName && AGENDAS[agendaName] ? createAgent(agendaName) : null;
 
 function openLinks() {
   return links.filter((link) => link.ops.readyState === "open");
@@ -169,16 +176,15 @@ addEventListener("keydown", (event) => {
   if (event.code === "KeyB") buyEdge = true;
   if (event.code === "KeyU") actEdge = true;
   if (event.code === "Tab") cycleEdge = event.shiftKey ? -1 : 1;
-  if (event.code === "KeyV" && !followId) {
+  if (event.code === "KeyV" && !followId && !agent) {
     if (view === "third") {
       view = "first";
-      zoom = { ...zoom, first: true, forced: true, level: 0 };
+      zoom = { ...zoom, first: true, forced: true, blend: 1 };
     } else {
       view = "third";
-      zoom = { distance: CHASE, first: false, level: 0, forced: false };
+      zoom = { distance: CHASE, first: false, level: 0, forced: false, blend: 0 };
       cameraDistance = CHASE;
     }
-    cameraSpring = null;
   }
   if (event.code === "KeyR") {
     optics = OPTICS[(OPTICS.indexOf(optics) + 1) % OPTICS.length];
@@ -249,6 +255,36 @@ function input() {
   };
 }
 
+function applyAgenda(command) {
+  for (const code of ["KeyW", "KeyA", "KeyS", "KeyD"]) keys.delete(code);
+  if (command.forward > 0) keys.add("KeyW");
+  if (command.forward < 0) keys.add("KeyS");
+  yaw = command.yaw;
+  if (command.pitch != null) pitch = command.pitch;
+  if (command.slot) slot = command.slot;
+  if (command.identify) selectEdge = true;
+  trigger = !!command.hold;
+  if (command.shot) shotQueued = true;
+  if (command.zoom) {
+    const before = zoom.level;
+    const wasFirst = zoom.first;
+    zoom = stepZoom(zoom, command.zoom, skills.eyesight.value, optics);
+    cameraDistance = zoom.distance;
+    if ((zoom.first && !wasFirst) || zoom.level > before) grantUse(skills, "eyesight", { tick, gap: 30 });
+  }
+  if (command.salvage) {
+    const wall = yard.pieces.find((piece) => piece.id === "wall");
+    if (wall && !agent.salvage) {
+      const saved = trySalvage(yard, wall.at);
+      report = saved.ok ? "salvage" : saved.reason;
+      if (saved.ok) sendOps(encodeSalvage(identity, { nonce: Math.floor(tick), cell: wall.at }));
+    }
+    agent.salvage = true;
+  } else if (agent) {
+    agent.salvage = false;
+  }
+}
+
 function eyeOf(sample) {
   return [
     player.position[0],
@@ -269,8 +305,8 @@ function otherActors() {
 function cameraAim(sample = {}) {
   const bodyYaw = sample.yaw ?? yaw;
   const bodyPitch = sample.pitch ?? pitch;
-  const first = zoom.first || (view === "first" && !followId);
-  if (first) {
+  const locked = zoom.blend >= 1 || (view === "first" && zoom.blend === 0);
+  if (locked) {
     return {
       yaw: bodyYaw,
       pitch: bodyPitch,
@@ -296,13 +332,18 @@ function aimCamera(sample, dt) {
   const feet = followId && followed && followed.yaw !== undefined
     ? [followed.x, followed.y, followed.z]
     : player.position;
-  if (!aim.third) {
-    const eye = followId ? 1.65 : (sample.crouch ? 1.1 : 1.65);
-    cameraPos = [feet[0], feet[1], feet[2] + eye];
-    cameraSpring = null;
-    return;
-  }
-  const ideal = chaseOrigin(feet, aim.yaw, aim.pitch, followId ? false : !!sample.crouch, aim.distance);
+  const eye = followId ? 1.65 : (sample.crouch ? 1.1 : 1.65);
+  const eyes = [feet[0], feet[1], feet[2] + eye];
+  const behind = chaseOrigin(
+    feet,
+    aim.yaw,
+    aim.pitch,
+    followId ? false : !!sample.crouch,
+    aim.third ? aim.distance : CLOSE,
+  );
+  const blend = aim.third ? zoom.blend : 1;
+  const ideal = blendOrigin(behind, eyes, blend);
+  cameraLook = blendDir(lookDirection(aim.yaw, aim.pitch), lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch), blend);
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
 }
@@ -321,10 +362,10 @@ function sceneFor(sample, width, height) {
     width,
     height,
     view: followId ? "third" : view,
-    self: !followId && aim.third,
+    self: !followId && zoom.blend < 0.65 && view !== "first",
     others: otherActors(),
     cameraOrigin: cameraPos,
-    cameraDir: aim.third ? lookDirection(aim.yaw, aim.pitch) : lookDirection(aim.yaw, aim.pitch),
+    cameraDir: cameraLook,
     fov: aim.fov,
   });
 }
@@ -541,8 +582,11 @@ function paint(sample) {
   markTarget(scene);
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
-  const ranged = cast(scene.camera.origin, dir, scene.objects.filter((object) => !object.self), scene.miss);
-  const reading = rangeRead(ranged?.object ? ranged.t : null, skills.ranging.value, optics);
+  const inEyes = zoom.blend >= 1 || (view === "first" && zoom.blend === 0);
+  const ranged = inEyes
+    ? cast(scene.camera.origin, dir, scene.objects.filter((object) => !object.self), scene.miss)
+    : null;
+  const reading = inEyes ? rangeRead(ranged?.object ? ranged.t : null, skills.ranging.value, optics) : null;
   rangeText = reading?.text || "";
   if (reading?.meters != null) grantUse(skills, "ranging", { tick, gap: 45 });
   const color = hit.color || scene.miss;
@@ -774,6 +818,11 @@ if (painter) fitCanvas(canvas, viewScale);
 paint(first);
 publish();
 canvas.dataset.ready = "1";
+if (agent) {
+  const note = document.querySelector("#agenda");
+  if (note) note.textContent = `${AGENDAS[agendaName].title}: ${AGENDAS[agendaName].agenda}`;
+  canvas.dataset.ai = agendaName;
+}
 canvas.dataset.pace = "vsync";
 
 const FOLLOW_M = 3.5;
@@ -910,7 +959,16 @@ if (params.get("still") !== "1") {
           work = null;
         }
       }
-      const moved = stepHands(world, player, stamina, sample, jump, skills.jump.value);
+      if (agent) {
+        applyAgenda(stepAgenda(agendaName, agent, {
+          x: player.position[0],
+          y: player.position[1],
+          yaw,
+          tick,
+          wall: yard.pieces.some((piece) => piece.id === "wall"),
+        }));
+      }
+      const moved = stepHands(world, player, stamina, agent ? input() : sample, jump, skills.jump.value);
       if (moved.jump) grantUse(skills, "jump", { tick });
       const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
       if (floor < -0.01 && player.position[2] <= 0.02) {

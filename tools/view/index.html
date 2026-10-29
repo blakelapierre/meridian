@@ -29,7 +29,7 @@
       #sight.hot { filter: drop-shadow(0 0 5px #fff); }
       #sight.cold { opacity: 0.35; }
       aside { position: fixed; top: 12px; left: 12px; width: min(28rem, calc(100vw - 24px)); background: rgba(0,0,0,.78); padding: 12px 14px; font: 14px/1.4 sans-serif; z-index: 2; }
-      html.quiet aside > :not(#bit):not(#link) { display: none; }
+      html.quiet aside > :not(#bit):not(#link):not(#agenda) { display: none; }
       html.quiet aside { width: auto; max-width: calc(100% - 16px); padding: 6px 8px; }
       a { color: #9cf; }
       h1 { font-size: 1rem; margin: 0 0 8px; }
@@ -51,7 +51,8 @@
   <body>
     <aside>
       <h1>Walk check</h1>
-      <p>The camera sits directly behind your body. The wheel moves it closer or farther. Zoom in close enough and you go to the eyes. From there the wheel zooms further, as far as eyesight and the equipped optic allow. Press R to cycle none, glasses, binoculars, and a telescope. The number under the crosshair is the range to whatever is centered. Bare eyes are coarse. Rangefinding skill and a telescope make it finer and reach farther. Hold the right mouse and move to orbit. Let go and the camera swings back behind the body. A quick right-click, without moving, still salvages a wall. Press V for the eyes, and V again to come back out.</p>
+      <p>The camera sits directly behind your body. The wheel moves it closer. The last part of the way eases into the eyes instead of jumping. The range under the crosshair appears only once you are in first person. From the eyes, the wheel zooms further, as far as eyesight and the equipped optic allow. Press R to cycle none, glasses, binoculars, and a telescope. Bare eyes are coarse. Rangefinding skill and a telescope make the range finer and longer. Hold the right mouse and move to orbit. Let go and the camera swings back behind the body. A quick right-click, without moving, still salvages a wall. Press V for the eyes, and V again to come back out.</p>
+      <p>The second column is four AI clients. Each one drives this same view. The surveyor names things and does not dig. The miner opens pits. The mason raises a wall and then salvages it. The marksman shoots the dummy. Their line starts with the agenda.</p>
       <p>Press E to identify what the crosshair is on. That becomes your action target. Tab cycles the next interesting thing: people, the dummy, walls, and props. Not the sand. Shift+Tab goes backward. A ring marks the current target. At appraisal 0 you can name sand. A dummy is harder until the skill rises. When the line includes an action, press U to do it. The panel at the lower right is the skill list. A successful identify, jump, dig, hit, or finished wall fills that skill. At a contract door, E still enters.</p>
       <p>Click the picture to look. W A S D move. A and D strafe. Shift sprints. Tap Space for a short hop. Hold Space to rise higher, up to the jump skill. The line says <code>rising</code> while you are still climbing. The primary holds <code>vsync</code> while it is focused. The other two frames run as fast as they can, and the line says <code>free</code>. If the primary misses vsync they drop frames and the line says <code>yield</code>. A hidden tab still drops to <code>1fps</code>.</p>
       <p>Press 3 until the line says <code>hammer</code>. The amber square is the hammer sight. Press 3 again for the bit. The cyan cross is the bit sight. A bright sight means the target is in reach and it lights up. A dim sight means it is too far, and nothing lights.</p>
@@ -60,6 +61,7 @@
       <p>From the south gate, walk north a step. The line says <code>atoll-skirmish</code>. Press E. Pass: <code>strike south</code>, <code>scrip 800</code>, and <code>metal 30</code>. Press B while it says <code>buy</code>. Pass: <code>smoke</code> and <code>scrip 500</code>. Metal stays <code>30</code>. The line rifle is too expensive. Digging or raising a wall now says <code>frozen</code>. <a href="/tools/view/index.html?gate=1">Start at the gate</a>.</p>
       <p>An <a href="/tools/archive/">archive</a> is a client with no body. Leave it open in another tab. This line gains <code>archive</code> when it links. A dig says <code>provisional</code> until that archive mines a block, then it says <code>official</code>. The other two frames draw that hole from the block, even if they never voted.</p>
       <p>Press 1 for the line. The white dot is the sight. Click the red dummy. Pass: <code>chest 28</code> and <code>dummy 72</code>. Four standing hits kill it. It stands back up after 5 seconds. A wall in the way is a miss. <a href="/tools/view/index.html?look=dummy">Start on the pad, already aimed</a>.</p>
+      <p id="agenda"></p>
       <p id="bit">sand is intact</p>
       <p id="link"></p>
       <p><a href="/tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
@@ -70,6 +72,6 @@
     <ul id="skills"></ul>
     <div id="sight"></div>
     <div id="fps">0 fps</div>
-    <script type="module" src="/src/app/main.js?v=26"></script>
+    <script type="module" src="/src/app/main.js?v=27"></script>
   </body>
 </html>
