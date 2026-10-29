@@ -53,6 +53,17 @@ test("building skill shortens the raise and starts the wall stronger", () => {
   assert.equal(accepted.integrity, 120);
 });
 
+test("a fractional building skill still produces a wall the other client can adopt", () => {
+  const integrity = pieceIntegrity(1);
+  assert.equal(Number.isInteger(integrity), true);
+  const yard = createYard(atoll.placements.footing);
+  const cell = [yard.pieces[0].at[0] + 1, yard.pieces[0].at[1]];
+  const frame = encodeWall(createIdentity(), { nonce: 3.9, cell, integrity: integrity + 0.4 });
+  const accepted = acceptWall(frame);
+  assert.equal(accepted.integrity, integrity);
+  assert.equal(adoptWall(createYard(atoll.placements.footing), accepted.cell, accepted.integrity).ok, true);
+});
+
 test("salvage returns the metal and a wall that lost its footing falls", () => {
   const lone = createYard(atoll.placements.footing);
   const beside = [lone.pieces[0].at[0] + 1, lone.pieces[0].at[1]];

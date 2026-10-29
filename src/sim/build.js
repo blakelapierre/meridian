@@ -62,7 +62,7 @@ export function placeTicks(skill = 0) {
 
 export function pieceIntegrity(skill = 0) {
   const trained = Math.max(0, Math.min(140, skill));
-  return 80 + (trained / 140) * 40;
+  return Math.round(80 + (trained / 140) * 40);
 }
 
 export function tryPlaceWall(yard, cell, skill = 0) {
