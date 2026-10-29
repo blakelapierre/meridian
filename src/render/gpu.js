@@ -103,6 +103,15 @@ bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
   return dot(p.xy, p.xy) <= 256.0 * 256.0;
 }
 
+bool columnAt(float ix, float iy) {
+  for (int m = 0; m < 32; m++) {
+    if (m >= uDigs) return false;
+    vec4 other = texelFetch(uDigTex, ivec2(m, 0), 0);
+    if (abs(other.x - ix) < 0.1 && abs(other.y - iy) < 0.1) return true;
+  }
+  return false;
+}
+
 bool cavity(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t, out vec3 p, out vec3 n) {
   float t0 = 0.0;
   float t1 = 1.0e30;
@@ -254,23 +263,41 @@ void main() {
     vec3 sandP = ro;
     bool sand = sandPlane(ro, rd, sandT, sandP);
     bool openMouth = false;
+    float mouthFloor = 0.0;
     if (uDigs > 0) {
       ivec2 mouth = ivec2(floor(sandP.xy * 2.0));
       for (int n = 0; n < 32; n++) {
         if (n >= uDigs) break;
         vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
-        if (sand && abs(dig.x - float(mouth.x)) < 0.1 && abs(dig.y - float(mouth.y)) < 0.1) openMouth = true;
+        if (sand && abs(dig.x - float(mouth.x)) < 0.1 && abs(dig.y - float(mouth.y)) < 0.1) {
+          openMouth = true;
+          mouthFloor = dig.z;
+        }
         vec3 bmin = vec3(dig.x * 0.5, dig.y * 0.5, dig.z);
         vec3 bmax = vec3(bmin.x + 0.5, bmin.y + 0.5, 0.0);
-        if (!cavity(ro, rd, bmin, bmax, t, p, bestN) || t <= 0.02 || t >= bestT) continue;
+        vec3 faceN;
+        if (!cavity(ro, rd, bmin, bmax, t, p, faceN) || t <= 0.02 || t >= bestT) continue;
+        bool floor = abs(faceN.z) > 0.5;
+        if (!floor) {
+          if (ro.z >= -0.05) continue;
+          if (columnAt(dig.x - faceN.x, dig.y - faceN.y)) continue;
+        }
         bestT = t;
         bestP = p;
+        bestN = faceN;
         bestRgb = vec3(0.16, 0.13, 0.10);
         bestRef = 0.04;
         found = true;
       }
     }
-    if (sand && !openMouth && sandT < bestT) {
+    if (sand && openMouth && !found) {
+      bestT = sandT;
+      bestP = vec3(sandP.xy, mouthFloor);
+      bestN = vec3(0.0, 0.0, 1.0);
+      bestRgb = vec3(0.16, 0.13, 0.10);
+      bestRef = 0.04;
+      found = true;
+    } else if (sand && !openMouth && sandT < bestT) {
       bestT = sandT;
       bestP = sandP;
       bestN = vec3(0.0, 0.0, 1.0);

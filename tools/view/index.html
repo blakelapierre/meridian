@@ -38,7 +38,7 @@
       <p>Click the picture to look. W A S D move. A and D strafe. Shift sprints. Space jumps and lands. While this window is focused the line ends in <code>vsync</code>. Click another window and it changes to <code>1fps</code>. The pixel size steps down if a frame misses the screen, and steps back up when there is room.</p>
       <p>Press 3 until the line says <code>hammer</code>. The amber square is the hammer sight. Press 3 again for the bit. The cyan cross is the bit sight. A bright sight means the target is in reach and it lights up. A dim sight means it is too far, and nothing lights.</p>
       <p>With the hammer, walk north to the stone slab and look at the ground beside it. The cell lights amber when it is in reach. Hold the left mouse. A cyan column rises while the line counts <code>work</code>. After 12 seconds it says <code>wall</code> and <code>metal 24</code>. Look at that wall, right-click, and it says <code>salvage</code> with the metal back at <code>30</code>. Empty sand says <code>support</code>.</p>
-      <p>With the bit, look down at the sand. The cross goes bright and the voxel lights up when it is in reach. Hold the left mouse. A pit opens under you, the line reads <code>voxel 500</code>, and you drop to the floor of the hole.</p>
+      <p>With the bit, look down at the sand. The cross goes bright and the voxel lights up when it is in reach. Hold the left mouse. A pit opens under you, the line reads <code>voxel 500</code>, and you drop to the floor. The rim stays sand. There is no wall around the hole.</p>
       <p>Press 1 for the line. The white dot is the sight. Click the red dummy. Pass: <code>chest 28</code> and <code>dummy 72</code>. Four standing hits kill it. It stands back up after 5 seconds. A wall in the way is a miss. <a href="/tools/view/index.html?look=dummy">Start on the pad, already aimed</a>.</p>
       <p id="bit">sand is intact</p>
       <p id="link"></p>
@@ -47,6 +47,6 @@
     <canvas width="160" height="90"></canvas>
     <div id="sight"></div>
     <div id="fps">0 fps</div>
-    <script type="module" src="/src/app/main.js?v=7"></script>
+    <script type="module" src="/src/app/main.js?v=8"></script>
   </body>
 </html>
