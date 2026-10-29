@@ -21,11 +21,12 @@ export function createPlayerWorld(player) {
   });
 }
 
-export function stepPlayer(state, player, acceleration, jump = false) {
+export function stepPlayer(state, player, acceleration, jump = false, impulse = null) {
   const gravity = state.tangentGravity || 0;
+  const lift = impulse == null ? (jump ? JUMP_ACCEL : 0) : impulse;
   player.acceleration[0] = acceleration[0];
   player.acceleration[1] = acceleration[1];
-  player.acceleration[2] = acceleration[2] + gravity + (jump ? JUMP_ACCEL : 0);
+  player.acceleration[2] = acceleration[2] + gravity + lift;
   tick(state);
   if (player.position[2] < 0) {
     player.position[2] = 0;

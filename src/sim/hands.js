@@ -1,4 +1,5 @@
 import { stepPlayer, stepStamina, STOP_ACCEL, wishSpeed } from "./player.js";
+import { stepLift } from "./jump.js";
 
 const AIR_ACCEL = 12;
 
@@ -24,13 +25,16 @@ export function controlAcceleration(velocity, wish, cap) {
   return [dx * scale, dy * scale, 0];
 }
 
-export function stepHands(world, player, stamina, input) {
+export function stepHands(world, player, stamina, input, jump = null, jumpSkill = 0) {
   const airborne = player.position[2] > 0.02;
   const speed = airborne ? 4.4 : wishSpeed(stamina, { sprint: input.sprint, crouch: input.crouch });
   const wish = wishPlanar(input.yaw, input.forward || 0, input.strafe || 0, speed);
   const accel = controlAcceleration(player.velocity, wish, airborne ? AIR_ACCEL : STOP_ACCEL);
-  const jump = !airborne && input.jump && stamina.value >= 12;
-  stepStamina(stamina, { sprint: !airborne && input.sprint, jump });
-  stepPlayer(world, player, accel, jump);
-  return { jump, speed };
+  if (!jump) {
+    const leaving = !airborne && input.jump && stamina.value >= 12;
+    stepStamina(stamina, { sprint: !airborne && input.sprint, jump: leaving });
+    stepPlayer(world, player, accel, leaving);
+    return { jump: leaving, speed };
+  }
+  return { ...stepLift(world, player, stamina, input, jump, jumpSkill, accel, airborne), speed };
 }
