@@ -60,6 +60,31 @@ export function stepCamera(spring, ideal, dt) {
   return spring.pos;
 }
 
+export function frameCamera(feet, target, distanceHint = CHASE) {
+  if (!target) return null;
+  const eye = 1.65;
+  const chest = [feet[0], feet[1], (feet[2] || 0) + eye * 0.55];
+  const dx = target[0] - chest[0];
+  const dy = target[1] - chest[1];
+  const dz = (target[2] ?? chest[2]) - chest[2];
+  const span = Math.hypot(dx, dy, dz);
+  if (span < 0.8) return null;
+  const mid = [chest[0] + dx * 0.42, chest[1] + dy * 0.42, chest[2] + dz * 0.42];
+  const flat = Math.hypot(dx, dy) || 1;
+  const sideX = -dy / flat;
+  const sideY = dx / flat;
+  const half = (70 * Math.PI / 180) / 2 * 0.58;
+  const distance = Math.min(22, Math.max(distanceHint, span / (2 * Math.tan(half))));
+  const origin = [
+    chest[0] - (dx / span) * distance * 0.82 + sideX * distance * 0.42,
+    chest[1] - (dy / span) * distance * 0.82 + sideY * distance * 0.42,
+    Math.max((feet[2] || 0) + 0.4, chest[2] - (dz / span) * distance * 0.28 + 0.85),
+  ];
+  const look = [mid[0] - origin[0], mid[1] - origin[1], mid[2] - origin[2]];
+  const len = Math.hypot(look[0], look[1], look[2]) || 1;
+  return { origin, dir: [look[0] / len, look[1] / len, look[2] / len], distance };
+}
+
 export function rayMisses(origin, dir, parts) {
   for (const part of parts) {
     const dx = part.origin[0] - origin[0];
