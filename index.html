@@ -19,7 +19,8 @@
     <h2>1. Walk</h2>
     <p>You stand on the south beach, looking north. The picture is 160×90, scaled up. The ground is the integer crust. The sky is blue because the sun is up.</p>
     <p>Click the picture, then look with the mouse. W A S D move. A and D strafe; they do not turn you. Shift sprints. Space jumps and lands. Walk north and the wooden compound gets closer.</p>
-    <p>Look down and hold the left mouse for about a second. Pass: a darker pit opens in the sand, and the line reads <code>voxel 500</code> plus a hash.</p>
+    <p>Press 3 for the bit. Look down and hold the left mouse for about a second. Pass: a darker pit opens in the sand, and the line reads <code>voxel 500</code> plus a hash.</p>
+    <p>Press 1 for the line. <a href="/tools/view/index.html?look=dummy">The pad view</a> is already aimed at the dummy. Click it. Pass: <code>chest 28</code> and <code>dummy 72</code>. Four hits and it reads <code>dummy dead</code>, then it stands back up after 5 seconds.</p>
     <p><a href="/tools/view/index.html">Open the walk</a></p>
 
     <h2>2. Position</h2>
@@ -41,5 +42,10 @@
     <p>The same walk, in two tabs. Tab A looks down and holds the left mouse. Tab B looks down at the same sand.</p>
     <p>Pass: both lines show <code>voxel 500</code> and the same hash. The darker pit is in both pictures. Open either tab first.</p>
     <p><a href="/tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?id=b&to=a">Tab B</a></p>
+
+    <h2>6. Shared shot</h2>
+    <p>Two walk tabs, both opened from the pad. Tab A clicks the dummy.</p>
+    <p>Pass: both lines say <code>chest 28</code> and <code>dummy 72</code>. <code>split</code> means the other tab did not see the same hit, and that shot does not count.</p>
+    <p><a href="/tools/view/index.html?look=dummy&id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?look=dummy&id=b&to=a">Tab B</a></p>
   </body>
 </html>
