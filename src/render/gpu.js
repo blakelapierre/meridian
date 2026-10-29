@@ -123,66 +123,6 @@ bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
   return dot(p.xy, p.xy) <= 256.0 * 256.0;
 }
 
-bool columnAt(float ix, float iy) {
-  for (int m = 0; m < 32; m++) {
-    if (m >= uDigs) return false;
-    vec4 other = texelFetch(uDigTex, ivec2(m, 0), 0);
-    if (abs(other.x - ix) < 0.1 && abs(other.y - iy) < 0.1) return true;
-  }
-  return false;
-}
-
-bool cavity(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t, out vec3 p, out vec3 n) {
-  float t0 = 0.0;
-  float t1 = 1.0e30;
-  int enterAxis = 2;
-  int exitAxis = 2;
-  float enterSign = 1.0;
-  float exitSign = 1.0;
-  for (int axis = 0; axis < 3; axis++) {
-    float d = rd[axis];
-    float o = ro[axis];
-    if (abs(d) < 1.0e-8) {
-      if (o < bmin[axis] || o > bmax[axis]) return false;
-      continue;
-    }
-    float ta = (bmin[axis] - o) / d;
-    float tb = (bmax[axis] - o) / d;
-    float sa = -1.0;
-    float sb = 1.0;
-    if (ta > tb) {
-      float swapT = ta;
-      ta = tb;
-      tb = swapT;
-      float swapS = sa;
-      sa = sb;
-      sb = swapS;
-    }
-    if (ta > t0) {
-      t0 = ta;
-      enterAxis = axis;
-      enterSign = sa;
-    }
-    if (tb < t1) {
-      t1 = tb;
-      exitAxis = axis;
-      exitSign = sb;
-    }
-    if (t0 > t1) return false;
-  }
-  if (t1 < 0.02) return false;
-  bool throughMouth = t0 > 0.02 && enterAxis == 2 && enterSign > 0.0;
-  bool inside = t0 <= 0.02;
-  if (!throughMouth && !inside) return false;
-  if (exitAxis == 2 && exitSign > 0.0) return false;
-  t = t1;
-  p = ro + rd * t;
-  if (exitAxis == 0) n = vec3(-exitSign, 0.0, 0.0);
-  else if (exitAxis == 1) n = vec3(0.0, -exitSign, 0.0);
-  else n = vec3(0.0, 0.0, -exitSign);
-  return true;
-}
-
 bool boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t) {
   float tMin = 0.0;
   float tMax = 1.0e30;
@@ -293,19 +233,16 @@ void main() {
           openMouth = true;
           mouthFloor = dig.z;
         }
-        vec3 bmin = vec3(dig.x * 0.5, dig.y * 0.5, dig.z);
-        vec3 bmax = vec3(bmin.x + 0.5, bmin.y + 0.5, 0.0);
-        vec3 faceN;
-        if (!cavity(ro, rd, bmin, bmax, t, p, faceN) || t <= 0.02 || t >= bestT) continue;
-        bool floor = abs(faceN.z) > 0.5;
-        if (!floor) {
-          if (ro.z >= -0.05) continue;
-          if (columnAt(dig.x - faceN.x, dig.y - faceN.y)) continue;
-        }
+        if (rd.z >= -1.0e-4) continue;
+        t = (dig.z - ro.z) / rd.z;
+        if (t <= 0.02 || t >= bestT) continue;
+        p = ro + rd * t;
+        vec2 lo = dig.xy * 0.5;
+        if (p.x < lo.x - 0.02 || p.x >= lo.x + 0.52 || p.y < lo.y - 0.02 || p.y >= lo.y + 0.52) continue;
         bestT = t;
         bestP = p;
-        bestN = faceN;
-        bestRgb = tiled(${SAND_TILE}, bestP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * (floor ? 0.55 : 0.4);
+        bestN = vec3(0.0, 0.0, 1.0);
+        bestRgb = tiled(${SAND_TILE}, p.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55;
         bestRef = 0.04;
         found = true;
       }
