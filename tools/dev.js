@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createStaticServer } from "./serve.js";
 import { createLighthouse } from "./signal/server.js";
+import { watchQuit } from "./console.js";
 
 export async function startDev(root, { httpPort = 0, signalPort = 0 } = {}) {
   const site = await createStaticServer(root, httpPort);
@@ -22,5 +23,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   startDev(root, { httpPort, signalPort }).then(({ site, lighthouse }) => {
     console.log(`${site.url}/`);
     console.log(lighthouse.url);
+    console.log("press q to stop");
+    watchQuit();
   });
 }
