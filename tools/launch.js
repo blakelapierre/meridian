@@ -89,6 +89,15 @@ export function benchHref(href, origin = "http://127.0.0.1") {
   return bench.pathname + bench.search;
 }
 
+export function bootOrder({ primary = "", follow = "", second = "", ais = [] } = {}) {
+  const order = [];
+  if (primary) order.push({ slot: "primary", src: primary });
+  if (follow) order.push({ slot: "follow", src: follow });
+  if (second) order.push({ slot: "second", src: second });
+  for (const src of ais) order.push({ slot: "ai", src });
+  return order;
+}
+
 function features(box) {
   return `popup=yes,width=${box.width},height=${box.height},left=${box.left},top=${box.top}`;
 }
