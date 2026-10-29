@@ -25,7 +25,7 @@ Slice keys. Later screens do not get to steal these. Hands are first person: the
 | G | Throw the selected utility | — | — | — |
 | B | — | — | — | Buy menu. Hidden outside the window |
 | Tab | Cycle people. Shift goes backward | same | same | same |
-| M | Sensed map. No players you cannot see | same | same | same |
+| M | Sensed map. Coordinates and heading always. Range, people, names, and objects grow with mapping | same | same | same |
 | Esc | Close the open panel | same | same | same |
 | Q | Toggle auto run. S still backs up | same | same | same |
 | Backquote | Cycle objects. Shift goes backward. Not people, not sand | same | same | same |

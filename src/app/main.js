@@ -15,6 +15,8 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, stepCamera, CHASE, BODY_COLORS } from "../sim/body.js";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
+import { inSense, mapAbilities, mapMarks } from "../sim/map.js";
+import { paintChart } from "../render/chart.js";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -105,6 +107,9 @@ let actEdge = false;
 let cycleEdge = 0;
 let objectEdge = 0;
 let autoRun = false;
+let mapOpen = params.get("quiet") !== "1";
+const trail = [];
+const seenPeople = new Map();
 let orbitYaw = 0;
 let orbitPitch = 0;
 let cameraDistance = CHASE;
@@ -190,6 +195,14 @@ addEventListener("keydown", (event) => {
   if (event.code === "Tab") cycleEdge = event.shiftKey ? -1 : 1;
   if (event.code === "Backquote") objectEdge = event.shiftKey ? -1 : 1;
   if (event.code === "KeyQ" && !followId) autoRun = !autoRun;
+  if (event.code === "KeyM") {
+    mapOpen = !mapOpen;
+    showChart();
+  }
+  if (event.code === "Escape" && mapOpen) {
+    mapOpen = false;
+    showChart();
+  }
   if (event.code === "KeyV" && !followId && !agent) {
     if (view === "third") {
       view = "first";
@@ -410,6 +423,59 @@ function adoptTarget(subject) {
   if (result.known) grantUse(skills, "appraisal", { tick });
   selection = { ...subject, id, line: result.line, canAct: result.canAct };
   report = result.line;
+}
+
+function showChart() {
+  const chart = document.querySelector("#chart");
+  if (chart) chart.classList.toggle("open", mapOpen);
+}
+
+function sensedPeople() {
+  const ability = mapAbilities(skills.mapping.value);
+  if (!ability.people) {
+    seenPeople.clear();
+    return [];
+  }
+  for (const other of otherActors()) {
+    if (inSense(player.position, other.feet, ability.radius)) {
+      seenPeople.set(other.id, { ...other, tick });
+    }
+  }
+  for (const [id, contact] of seenPeople) {
+    if (tick - contact.tick > ability.memory) seenPeople.delete(id);
+  }
+  return [...seenPeople.values()];
+}
+
+function drawChart() {
+  const chart = document.querySelector("#chart");
+  if (!mapOpen) {
+    if (chart) chart.classList.remove("open");
+    return;
+  }
+  if (chart) chart.classList.add("open");
+  const ability = mapAbilities(skills.mapping.value);
+  const objects = listObjects({
+    dummy: atoll.placements.dummy,
+    pieces: yard.pieces,
+    props: atoll.props,
+    feet: player.position,
+  });
+  const plotted = mapMarks({
+    self: player.position,
+    skill: skills.mapping.value,
+    target: selection,
+    objects,
+    trail,
+    known: sensedPeople(),
+  });
+  paintChart(document.querySelector("#map"), document.querySelector("#fix"), {
+    self: player.position,
+    yaw,
+    skill: skills.mapping.value,
+    marks: plotted.marks,
+    radius: ability.radius,
+  });
 }
 
 function cycle(step, kind) {
@@ -853,6 +919,7 @@ if (agent) {
   canvas.dataset.ai = agendaName;
 }
 canvas.dataset.pace = "vsync";
+showChart();
 
 const FOLLOW_M = 3.5;
 
@@ -1007,6 +1074,13 @@ if (params.get("still") !== "1") {
       const moved = stepHands(world, player, stamina, agent ? input() : sample, jump, skills.jump.value);
       if (moved.jump) grantUse(skills, "jump", { tick });
       if (moved.running) grantUse(skills, "run", { tick, gap: 30 });
+      if (mapOpen) grantUse(skills, "mapping", { tick, gap: 15 });
+      const step = player.position;
+      const lastFix = trail[trail.length - 1];
+      if (!lastFix || (step[0] - lastFix[0]) ** 2 + (step[1] - lastFix[1]) ** 2 > 2.25) {
+        trail.push([step[0], step[1]]);
+        if (trail.length > 80) trail.shift();
+      }
       const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
       if (floor < -0.01 && player.position[2] <= 0.02) {
         player.position[2] = floor;
@@ -1033,6 +1107,7 @@ if (params.get("still") !== "1") {
     }
     showSight(aimed);
     aimCamera(sample, dt);
+    drawChart();
     if (selection?.kind === "player") {
       const live = otherActors().find((actor) => actor.id === selection.id);
       if (live) selection.point = [live.feet[0], live.feet[1], live.feet[2] + 1];
