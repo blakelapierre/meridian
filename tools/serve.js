@@ -48,7 +48,7 @@ export function createStaticServer(root, port = 0) {
     }
   });
   return new Promise((resolveReady) => {
-    server.listen(port, "127.0.0.1", () => {
+    server.listen(port, "0.0.0.0", () => {
       const address = server.address();
       resolveReady({
         port: address.port,

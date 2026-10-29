@@ -9,7 +9,7 @@ import { DAY_TICKS } from "../sim/sun.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
-import { lookDirection } from "../sim/hands.js";
+import { lookDirection, stepHands } from "../sim/hands.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { createIdentity } from "../net/identity.js";
@@ -20,11 +20,12 @@ import { acceptShot, encodeShot } from "../net/shots.js";
 const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
 let context = null;
+let viewScale = 0.5;
 if (painter) {
-  fitCanvas(canvas);
+  fitCanvas(canvas, viewScale);
   canvas.style.imageRendering = "auto";
   canvas.dataset.renderer = "webgl2";
-  addEventListener("resize", () => fitCanvas(canvas));
+  addEventListener("resize", () => fitCanvas(canvas, viewScale));
 } else {
   context = canvas.getContext("2d", { alpha: false });
   if (context) context.imageSmoothingEnabled = false;
@@ -344,7 +345,7 @@ async function link() {
 }
 
 const first = input();
-if (painter) fitCanvas(canvas, 1);
+if (painter) fitCanvas(canvas, viewScale);
 paint(first);
 publish();
 canvas.dataset.ready = "1";
@@ -429,17 +430,19 @@ if (params.get("still") !== "1") {
     showSight(aimed);
     const active = !document.hidden && document.hasFocus();
     const decision = pacer.consider(now, active);
+    viewScale = pacer.scale;
     canvas.dataset.pace = decision.mode;
     if (params.get("nopaint") !== "1" && decision.paint) {
-      if (painter) fitCanvas(canvas, pacer.scale);
+      if (painter) fitCanvas(canvas, viewScale);
       const started = performance.now();
       paint(sample);
       pacer.note(performance.now() - started, active);
       canvas.dataset.fps = String(fps.paint(now));
     }
     flush();
-    } catch {
+    } catch (error) {
       report = "frame";
+      canvas.dataset.err = String(error && error.message || error);
     }
     requestAnimationFrame(frame);
   };
