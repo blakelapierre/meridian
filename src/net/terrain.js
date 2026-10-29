@@ -141,8 +141,11 @@ export function createTerrain({ identity, leader }) {
     if (frame.kind === 2) {
       const proposal = remote || proposed;
       if (!leader || !proposal) return { ok: false, reason: "proposal" };
+      const voteBody = decode(frame.bytes);
+      if (voteBody.seq !== log.seq + 1) return { ok: false, reason: "seq" };
       const vote = { bytes: frame.bytes, sig: frame.sig, pubkey: frame.pubkey };
       const sealed = seal(proposal, vote, false);
+      if (!sealed.ok) return sealed;
       if (proposal === proposed) proposed = null;
       if (proposal === remote) remote = null;
       flush();
