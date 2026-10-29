@@ -19,6 +19,7 @@ export function createPacer() {
   let checks = 0;
   let gap = 0;
   let seen = 0;
+  let misses = 0;
   return {
     get scale() {
       return scale;
@@ -35,7 +36,25 @@ export function createPacer() {
       }
       lastNow = now;
       const paint = shouldPaint(active, now - lastPaint);
-      return { paint, scale, refresh, mode: active ? "vsync" : "1fps" };
+      const holding = active && (gap === 0 || gap <= refresh * 1.35);
+      return { paint, scale, refresh, mode: active ? "vsync" : "1fps", gap, holding };
+    },
+    considerExtra(now, holding) {
+      seen += 1;
+      if (lastNow) gap = now - lastNow;
+      lastNow = now;
+      if (holding) misses = 0;
+      else misses = Math.min(24, misses + 1);
+      const stride = misses === 0 ? 1 : misses < 8 ? 2 : 4;
+      if (!holding) scale = Math.max(0.25, scale * 0.98);
+      return {
+        paint: seen % stride === 0,
+        scale: Math.min(scale, 0.6),
+        refresh,
+        mode: holding ? "free" : "yield",
+        gap,
+        holding,
+      };
     },
     note(ms, active) {
       lastPaint = lastNow;

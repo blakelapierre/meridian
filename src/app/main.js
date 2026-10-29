@@ -1,5 +1,5 @@
 import { paintFrame } from "../engine/frame.js";
-import { cast, project } from "../engine/cast.js";
+import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
 import { createFps } from "../render/fps.js";
@@ -12,8 +12,9 @@ import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
 import { lookDirection, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
-import { createSkills, grantUse } from "../sim/skills.js";
-import { chaseOrigin, createCameraSpring, stepCamera } from "../sim/body.js";
+import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
+import { chaseOrigin, createCameraSpring, stepCamera, CHASE } from "../sim/body.js";
+import { cycleTarget, listTargets } from "../sim/target.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
@@ -45,6 +46,14 @@ if (painter) {
 const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
+const quiet = params.get("quiet") === "1";
+const paceBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-pace");
+let primaryHolding = true;
+if (quiet && paceBus) {
+  paceBus.onmessage = (event) => {
+    if (event.data?.role === "primary") primaryHolding = event.data.holding !== false;
+  };
+}
 const followId = params.get("follow");
 const keys = new Set();
 const peer = Boolean(params.get("id"));
@@ -86,6 +95,12 @@ let useEdge = false;
 let buyEdge = false;
 let selectEdge = false;
 let actEdge = false;
+let cycleEdge = 0;
+let orbitYaw = 0;
+let orbitPitch = 0;
+let cameraDistance = CHASE;
+let rightDown = false;
+let rightMoved = false;
 let selection = null;
 const skills = createSkills();
 const jump = createJump();
@@ -141,11 +156,15 @@ addEventListener("keydown", (event) => {
   keys.add(event.code);
   if (event.code === "Digit1") slot = "line";
   if (event.code === "Digit3") slot = slot === "bit" ? "hammer" : "bit";
+  if (event.code === "Tab") event.preventDefault();
   if (event.repeat) return;
-  if (event.code === "KeyE") useEdge = true;
+  if (event.code === "KeyE") {
+    if (entryState.prompt) useEdge = true;
+    else selectEdge = true;
+  }
   if (event.code === "KeyB") buyEdge = true;
-  if (event.code === "KeyF") selectEdge = true;
   if (event.code === "KeyU") actEdge = true;
+  if (event.code === "Tab") cycleEdge = event.shiftKey ? -1 : 1;
   if (event.code === "KeyV" && !followId) {
     view = view === "third" ? "first" : "third";
     cameraSpring = null;
@@ -155,18 +174,8 @@ addEventListener("keydown", (event) => {
 addEventListener("keyup", (event) => keys.delete(event.code));
 canvas.addEventListener("mousedown", (event) => {
   if (event.button === 2) {
-    if (slot !== "hammer") return;
-    const mark = refreshAim(input());
-    if (!mark.inRange) {
-      report = "far";
-      return;
-    }
-    const saved = trySalvage(yard, mark.cell);
-    report = saved.ok ? "salvage" : saved.reason;
-    if (!saved.ok) return;
-    const nonce = Math.floor(tick);
-    const frame = encodeSalvage(identity, { nonce, cell: mark.cell });
-    sendOps(frame);
+    rightDown = true;
+    rightMoved = false;
     return;
   }
   if (event.button !== 0) return;
@@ -175,11 +184,37 @@ canvas.addEventListener("mousedown", (event) => {
 });
 addEventListener("mouseup", (event) => {
   if (event.button === 0) trigger = false;
+  if (event.button !== 2) return;
+  const orbiting = rightMoved;
+  rightDown = false;
+  if (orbiting || followId || slot !== "hammer") return;
+  const mark = refreshAim(input());
+  if (!mark.inRange) {
+    report = "far";
+    return;
+  }
+  const saved = trySalvage(yard, mark.cell);
+  report = saved.ok ? "salvage" : saved.reason;
+  if (!saved.ok) return;
+  const nonce = Math.floor(tick);
+  const frame = encodeSalvage(identity, { nonce, cell: mark.cell });
+  sendOps(frame);
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("click", () => canvas.requestPointerLock());
+canvas.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  cameraDistance = Math.min(12, Math.max(1.2, cameraDistance + Math.sign(event.deltaY) * 0.45));
+}, { passive: false });
 addEventListener("mousemove", (event) => {
-  if (followId || document.pointerLockElement !== canvas) return;
+  if (document.pointerLockElement !== canvas) return;
+  if (rightDown) {
+    orbitYaw += event.movementX * 0.004;
+    orbitPitch = Math.max(-1, Math.min(0.8, orbitPitch - event.movementY * 0.004));
+    if (event.movementX || event.movementY) rightMoved = true;
+    return;
+  }
+  if (followId) return;
   yaw += event.movementX * 0.0022;
   pitch = Math.max(-1.2, Math.min(1.2, pitch - event.movementY * 0.0022));
 });
@@ -213,8 +248,21 @@ function otherActors() {
   return list;
 }
 
+function cameraAim(sample = {}) {
+  const bodyYaw = sample.yaw ?? yaw;
+  const bodyPitch = sample.pitch ?? pitch;
+  if (!followId && view === "first") return { yaw: bodyYaw, pitch: bodyPitch, distance: null, third: false };
+  return {
+    yaw: bodyYaw + orbitYaw,
+    pitch: Math.max(-1.2, Math.min(1.2, bodyPitch + orbitPitch)),
+    distance: cameraDistance,
+    third: true,
+  };
+}
+
 function aimCamera(sample, dt) {
-  if (!followId && view === "first") {
+  const aim = cameraAim(sample);
+  if (!aim.third) {
     cameraSpring = null;
     cameraPos = null;
     return;
@@ -222,12 +270,13 @@ function aimCamera(sample, dt) {
   const feet = followId && followed && followed.yaw !== undefined
     ? [followed.x, followed.y, followed.z]
     : player.position;
-  const ideal = chaseOrigin(feet, sample.yaw ?? yaw, sample.pitch ?? pitch, followId ? false : !!sample.crouch);
+  const ideal = chaseOrigin(feet, aim.yaw, aim.pitch, followId ? false : !!sample.crouch, aim.distance);
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
 }
 
 function sceneFor(sample, width, height) {
+  const aim = cameraAim(sample);
   return buildScene({
     feet: player.position,
     yaw: sample.yaw ?? yaw,
@@ -243,6 +292,7 @@ function sceneFor(sample, width, height) {
     self: !followId && view === "third",
     others: otherActors(),
     cameraOrigin: cameraPos,
+    cameraDir: aim.third ? lookDirection(aim.yaw, aim.pitch) : null,
   });
 }
 
@@ -252,6 +302,29 @@ function refreshAim(sample = {}) {
   const pitchNow = sample.pitch ?? pitch;
   const objects = sceneFor(sample, 16, 9).objects.filter((object) => !object.self);
   return toolAim(slot, eyeOf(sample), lookDirection(yawNow, pitchNow), objects, yard.pieces);
+}
+
+function adoptTarget(subject) {
+  const id = subject.id || (subject.cell ? `${subject.kind}:${subject.cell[0]}:${subject.cell[1]}` : subject.kind);
+  const result = appraise(skills.appraisal.value, subject);
+  if (result.known) grantUse(skills, "appraisal", { tick });
+  selection = { ...subject, id, line: result.line, canAct: result.canAct };
+  report = result.line;
+}
+
+function cycle(step) {
+  const next = cycleTarget(listTargets({
+    dummy: atoll.placements.dummy,
+    others: otherActors(),
+    pieces: yard.pieces,
+    props: atoll.props,
+    feet: player.position,
+  }), selection?.id, step);
+  if (!next) {
+    report = "nothing to target";
+    return;
+  }
+  adoptTarget(next);
 }
 
 function identify(sample) {
@@ -264,10 +337,7 @@ function identify(sample) {
     report = "nothing to identify";
     return;
   }
-  const result = appraise(skills.appraisal.value, subject);
-  if (result.known) grantUse(skills, "appraisal", { tick });
-  selection = { ...subject, line: result.line, canAct: result.canAct };
-  report = result.line;
+  adoptTarget(subject);
 }
 
 function actOn(sample) {
@@ -343,6 +413,26 @@ function showSight(mark) {
   canvas.dataset.aim = slot === "bit" || slot === "hammer" ? (mark?.inRange ? mark.kind : "far") : "";
 }
 
+function paintSkills() {
+  const list = document.querySelector("#skills");
+  if (!list) return;
+  list.replaceChildren(...SKILL_NAMES.map((name) => {
+    const skill = skills[name];
+    const label = document.createElement("span");
+    label.textContent = name;
+    const track = document.createElement("span");
+    track.className = "bar";
+    const fill = document.createElement("i");
+    fill.style.width = `${Math.min(100, skill.value)}%`;
+    track.append(fill);
+    const value = document.createElement("b");
+    value.textContent = String(Math.floor(skill.value));
+    const row = document.createElement("li");
+    row.append(label, track, value);
+    return row;
+  }));
+}
+
 function publish() {
   const voxel = terrain.voxel();
   const tip = tipOf(worldChain).block;
@@ -383,12 +473,34 @@ function publish() {
   canvas.dataset.prompt = entryState.prompt || "";
   canvas.dataset.scrip = entryState.scrip == null ? "" : String(entryState.scrip);
   canvas.dataset.body = entryState.body || "beach";
+  paintSkills();
+}
+
+function markTarget(scene) {
+  const el = document.querySelector("#target");
+  if (!el) return;
+  if (!selection?.point) {
+    el.style.display = "none";
+    return;
+  }
+  const screen = worldToScreen(selection.point, scene.camera);
+  if (!screen) {
+    el.style.display = "none";
+    return;
+  }
+  const x = Math.min(0.97, Math.max(0.03, screen.x));
+  const y = Math.min(0.97, Math.max(0.03, screen.y));
+  el.style.display = "block";
+  el.style.left = `${x * 100}%`;
+  el.style.top = `${y * 100}%`;
+  el.dataset.edge = screen.x < 0 || screen.x > 1 || screen.y < 0 || screen.y > 1 ? "edge" : "";
 }
 
 function paint(sample) {
   const scene = sceneFor(sample, canvas.width, canvas.height);
   scene.work = work;
   scene.time = tick / 30;
+  markTarget(scene);
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
   const color = hit.color || scene.miss;
@@ -679,8 +791,10 @@ if (params.get("still") !== "1") {
     const sample = input();
     const selectOnce = selectEdge;
     const actOnce = actEdge;
+    const cycleOnce = cycleEdge;
     selectEdge = false;
     actEdge = false;
+    cycleEdge = 0;
     const aimed = refreshAim(sample);
     if (followId) {
       bank = 0;
@@ -782,14 +896,16 @@ if (params.get("still") !== "1") {
     }
     showSight(aimed);
     aimCamera(sample, dt);
+    if (cycleOnce) cycle(cycleOnce);
     if (selectOnce) identify(sample);
     if (actOnce) actOn(sample);
     if (!work && selection?.point) {
       work = { x: selection.point[0], y: selection.point[1], height: 1.6, mode: 4 };
     }
     const active = !document.hidden && document.hasFocus();
-    const decision = pacer.consider(now, active);
-    viewScale = pacer.scale;
+    const decision = quiet && !document.hidden ? pacer.considerExtra(now, primaryHolding) : pacer.consider(now, active);
+    if (!quiet && paceBus) paceBus.postMessage({ role: "primary", holding: decision.holding });
+    viewScale = decision.scale;
     canvas.dataset.pace = decision.mode;
     if (params.get("nopaint") !== "1" && decision.paint) {
       if (painter) fitCanvas(canvas, viewScale);
