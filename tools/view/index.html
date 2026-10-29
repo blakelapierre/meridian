@@ -7,7 +7,15 @@
       html, body { margin: 0; background: #111; height: 100%; color: #eee; }
       canvas { width: 100vw; height: 100vh; display: block; background: #123; cursor: crosshair; }
       #fps { position: fixed; top: 12px; right: 14px; z-index: 3; font: 16px/1 sans-serif; color: #9f9; text-shadow: 0 1px 2px #000; }
-      #sight { display: none; position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; margin: -6px 0 0 -6px; border: 1px solid #fff; border-radius: 50%; z-index: 3; pointer-events: none; }
+      #sight { display: none; position: fixed; left: 50%; top: 50%; z-index: 3; pointer-events: none; }
+      #sight[data-tool="line"] { width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 1px solid #fff; border-radius: 50%; }
+      #sight[data-tool="bit"] { width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+      #sight[data-tool="bit"]::before, #sight[data-tool="bit"]::after { content: ""; position: absolute; background: #7ef; }
+      #sight[data-tool="bit"]::before { left: 8px; top: 0; width: 2px; height: 18px; }
+      #sight[data-tool="bit"]::after { left: 0; top: 8px; width: 18px; height: 2px; }
+      #sight[data-tool="hammer"] { width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 2px solid #fc8; }
+      #sight.hot { filter: drop-shadow(0 0 5px #fff); }
+      #sight.cold { opacity: 0.35; }
       aside { position: fixed; top: 12px; left: 12px; width: min(28rem, calc(100vw - 24px)); background: rgba(0,0,0,.78); padding: 12px 14px; font: 14px/1.4 sans-serif; z-index: 2; }
       a { color: #9cf; }
       h1 { font-size: 1rem; margin: 0 0 8px; }
@@ -28,8 +36,9 @@
       <h1>Walk check</h1>
       <p>You should see sand, a blue sky, and, if you walk north, a wooden compound. With WebGL2 the picture is sharp, up to 1920×1080, not a 160×90 mosaic. Without it, the page stays on the coarse picture.</p>
       <p>Click the picture to look. W A S D move. A and D strafe. Shift sprints. Space jumps and lands. While this window is focused the line ends in <code>vsync</code>. Click another window and it changes to <code>1fps</code>. The pixel size steps down if a frame misses the screen, and steps back up when there is room.</p>
-      <p>Press 3 until the line says <code>hammer</code>. Walk north to the stone slab, look at the ground beside it, and hold the left mouse. A cyan column rises on that cell while the line counts <code>work</code>. After 12 seconds it says <code>wall</code> and <code>metal 24</code>. Right-click that wall and it says <code>salvage</code>, the wall is gone, and the metal is <code>30</code> again. Empty sand says <code>support</code> and does not spend metal.</p>
-      <p>Press 3 again for the bit. Look down and hold the left mouse. A darker pit opens, and the line reads <code>voxel 500</code>.</p>
+      <p>Press 3 until the line says <code>hammer</code>. The amber square is the hammer sight. Press 3 again for the bit. The cyan cross is the bit sight. A bright sight means the target is in reach and it lights up. A dim sight means it is too far, and nothing lights.</p>
+      <p>With the hammer, walk north to the stone slab and look at the ground beside it. The cell lights amber when it is in reach. Hold the left mouse. A cyan column rises while the line counts <code>work</code>. After 12 seconds it says <code>wall</code> and <code>metal 24</code>. Look at that wall, right-click, and it says <code>salvage</code> with the metal back at <code>30</code>. Empty sand says <code>support</code>.</p>
+      <p>With the bit, look down at the sand. The cross goes bright and the voxel lights up when it is in reach. Hold the left mouse. A darker pit opens, and the line reads <code>voxel 500</code>.</p>
       <p>Press 1 for the line. The white dot is the sight. Click the red dummy. Pass: <code>chest 28</code> and <code>dummy 72</code>. Four standing hits kill it. It stands back up after 5 seconds. A wall in the way is a miss. <a href="/tools/view/index.html?look=dummy">Start on the pad, already aimed</a>.</p>
       <p id="bit">sand is intact</p>
       <p id="link"></p>

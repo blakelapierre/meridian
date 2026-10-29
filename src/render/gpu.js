@@ -221,21 +221,25 @@ void main() {
     vec2 cell = uWork.xy;
     float rise = max(uWork.z, 0.08);
     float gt;
-    vec3 bmin = vec3(cell.x - 0.24, cell.y - 0.08, 0.0);
-    vec3 bmax = vec3(cell.x + 0.24, cell.y + 0.08, rise);
-    bool column = uWork.w < 1.5 && boxHit(uOrigin, rd, bmin, bmax, gt) && gt < bestT;
-    if (column) {
+    float wide = rise < 0.4 ? 0.42 : 0.24;
+    float deep = rise < 0.4 ? 0.42 : 0.08;
+    vec3 bmin = vec3(cell.x - wide, cell.y - deep, 0.0);
+    vec3 bmax = vec3(cell.x + wide, cell.y + deep, rise);
+    bool piece = uWork.w > 3.5;
+    bool rising = uWork.w < 1.5;
+    vec3 tint = piece ? vec3(1.0, 0.72, 0.28) : vec3(0.2, 0.9, 1.0);
+    if ((rising || piece) && boxHit(uOrigin, rd, bmin, bmax, gt) && gt < bestT) {
       vec3 gp = uOrigin + rd * gt;
       float band = 0.55 + 0.45 * sin(gp.z * 16.0 - uTime * 8.0);
       float lip = smoothstep(rise - 0.12, rise, gp.z);
-      bestColor = vec4(mix(vec3(0.15, 0.85, 1.0) * band, vec3(1.0, 0.78, 0.35), lip), 1.0);
+      bestColor = vec4(mix(tint * band, vec3(1.0, 0.95, 0.7), lip), 1.0);
     } else if (bestT < 1.0e20) {
       float dist = length(bestP.xy - cell);
       float ring = 0.28 + 0.05 * sin(uTime * 3.0);
       float mark = smoothstep(0.07, 0.0, abs(dist - ring));
       float pad = smoothstep(0.34, 0.08, dist);
       float scan = 0.55 + 0.45 * sin(uTime * 6.0 + dist * 20.0);
-      bestColor.rgb += vec3(0.2, 0.9, 1.0) * (mark * 0.95 + pad * 0.35 * scan);
+      bestColor.rgb += tint * (mark * 0.95 + pad * 0.35 * scan);
     }
   }
   fragColor = bestColor;

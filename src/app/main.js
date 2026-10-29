@@ -7,7 +7,8 @@ import { createPacer } from "../render/pace.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { stepHands } from "../sim/hands.js";
 import { bitAim } from "../sim/bit.js";
-import { adoptSalvage, adoptWall, cellOnGround, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
+import { toolAim } from "../sim/aim.js";
+import { adoptSalvage, adoptWall, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
 import { lookDirection } from "../sim/hands.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
@@ -74,13 +75,16 @@ addEventListener("keyup", (event) => keys.delete(event.code));
 canvas.addEventListener("mousedown", (event) => {
   if (event.button === 2) {
     if (slot !== "hammer") return;
-    const eye = [player.position[0], player.position[1], player.position[2] + 1.65];
-    const cell = cellOnGround(eye, lookDirection(yaw, pitch));
-    const saved = trySalvage(yard, cell);
+    const mark = refreshAim(input());
+    if (!mark.inRange) {
+      report = "far";
+      return;
+    }
+    const saved = trySalvage(yard, mark.cell);
     report = saved.ok ? "salvage" : saved.reason;
     if (!saved.ok) return;
     const nonce = tick;
-    const frame = encodeSalvage(identity, { nonce, cell });
+    const frame = encodeSalvage(identity, { nonce, cell: mark.cell });
     if (ops && ops.readyState === "open") ops.send(frame);
     else if (peer) shotFrames.push(frame);
     return;
@@ -112,6 +116,44 @@ function input() {
   };
 }
 
+function eyeOf(sample) {
+  return [
+    player.position[0],
+    player.position[1],
+    player.position[2] + (sample?.crouch ? 1.1 : 1.65),
+  ];
+}
+
+function refreshAim(sample = {}) {
+  if (slot !== "bit" && slot !== "hammer") return { inRange: false, kind: "" };
+  const yawNow = sample.yaw ?? yaw;
+  const pitchNow = sample.pitch ?? pitch;
+  const objects = buildScene({
+    feet: player.position,
+    yaw: yawNow,
+    pitch: pitchNow,
+    crouch: !!sample.crouch,
+    tick,
+    atoll,
+    crust: terrain.log.crust,
+    pieces: yard.pieces,
+    width: 16,
+    height: 9,
+  }).objects;
+  return toolAim(slot, eyeOf(sample), lookDirection(yawNow, pitchNow), objects, yard.pieces);
+}
+
+function showSight(mark) {
+  const sight = document.querySelector("#sight");
+  if (!sight) return;
+  const tool = slot === "line" || slot === "bit" || slot === "hammer";
+  sight.style.display = tool ? "block" : "none";
+  sight.dataset.tool = slot;
+  sight.classList.toggle("hot", !!mark?.inRange);
+  sight.classList.toggle("cold", (slot === "bit" || slot === "hammer") && !mark?.inRange);
+  canvas.dataset.aim = slot === "bit" || slot === "hammer" ? (mark?.inRange ? mark.kind : "far") : "";
+}
+
 function publish() {
   const voxel = terrain.voxel();
   const ground = voxel === null ? "sand is intact" : `voxel ${voxel} hash ${terrain.hash()}`;
@@ -120,7 +162,8 @@ function publish() {
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const pace = canvas.dataset.pace || "vsync";
   const rate = canvas.dataset.fps || "0";
-  if (bit) bit.textContent = `${slot} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
+  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -150,8 +193,7 @@ function paint(sample) {
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
   const color = hit.color || scene.miss;
   canvas.dataset.center = `${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)}`;
-  const sight = document.querySelector("#sight");
-  if (sight) sight.style.display = slot === "line" ? "block" : "none";
+  showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
   if (painter && painter.paint(scene)) return scene;
   if (!context) {
     painter = null;
@@ -317,6 +359,7 @@ if (params.get("still") !== "1") {
     bank += Math.min(0.1, (now - last) / 1000);
     last = now;
     const sample = input();
+    const aimed = refreshAim(sample);
     while (bank >= 1 / 30) {
       stepDummy(dummy);
       if (cooldown > 0) cooldown -= 1;
@@ -324,11 +367,10 @@ if (params.get("still") !== "1") {
         fire(sample);
         shotQueued = false;
         cooldown = 3;
-      } else if (slot === "hammer" && trigger) {
-        const eye = [player.position[0], player.position[1], player.position[2] + (sample.crouch ? 1.1 : 1.65)];
-        const cell = cellOnGround(eye, lookDirection(sample.yaw, sample.pitch));
-        if (!raising || !cell || raising.cell[0] !== cell[0] || raising.cell[1] !== cell[1]) {
-          raising = cell ? { cell, ticks: 0 } : null;
+      } else if (slot === "hammer" && trigger && aimed.inRange && aimed.kind !== "wall" && aimed.kind !== "dummy") {
+        const cell = aimed.cell;
+        if (!raising || raising.cell[0] !== cell[0] || raising.cell[1] !== cell[1]) {
+          raising = { cell, ticks: 0 };
         }
         if (raising) {
           raising.ticks += 1;
@@ -358,12 +400,9 @@ if (params.get("still") !== "1") {
       } else {
         raising = null;
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
-          const eye = [player.position[0], player.position[1], player.position[2] + (sample.crouch ? 1.1 : 1.65)];
-          const cell = cellOnGround(eye, lookDirection(sample.yaw, sample.pitch));
-          work = cell ? { x: cell[0] * 0.5, y: cell[1] * 0.5, height: 0.12, mode: 2 } : null;
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
           terrain.dig(aim.eye, aim.aim, { peer });
-        } else {
+        } else if (!raising) {
           work = null;
         }
       }
@@ -371,6 +410,19 @@ if (params.get("still") !== "1") {
       tick += 1;
       bank -= 1 / 30;
     }
+    if (!raising) {
+      if (aimed.inRange) {
+        work = {
+          x: aimed.x,
+          y: aimed.y,
+          height: aimed.kind === "wall" ? 2.2 : aimed.kind === "dummy" ? 1.6 : 0.2,
+          mode: aimed.kind === "ground" ? 3 : 4,
+        };
+      } else {
+        work = null;
+      }
+    }
+    showSight(aimed);
     const active = !document.hidden && document.hasFocus();
     const decision = pacer.consider(now, active);
     canvas.dataset.pace = decision.mode;
