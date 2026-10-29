@@ -11,7 +11,7 @@ const boxMin = new Float32Array(MAX_BOXES * 4);
 const boxMax = new Float32Array(MAX_BOXES * 4);
 const boxColor = new Float32Array(MAX_BOXES * 4);
 const digData = new Float32Array(MAX_DIGS * 4);
-const RECT_SLOTS = 24;
+const RECT_SLOTS = 40;
 const rectData = new Float32Array(RECT_SLOTS * 4);
 const atlasData = new Uint8Array(ATLAS * ATLAS * 4);
 
@@ -434,13 +434,15 @@ void main() {
           sphereColor[at + 2] = object.color[2];
           sphereColor[at + 3] = object.reflectivity || 0;
           if (object.texture) {
-            rectData.set(rectFor(spheres), spheres * 4);
-            if (boundTex[spheres] !== object.texture) {
-              blitTexture(atlasData, spheres, object.texture);
-              boundTex[spheres] = object.texture;
-              atlasDirty = true;
+            if (spheres < SAND_TILE) {
+              rectData.set(rectFor(spheres), spheres * 4);
+              if (boundTex[spheres] !== object.texture) {
+                blitTexture(atlasData, spheres, object.texture);
+                boundTex[spheres] = object.texture;
+                atlasDirty = true;
+              }
             }
-          } else {
+          } else if (spheres < SAND_TILE) {
             rectData[spheres * 4 + 3] = 0;
           }
           spheres += 1;

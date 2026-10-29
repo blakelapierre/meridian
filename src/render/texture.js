@@ -1,8 +1,8 @@
 export const ATLAS = 1024;
 export const TEX_TILE = 128;
 export const ATLAS_TILES = ATLAS / TEX_TILE;
-export const SAND_TILE = 8;
-export const WOOD_TILE = 9;
+export const SAND_TILE = 32;
+export const WOOD_TILE = 33;
 
 export function makeTexture(width, height, fill) {
   const data = new Uint8Array(width * height * 4);
