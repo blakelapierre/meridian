@@ -73,7 +73,7 @@ Two kinds of test, and they do not share a process.
 
 Dev mode may also use a pasted offer, as the WebRTC spec allows. The default local loop is the process above, so two browsers can be started without a paste.
 
-Feature flag **`localEdits`**: until the op log (P3) exists, a hole may exist in one process only, and only when this flag is on. The default is off. A build that shows a hole with the flag off and no cert is wrong.
+Feature flag **`localEdits`**: a hole may exist in one process only, and only when this flag is on. The default is off. A build that shows a hole with the flag off and no cert is wrong. A certified op in [src/sim/oplog.js](../src/sim/oplog.js) may apply with the flag off. The view does not append that log yet.
 
 ## 5. Frame used by content
 
