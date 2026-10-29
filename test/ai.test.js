@@ -14,10 +14,10 @@ test("four agendas want different things and use the same controls", () => {
   assert.equal(miner.slot, "bit");
   assert.equal(miner.hold, true);
   assert.equal(miner.shot, false);
-  const mason = stepAgenda("mason", createAgent("mason"), { x: 1.2, y: -140, yaw: 0, tick: 3, wall: true });
-  assert.equal(mason.slot, "hammer");
-  assert.equal(mason.salvage, true);
-  assert.equal(mason.hold, false);
+  const builder = stepAgenda("builder", createAgent("builder"), { x: 1.2, y: -140, yaw: 0, tick: 3, wall: true });
+  assert.equal(builder.slot, "hammer");
+  assert.equal(builder.salvage, true);
+  assert.equal(builder.hold, false);
   const shot = stepAgenda("marksman", createAgent("marksman"), { x: 0, y: -128, yaw: Math.atan2(10, 3), tick: 16 });
   assert.equal(shot.slot, "line");
   assert.equal(shot.hold, false);

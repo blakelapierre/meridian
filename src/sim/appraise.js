@@ -69,7 +69,15 @@ export function subjectFromHit(hit, pieces = []) {
   if (object.type === "box" || object.type === "crust") {
     const cell = [Math.round(hit.point[0] / 0.5), Math.round(hit.point[1] / 0.5)];
     const piece = pieces.find((item) => item.at[0] === cell[0] && item.at[1] === cell[1]);
-    if (piece?.id === "wall") return { ...SUBJECTS.wall, kind: "wall", cell, point: hit.point };
+    if (piece?.id === "wall") {
+      return {
+        ...SUBJECTS.wall,
+        detail: `integrity ${Math.round(piece.integrity ?? 80)}`,
+        kind: "wall",
+        cell,
+        point: hit.point,
+      };
+    }
     if (piece?.id === "footing") return { ...SUBJECTS.footing, kind: "footing", cell, point: hit.point };
     if (object.type === "box") return { ...SUBJECTS.prop, kind: "prop", point: hit.point };
     return { ...SUBJECTS.sand, kind: "sand", cell, point: hit.point };

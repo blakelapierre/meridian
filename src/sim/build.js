@@ -55,13 +55,23 @@ function support(pieces, cell) {
   return grounded(piecesWith, piecesWith.length - 1);
 }
 
-export function tryPlaceWall(yard, cell) {
+export function placeTicks(skill = 0) {
+  const trained = Math.max(0, Math.min(140, skill));
+  return Math.max(1, Math.round(12 * 30 * (1 - 0.4 * trained / 140)));
+}
+
+export function pieceIntegrity(skill = 0) {
+  const trained = Math.max(0, Math.min(140, skill));
+  return 80 + (trained / 140) * 40;
+}
+
+export function tryPlaceWall(yard, cell, skill = 0) {
   if (!cell) return { ok: false, reason: "aim" };
   if (yard.metal < 6) return { ok: false, reason: "metal" };
   if (yard.pieces.some((piece) => sameCell(piece.at, cell))) return { ok: false, reason: "occupied" };
   if (!support(yard.pieces, cell)) return { ok: false, reason: "support" };
   yard.metal -= 6;
-  yard.pieces.push({ id: "wall", at: cell.slice(), anchors: false });
+  yard.pieces.push({ id: "wall", at: cell.slice(), anchors: false, integrity: pieceIntegrity(skill) });
   return { ok: true, metal: yard.metal };
 }
 
@@ -94,10 +104,10 @@ export function adoptSalvage(yard, cell) {
   return { ok: true, metal: yard.metal, fallen };
 }
 
-export function adoptWall(yard, cell) {
+export function adoptWall(yard, cell, integrity = 80) {
   if (yard.pieces.some((piece) => sameCell(piece.at, cell))) return { ok: true, metal: yard.metal };
   if (!support(yard.pieces, cell)) return { ok: false, reason: "support" };
-  yard.pieces.push({ id: "wall", at: cell.slice(), anchors: false });
+  yard.pieces.push({ id: "wall", at: cell.slice(), anchors: false, integrity });
   return { ok: true, metal: yard.metal };
 }
 

@@ -1,4 +1,4 @@
-export const AI_ORDER = ["surveyor", "miner", "mason", "marksman"];
+export const AI_ORDER = ["surveyor", "miner", "builder", "marksman"];
 
 export function aiHrefs(primaryId, origin = "http://127.0.0.1") {
   return AI_ORDER.map((agenda) => {
