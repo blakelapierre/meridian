@@ -72,37 +72,17 @@ function place(url, name, box) {
   return win;
 }
 
-function clickOpen(url, name) {
-  const link = document.createElement("a");
-  link.href = url;
-  link.target = name;
-  link.rel = "opener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  const win = window.open("", name);
-  if (!win) return null;
-  try {
-    if (win.location.href === "about:blank") {
-      win.close();
-      return null;
-    }
-  } catch {
-    // a cross-origin handle is still a real window
-  }
-  return win;
-}
-
 export function openChecks(href, origin, screenBox) {
   const urls = trio(href, origin);
   const boxes = tiles(screenBox.width, screenBox.height, screenBox.left, screenBox.top);
   const names = ["meridian-primary", "meridian-second", "meridian-follow"];
-  return urls.map((url, index) => place(url, names[index], boxes[index]) || clickOpen(url, names[index]));
+  return urls.map((url, index) => place(url, names[index], boxes[index]));
 }
 
 if (typeof document !== "undefined") {
   let watch = 0;
   const onClick = (event) => {
+    if (!event.isTrusted) return;
     const link = event.target.closest?.("a[href^='/tools/']");
     if (!link) return;
     event.preventDefault();
