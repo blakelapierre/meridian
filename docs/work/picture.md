@@ -6,7 +6,7 @@ The focused view aims at vsync. A hidden tab paints about once a second. Extra f
 
 ## This pass
 
-While you are moving, the target is the play resolution, never the native one. The amber counter on `recover` is unchanged. There is still no sharper center.
+Moving still targets the play resolution. The dim ring on the chart is not a sharper center in the world picture.
 
 ## Proves
 

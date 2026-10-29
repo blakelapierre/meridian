@@ -20,7 +20,7 @@ K toggles the listener. The line says `muted` while it is off. The first cue als
 
 ## This pass
 
-A shot farther than 40 m is a quarter as loud. The sea south of y = −190 is unchanged. There is still no music.
+Loudness falls off between 40 m and 80 m, and stays at a quarter past that. The sea is unchanged.
 
 ## Proves
 

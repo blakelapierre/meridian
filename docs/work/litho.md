@@ -8,7 +8,7 @@ Nothing on the beach answers when you dig. A pit stays a pit. Off the beach, a p
 
 ## This pass
 
-Twenty digs in a session put `resonance` on the line. Nothing answers. The beach still does not eat metal.
+`resonance` still summons nothing. Twenty digs only change the word on the line.
 
 ## Proves
 

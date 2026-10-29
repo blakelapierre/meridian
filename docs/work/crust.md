@@ -6,7 +6,7 @@ The beach is a crust field. A dig writes air, sample `500`, inside the brush. Th
 
 ## This pass
 
-You can carry 4 spoil, plus 1 for every 20 mining. A dig past that says `full`. Certified sand still does not slump.
+The line shows spoil as what you hold over the cap, for example `2/4`. A dig at the cap still says `full`.
 
 ## Proves
 

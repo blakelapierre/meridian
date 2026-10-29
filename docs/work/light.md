@@ -6,7 +6,7 @@ The sun is a direction on a 72-minute day. The picture brightens when the sun is
 
 ## This pass
 
-A turned fin yields 60% of the flux. Z still turns it. A night hit still practices marksmanship twice.
+Dusk and dawn do not change the fin. Only turning it does, and only to 60%.
 
 ## Proves
 

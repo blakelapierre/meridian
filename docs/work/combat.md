@@ -8,7 +8,7 @@ The line is a hitscan against the dummy when it connects. A miss becomes a bolt.
 
 ## This pass
 
-A bolt that meets the ground moving faster across than down bounces at a third of its fall. A steep one sticks. Armor on the dummy is still none.
+A bounce happens once. The next time the bolt meets the ground, it stays there.
 
 ## Proves
 

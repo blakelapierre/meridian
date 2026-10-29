@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints sand, pits, stone, and wood. The
 
 ## This pass
 
-The chart readout says `sense` and the radius in meters. The dashed ring is that radius. Told ground stays cooler.
+Outside the sense ring the chart is dimmed. Inside it, the ground you have seen stays as it was.
 
 ## Proves
 

@@ -8,7 +8,7 @@ Nothing on the status line is an objective. The atoll paper is lore only. The ch
 
 ## This pass
 
-E on a slip picks it up. The sentence can be kept if you can read it. It is still not an objective.
+The picked-up slip remembers who wrote it. The screen still has no objective.
 
 ## Proves
 

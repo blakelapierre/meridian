@@ -42,10 +42,11 @@ export function offerNotes(notes, skills, tier) {
   return notes.slice(-cap).map((note) => note.line);
 }
 
-export function takeTold(notes, skills, line) {
+export function takeTold(notes, skills, line, by = "") {
   if (!line || notes.some((note) => note.line === line)) return null;
   if (skillValue(skills, "appraisal") < 8 && skillValue(skills, "mapping") < 8) return null;
   const note = { kind: "told", skill: "appraisal", line };
+  if (by) note.by = by;
   notes.push(note);
   if (notes.length > 12) notes.shift();
   return note;

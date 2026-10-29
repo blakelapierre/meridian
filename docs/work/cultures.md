@@ -8,7 +8,7 @@ Everyone wakes in a culture. The default is Holds. `?culture=hosts` starts with 
 
 ## This pass
 
-The line names the crate you woke with. North of the cell line it says `walked`. The metal in your hands does not change.
+Walking back south of the cell line restores the name of the crate you woke with. The skills do not notice.
 
 ## Proves
 

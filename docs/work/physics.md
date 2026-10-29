@@ -8,7 +8,7 @@ The beach body is a capsule with weight, a stop window, jump, and crouch. Gravit
 
 ## This pass
 
-When the dummy drops, anyone inside 4 m is shoved. The shove falls off with distance. Bodies still do not overlap.
+The shove happens once, when the dummy drops, not on every tick it stays down.
 
 ## Proves
 

@@ -1,8 +1,14 @@
 export function bandage(vitals, fiber) {
   if (fiber < 1) return false;
-  if ((vitals.blood ?? 100) >= 100 && vitals.integrity >= 100) return false;
+  const legs = ["left", "right"].filter((name) => (vitals[name] ?? 100) < 100);
+  const hurt = (vitals.blood ?? 100) < 100 || vitals.integrity < 100 || legs.length > 0;
+  if (!hurt) return false;
   vitals.blood = Math.min(100, (vitals.blood ?? 100) + 15);
   vitals.integrity = Math.min(100, vitals.integrity + 8);
+  if (legs.length) {
+    const worse = legs.reduce((a, b) => (vitals[a] <= vitals[b] ? a : b));
+    vitals[worse] = Math.min(100, vitals[worse] + 20);
+  }
   return true;
 }
 
@@ -20,8 +26,9 @@ export function blastPush(from, at, power = 4) {
 }
 
 export function crackGain(distance) {
-  if (distance == null) return 1;
-  return distance <= 40 ? 1 : 0.25;
+  if (distance == null || distance <= 40) return 1;
+  if (distance >= 80) return 0.25;
+  return 1 - ((distance - 40) / 40) * 0.75;
 }
 
 export function finGain(yaw = 0) {
@@ -51,6 +58,14 @@ export function clockName(joined) {
 
 export function resonanceWord(digs) {
   return digs >= 20 ? "resonance" : "";
+}
+
+export function socketOf(kind) {
+  return kind === "pose" ? "snap" : "ops";
+}
+
+export function dominionOpen() {
+  return false;
 }
 
 export function soldierTarget(still, native, play) {

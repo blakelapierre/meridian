@@ -8,7 +8,7 @@ Metal pays for walls, the hearth, and the fin. Spoil is a crate you can see. Whe
 
 ## This pass
 
-L with the hammer lays a road for 1 metal. It does not carry goods. The vein and the wreck are unchanged.
+Standing on a road is a little faster, about 15%. It still does not carry goods.
 
 ## Proves
 

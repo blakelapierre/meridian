@@ -8,7 +8,7 @@ There is no narrator and no quest line. The names in the world are Cairn, Atoll,
 
 ## This pass
 
-A slip you drop is marked `by` yourself. Picking it up can keep the sentence. It is a memory, not a charter of a town.
+Picking up a slip keeps who wrote it, when the slip has a name. Yours says self.
 
 ## Proves
 
