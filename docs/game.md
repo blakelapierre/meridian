@@ -519,6 +519,7 @@ Success is defined per skill: a certified hit for marksmanship, a certified edit
 | Smithing | Crafted weapon quality roll ceiling. The roll is `20 + skill * 80/140`, seeded, then clamped to 100 |
 | Fabrication | Personal work rate, §9 |
 | Survey | Vein and mast radius × `1 + skill/140` |
+| Mapping | Sensed-map radius is `16 + skill/140*64` meters. Trail at 12, people at 28, objects at 48, names at 70. Unsensed people stay off the map |
 | Command | Table radius, §12. Specialization required to sit as commander |
 | Logistics | Carry mass limits +50% at 140. Link upkeep −25% at 140 |
 | Signals | Aggregate subscribe range. Does not reveal unsensed bodies |
@@ -580,7 +581,7 @@ At a given tick the sun direction is a pure function. Dawn and dusk are the 6 mi
 
 Darkness is the lack of sun and lamps. A body carries no personal magic light. Muzzle flashes and the firepot are the short ones. Vision traces for sensors and for “can this commander see that dot” use the same occlusion as bullets’ line of sight, smoke included.
 
-The player HUD does not include a radar of unsensed people. A compass is allowed. A map shows SDF you have walked within 50 m, plus your deed, plus strike geometry while you are in that contract.
+The player HUD does not include a radar of unsensed people. The sensed map shows world coordinates, a live heading, the current target, and only the people inside the mapping range. That range, the trail, names, and nearby objects grow with the mapping skill.
 
 ---
 
