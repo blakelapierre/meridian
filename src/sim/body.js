@@ -8,6 +8,13 @@ const CLOTH = [0.2, 0.34, 0.58, 1];
 const OTHER = [0.55, 0.42, 0.22, 1];
 const SKIN = [0.76, 0.58, 0.44, 1];
 
+export const BODY_COLORS = {
+  surveyor: [0.35, 0.55, 0.72, 1],
+  miner: [0.72, 0.48, 0.18, 1],
+  builder: [0.28, 0.48, 0.32, 1],
+  marksman: [0.62, 0.24, 0.22, 1],
+};
+
 function sphere(x, y, z, radius, color, self) {
   return { type: "sphere", origin: [x, y, z], radius, color, reflectivity: 0.04, self, body: self ? "self" : "player" };
 }

@@ -1,7 +1,7 @@
 import { cameraBasis } from "../engine/cast.js";
 import { ATLAS, SAND_TILE, WOOD_TILE, blitTexture, rectFor, sandTexture, woodTexture } from "./texture.js";
 
-const MAX_SPHERES = 8;
+const MAX_SPHERES = 24;
 const MAX_BOXES = 32;
 const MAX_DIGS = 128;
 
@@ -11,7 +11,7 @@ const boxMin = new Float32Array(MAX_BOXES * 4);
 const boxMax = new Float32Array(MAX_BOXES * 4);
 const boxColor = new Float32Array(MAX_BOXES * 4);
 const digData = new Float32Array(MAX_DIGS * 4);
-const RECT_SLOTS = 10;
+const RECT_SLOTS = 24;
 const rectData = new Float32Array(RECT_SLOTS * 4);
 const atlasData = new Uint8Array(ATLAS * ATLAS * 4);
 
@@ -43,6 +43,8 @@ function texture(gl, width) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, 1, 0, gl.RGBA, gl.FLOAT, null);
   return tex;
 }
+
+export const SPHERE_BUDGET = MAX_SPHERES;
 
 export function fitCanvas(canvas, scale = 1) {
   const boxW = canvas.clientWidth || window.innerWidth || 960;

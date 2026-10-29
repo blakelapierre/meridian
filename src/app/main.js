@@ -13,7 +13,7 @@ import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPla
 import { lookDirection, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
-import { chaseOrigin, createCameraSpring, stepCamera, CHASE } from "../sim/body.js";
+import { chaseOrigin, createCameraSpring, stepCamera, CHASE, BODY_COLORS } from "../sim/body.js";
 import { cycleTarget, listTargets } from "../sim/target.js";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
@@ -305,9 +305,13 @@ function eyeOf(sample) {
 
 function otherActors() {
   const list = [];
-  for (const pose of poses.values()) {
+  for (const [id, pose] of poses) {
     if (pose.yaw === undefined) continue;
-    list.push({ feet: [pose.x, pose.y, pose.z], yaw: pose.yaw });
+    list.push({
+      feet: [pose.x, pose.y, pose.z],
+      yaw: pose.yaw,
+      color: BODY_COLORS[id] || [0.55, 0.42, 0.22, 1],
+    });
   }
   return list;
 }
