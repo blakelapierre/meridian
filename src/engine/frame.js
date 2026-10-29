@@ -10,11 +10,24 @@ export function paintFrame(scene, width, height, buffer) {
       const u = (x + 0.5) / width;
       const direction = project(u, v, scene.camera);
       const hit = cast(scene.camera.origin, direction, scene.objects, miss);
-      pixels[i++] = hit.color[0] * 255;
-      pixels[i++] = hit.color[1] * 255;
-      pixels[i++] = hit.color[2] * 255;
-      pixels[i++] = hit.color[3] * 255;
+      const color = shade(scene, hit, miss);
+      pixels[i++] = color[0] * 255;
+      pixels[i++] = color[1] * 255;
+      pixels[i++] = color[2] * 255;
+      pixels[i++] = color[3] * 255;
     }
   }
   return pixels;
+}
+
+function shade(scene, hit, miss) {
+  if (!scene.sun || !hit.object || !hit.point) return hit.color || miss;
+  const origin = [
+    hit.point[0] + scene.sun[0] * 0.08,
+    hit.point[1] + scene.sun[1] * 0.08,
+    hit.point[2] + scene.sun[2] * 0.08,
+  ];
+  const blocked = cast(origin, scene.sun, scene.objects, miss);
+  if (!blocked.object || blocked.t > 80) return hit.color;
+  return [hit.color[0] * 0.45, hit.color[1] * 0.45, hit.color[2] * 0.45, hit.color[3]];
 }
