@@ -6,7 +6,7 @@ The crate starts as 30 metal, 8 stone, and one solar fin. The footing anchors pi
 
 ## This pass
 
-P with the hammer places a post for 2 metal, if the cell has support and is empty. A fallen wall is still a crate.
+M with the hammer places a door for 3 metal, on support. P still places a post. The door does not open yet.
 
 ## Proves
 

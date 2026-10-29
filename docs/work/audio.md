@@ -20,7 +20,7 @@ K toggles the listener. The line says `muted` while it is off. The first cue als
 
 ## This pass
 
-South of y = −190 you hear the sea, a low tone. Shots still pan. There is still no music.
+A shot farther than 40 m is a quarter as loud. The sea south of y = −190 is unchanged. There is still no music.
 
 ## Proves
 

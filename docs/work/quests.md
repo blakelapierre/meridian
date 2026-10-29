@@ -8,7 +8,7 @@ Nothing on the status line is an objective. The atoll paper is lore only. The ch
 
 ## This pass
 
-Reading someone else's slip can be kept as a told note, if appraisal or mapping can read it. N still drops your own.
+E on a slip picks it up. The sentence can be kept if you can read it. It is still not an objective.
 
 ## Proves
 

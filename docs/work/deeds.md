@@ -8,7 +8,7 @@ A bound hearth claims a 6 m radius. The binder may edit it. A stranger's certifi
 
 ## This pass
 
-A wall you are more than 40 m from loses 1 integrity every 20 seconds. Keys are unchanged.
+Stay more than 40 m from your hearth for 60 seconds and the claim lapses. The line says `lapse`. Keys still work until then.
 
 ## Proves
 

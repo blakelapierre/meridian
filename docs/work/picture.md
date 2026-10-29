@@ -6,7 +6,7 @@ The focused view aims at vsync. A hidden tab paints about once a second. Extra f
 
 ## This pass
 
-While the pace says `recover`, the frame counter turns amber. The buffer stays one resolution. There is no sharper center.
+While you are moving, the target is the play resolution, never the native one. The amber counter on `recover` is unchanged. There is still no sharper center.
 
 ## Proves
 

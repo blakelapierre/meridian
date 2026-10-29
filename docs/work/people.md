@@ -6,7 +6,7 @@ Other clients are bodies. Tab cycles them. Backtick cycles objects. Standing ins
 
 ## This pass
 
-Dragging a downed friend would cut your pace to 1.6 m/s. Other bodies do not yet have a downed state, so it does not apply. The fellowship names stay.
+X while a person is targeted and within 2.2 m drags. Your pace drops to 1.6. They do not slide. X again lets go.
 
 ## Proves
 

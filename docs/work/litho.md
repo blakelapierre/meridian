@@ -8,7 +8,7 @@ Nothing on the beach answers when you dig. A pit stays a pit. Off the beach, a p
 
 ## This pass
 
-Off the beach, unattended wood eats one metal. The beach still does not.
+Twenty digs in a session put `resonance` on the line. Nothing answers. The beach still does not eat metal.
 
 ## Proves
 

@@ -8,7 +8,7 @@ There is no narrator and no quest line. The names in the world are Cairn, Atoll,
 
 ## This pass
 
-The slip on the ground is a sentence that exists because someone wrote it. The notebook color for a told line is unchanged.
+A slip you drop is marked `by` yourself. Picking it up can keep the sentence. It is a memory, not a charter of a town.
 
 ## Proves
 

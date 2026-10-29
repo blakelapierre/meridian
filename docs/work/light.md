@@ -6,7 +6,7 @@ The sun is a direction on a 72-minute day. The picture brightens when the sun is
 
 ## This pass
 
-A hit at night practices marksmanship a second time. Z still turns the fin.
+A turned fin yields 60% of the flux. Z still turns it. A night hit still practices marksmanship twice.
 
 ## Proves
 

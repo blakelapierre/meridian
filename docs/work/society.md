@@ -8,7 +8,7 @@ Friendliness is still a score. Y offers a fellowship to the person you have targ
 
 ## This pass
 
-Tithe is zero. There is no patron to pay. Fellowship names stay on the line.
+Two fellowships and a bound hearth put `charter` on the line. There is still no patron, so the company wallet cannot spend.
 
 ## Proves
 

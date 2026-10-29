@@ -6,7 +6,7 @@
 
 ## This pass
 
-The line will not fire again for 12 ticks. The line says `reload`. G still throws a stone.
+The reload count is on the line while the line is locked. G still throws.
 
 ## Proves
 

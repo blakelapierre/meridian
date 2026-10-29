@@ -8,7 +8,7 @@ Everyone wakes in a culture. The default is Holds. `?culture=hosts` starts with 
 
 ## This pass
 
-A specialty is marked with a star on the skill list. Two are still the cap.
+The line names the crate you woke with. North of the cell line it says `walked`. The metal in your hands does not change.
 
 ## Proves
 

@@ -8,7 +8,7 @@ The beach body is a capsule with weight, a stop window, jump, and crouch. Gravit
 
 ## This pass
 
-Standing in a pool adds lift. Bodies still cannot overlap.
+When the dummy drops, anyone inside 4 m is shoved. The shove falls off with distance. Bodies still do not overlap.
 
 ## Proves
 
