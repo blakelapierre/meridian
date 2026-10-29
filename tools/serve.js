@@ -26,6 +26,12 @@ export function createStaticServer(root, port = 0) {
       response.end();
       return;
     }
+    if (request.method === "POST" && pathname === "/__quit") {
+      response.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" });
+      response.end("bye");
+      setTimeout(() => process.exit(0), 20);
+      return;
+    }
     const file = resolve(base, pathname.replace(/^\/+/, ""));
     if (file !== base && !file.startsWith(base + sep)) {
       response.writeHead(403);
@@ -36,7 +42,13 @@ export function createStaticServer(root, port = 0) {
       let target = file;
       const info = await stat(target);
       if (info.isDirectory()) target = resolve(target, "index.html");
-      const body = await readFile(target);
+      let body = await readFile(target);
+      if (extname(target) === ".html") {
+        const html = body.toString("utf8");
+        const tag = '<script src="/tools/quit.js"></script>';
+        const at = html.lastIndexOf("</body>");
+        body = Buffer.from(at === -1 ? html + tag : html.slice(0, at) + tag + html.slice(at));
+      }
       response.writeHead(200, {
         "content-type": types[extname(target)] || "application/octet-stream",
         "cache-control": "no-store",
