@@ -40,7 +40,7 @@ export function createPacer() {
     note(ms, active) {
       lastPaint = lastNow;
       if (!active) return scale;
-      paints.push(Math.max(ms, gap));
+      paints.push(gap > refresh * 1.25 ? gap : ms);
       checks += 1;
       if (checks < 30) return scale;
       const average = paints.reduce((sum, value) => sum + value, 0) / paints.length;

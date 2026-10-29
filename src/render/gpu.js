@@ -58,7 +58,7 @@ export function createGpuPainter(canvas) {
       antialias: false,
       depth: false,
       stencil: false,
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false,
     });
   } catch {
     return null;
@@ -93,52 +93,22 @@ uniform sampler2D uBoxColor;
 uniform sampler2D uDigTex;
 out vec4 fragColor;
 
-float digSample(ivec3 i, float seeded) {
-  for (int n = 0; n < ${MAX_DIGS}; n++) {
-    if (n >= uDigs) break;
+bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
+  if (rd.z > -1.0e-4) return false;
+  t = -ro.z / rd.z;
+  if (t < 0.02 || t > 400.0) return false;
+  p = ro + rd * t;
+  p.z = 0.0;
+  return dot(p.xy, p.xy) <= 256.0 * 256.0;
+}
+
+bool dugHere(vec3 p) {
+  if (uDigs <= 0) return false;
+  ivec2 ij = ivec2(floor(p.xy * 2.0));
+  for (int n = 0; n < 16; n++) {
+    if (n >= uDigs) return false;
     vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
-    if (abs(dig.x - float(i.x)) < 0.1 && abs(dig.y - float(i.y)) < 0.1 && abs(dig.z - float(i.z)) < 0.1) return dig.w;
-  }
-  return seeded;
-}
-
-float sampleMeters(vec3 p) {
-  vec3 cm = p * 100.0;
-  ivec3 i = ivec3(floor(cm / 50.0));
-  float cx = float(i.x) * 50.0 + 25.0;
-  float cy = float(i.y) * 50.0 + 25.0;
-  float cz = float(i.z) * 50.0 + 25.0;
-  float h2 = cx * cx + cy * cy;
-  float plane = cz * 10.0;
-  float seeded;
-  if (h2 > 25600.0 * 25600.0) {
-    float coast = (sqrt(h2) - 25600.0) * 10.0;
-    seeded = clamp(max(coast, 1.0), 1.0, 2000.0);
-  } else {
-    seeded = clamp(plane, -2000.0, 2000.0);
-  }
-  return digSample(i, seeded) / 1000.0;
-}
-
-bool crustHit(vec3 ro, vec3 rd, out float t, out vec3 p) {
-  t = 0.0;
-  for (int i = 0; i < 64; i++) {
-    p = ro + rd * t;
-    float sdf = sampleMeters(p);
-    if (sdf <= 0.0) {
-      float hi = t;
-      float lo = max(t - 0.75, 0.0);
-      for (int r = 0; r < 5; r++) {
-        float mid = 0.5 * (lo + hi);
-        if (sampleMeters(ro + rd * mid) <= 0.0) hi = mid;
-        else lo = mid;
-      }
-      t = hi;
-      p = ro + rd * t;
-      return true;
-    }
-    t += max(sdf, 0.05);
-    if (t > 400.0) return false;
+    if (abs(dig.x - float(ij.x)) < 0.1 && abs(dig.y - float(ij.y)) < 0.1 && dig.w < 0.0) return true;
   }
   return false;
 }
@@ -193,40 +163,6 @@ bool blocked(vec3 from, vec3 rd) {
   return false;
 }
 
-vec3 crustNormal(vec3 p) {
-  float e = 0.2;
-  vec3 n = vec3(
-    sampleMeters(p + vec3(e, 0.0, 0.0)) - sampleMeters(p - vec3(e, 0.0, 0.0)),
-    sampleMeters(p + vec3(0.0, e, 0.0)) - sampleMeters(p - vec3(0.0, e, 0.0)),
-    sampleMeters(p + vec3(0.0, 0.0, e)) - sampleMeters(p - vec3(0.0, 0.0, e))
-  );
-  if (dot(n, n) < 1.0e-6) return vec3(0.0, 0.0, 1.0);
-  n = normalize(n);
-  if (n.z > 0.82) return vec3(0.0, 0.0, 1.0);
-  return n;
-}
-
-bool dugColumn(vec3 p) {
-  ivec2 ij = ivec2(floor(p.xy * 2.0));
-  for (int n = 0; n < ${MAX_DIGS}; n++) {
-    if (n >= uDigs) break;
-    vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
-    if (abs(dig.x - float(ij.x)) < 0.1 && abs(dig.y - float(ij.y)) < 0.1) return true;
-  }
-  return false;
-}
-
-bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
-  if (rd.z > -1.0e-4) return false;
-  t = -ro.z / rd.z;
-  if (t < 0.02 || t > 400.0) return false;
-  p = ro + rd * t;
-  p.z = 0.0;
-  if (dot(p.xy, p.xy) > 256.0 * 256.0) return false;
-  if (dugColumn(p)) return false;
-  return true;
-}
-
 vec3 skyColor(vec3 rd) {
   vec3 sun = normalize(uSun);
   float day = smoothstep(-0.02, 0.25, sun.z);
@@ -265,7 +201,7 @@ void main() {
   vec3 ro = uOrigin;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
-  for (int bounce = 0; bounce < 5; bounce++) {
+  for (int bounce = 0; bounce < 2; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
     vec3 bestN = vec3(0.0, 0.0, 1.0);
@@ -278,27 +214,7 @@ void main() {
       bestT = t;
       bestP = p;
       bestN = vec3(0.0, 0.0, 1.0);
-      bestRgb = vec3(0.55, 0.48, 0.32);
-      bestRef = 0.2;
-      found = true;
-    } else if (rd.z < -0.02) {
-      float planeT = -ro.z / rd.z;
-      vec3 guess = ro + rd * planeT;
-      bool island = planeT > 0.02 && planeT < 400.0 && dot(guess.xy, guess.xy) < 256.0 * 256.0;
-      if ((island || ro.z < 0.0) && crustHit(ro, rd, t, p) && t > 0.02 && t < bestT) {
-        bestT = t;
-        bestP = p;
-        bestN = crustNormal(p);
-        bool pit = p.z < -0.3;
-        bestRgb = pit ? vec3(0.16, 0.13, 0.10) : vec3(0.55, 0.48, 0.32);
-        bestRef = pit ? 0.04 : 0.2;
-        found = true;
-      }
-    } else if (ro.z < 0.0 && crustHit(ro, rd, t, p) && t > 0.02 && t < bestT) {
-      bestT = t;
-      bestP = p;
-      bestN = crustNormal(p);
-      bool pit = p.z < -0.3;
+      bool pit = dugHere(p);
       bestRgb = pit ? vec3(0.16, 0.13, 0.10) : vec3(0.55, 0.48, 0.32);
       bestRef = pit ? 0.04 : 0.2;
       found = true;
@@ -345,7 +261,11 @@ void main() {
       break;
     }
     if (dot(bestN, rd) > 0.0) bestN = -bestN;
-    bestRgb = sunLit(bestP, bestN, bestRgb);
+    if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
+    else {
+      float nd = max(dot(bestN, normalize(uSun)), 0.0);
+      bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;
+    }
     if (bounce == 0 && uWork.w > 0.5) {
       vec2 cell = uWork.xy;
       float rise = max(uWork.z, 0.08);
@@ -374,7 +294,7 @@ void main() {
         bestRgb += tint * (mark * 0.95 + pad * 0.35 * scan);
       }
     }
-    float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
+    float mirror = bounce == 1 ? 0.0 : clamp(bestRef, 0.0, 1.0);
     accum += thru * bestRgb * (1.0 - mirror);
     thru *= mirror;
     if (thru <= 0.001) break;
@@ -500,7 +420,7 @@ void main() {
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      return gl.getError() === gl.NO_ERROR;
+      return true;
     },
   };
 }
