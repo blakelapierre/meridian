@@ -109,6 +109,20 @@ function asEdit(proposal) {
   };
 }
 
+export function adoptOp(log, op, quorum) {
+  const applied = appendOp(log, op, quorum);
+  if (applied.ok) return applied;
+  if (applied.reason !== "dig" && applied.reason !== "hash") return applied;
+  const open = inspect(op);
+  if (!open || open.commit.seq !== log.seq + 1) return applied;
+  const edit = asEdit(open.proposal);
+  const already = edit.writes.every((write) => log.crust.sampleIndex(write.i, write.j, write.k) === write.sdf_mm);
+  if (!already) return applied;
+  log.seq = open.commit.seq;
+  log.ops.push(op);
+  return { ok: true, predicted: true };
+}
+
 export function appendOp(log, op, quorum) {
   if (!certComplete(op, quorum)) return { ok: false, reason: "cert" };
   const open = inspect(op);
