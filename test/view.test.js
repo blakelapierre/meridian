@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createServer } from "node:http";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { WebSocket } from "ws";
+import { createStaticServer } from "../tools/serve.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const chrome = [
@@ -16,7 +16,7 @@ const chrome = [
 ].find((path) => path && existsSync(path));
 
 test("the view paints the dummy at the pad", { skip: !chrome, timeout: 20000 }, async () => {
-  const site = await serve(root);
+  const site = await createStaticServer(root);
   const dir = await mkdtemp(join(tmpdir(), "meridian-view-"));
   const browser = spawn(chrome, [
     "--no-sandbox",
@@ -49,36 +49,6 @@ function debugPort(child) {
       if (!match) return;
       clearTimeout(timer);
       resolve(Number(match[1]));
-    });
-  });
-}
-
-const types = {
-  ".html": "text/html",
-  ".js": "text/javascript",
-  ".json": "application/json",
-};
-
-function serve(dir) {
-  const server = createServer(async (request, response) => {
-    const url = new URL(request.url, "http://127.0.0.1");
-    const path = join(dir, decodeURIComponent(url.pathname));
-    try {
-      const body = await readFile(path);
-      response.writeHead(200, { "content-type": types[extname(path)] || "application/octet-stream" });
-      response.end(body);
-    } catch {
-      response.writeHead(404);
-      response.end();
-    }
-  });
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address();
-      resolve({
-        toString() { return `http://127.0.0.1:${port}`; },
-        close: () => new Promise((done) => server.close(done)),
-      });
     });
   });
 }
