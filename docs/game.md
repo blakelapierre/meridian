@@ -512,6 +512,7 @@ Success is defined per skill: a certified hit for marksmanship, a certified edit
 | Close combat | Mallet damage × `1 + 0.35 * skill/140` |
 | Breach | Plant, defuse, and charge times × `1 - 0.25 * skill/140` |
 | Fieldcraft | Sprint drain × `1 - 0.30 * skill/140`. Fall damage × the same factor |
+| Run | Sprint speed × `1 + 0.35 * skill/140`. Walking speed is unchanged |
 | Surgery | Bandage and splint times × `1 - 0.40 * skill/140` |
 | Building | Structure piece integrity starts at `80 + skill/140*40`. Place work time down by the same fraction as surgery |
 | Mining | Terraform rate, §7 |
