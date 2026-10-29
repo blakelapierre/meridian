@@ -1,71 +1,55 @@
-const HZ = 30;
+import { lookDirection } from "./hands.js";
 
-export function createPerson(position = [0, -150, 0]) {
-  return {
-    position: position.slice(),
-    integrity: 100,
-    blood: 100,
-    pain: 0,
-    limbs: { armL: 100, armR: 100, legL: 100, legR: 100 },
-    carried: [
-      { id: "bit", n: 1 },
-      { id: "metal", n: 30 },
-      { id: "stone", n: 8 },
-    ],
-    bound: null,
-    recall: 0,
-    cooldown: 0,
-  };
+export const CHASE = 3.4;
+export const SHOULDER = 0.72;
+export const RISE = 0.42;
+
+const CLOTH = [0.2, 0.34, 0.58, 1];
+const OTHER = [0.55, 0.42, 0.22, 1];
+const SKIN = [0.76, 0.58, 0.44, 1];
+
+function sphere(x, y, z, radius, color, self) {
+  return { type: "sphere", origin: [x, y, z], radius, color, reflectivity: 0.04, self };
 }
 
-function stack(person, id) {
-  return person.carried.find((item) => item.id === id);
+export function playerParts(feet, yaw, crouch = false, { self = true, color = CLOTH } = {}) {
+  const height = crouch ? 1.2 : 1.8;
+  const forwardX = Math.sin(yaw);
+  const forwardY = Math.cos(yaw);
+  const lean = 0.12;
+  const head = height - 0.16;
+  return [
+    sphere(feet[0], feet[1], feet[2] + height * 0.32, crouch ? 0.2 : 0.22, color, self),
+    sphere(feet[0] + forwardX * lean, feet[1] + forwardY * lean, feet[2] + height * 0.62, crouch ? 0.18 : 0.2, color, self),
+    sphere(feet[0] + forwardX * lean, feet[1] + forwardY * lean, feet[2] + head, 0.16, self ? SKIN : color, self),
+  ];
 }
 
-export function craftHearth(person, { footingOwned = false, ticks = 0 } = {}) {
-  const metal = stack(person, "metal");
-  const stone = stack(person, "stone");
-  if (!footingOwned || !metal || metal.n < 20 || !stone || stone.n < 8) return false;
-  if (ticks < 20 * HZ) return false;
-  metal.n -= 20;
-  stone.n -= 8;
-  person.carried.push({ id: "hearth-stone", n: 1 });
-  return true;
+export function chaseOrigin(feet, yaw, pitch, crouch = false) {
+  const eye = crouch ? 1.1 : 1.65;
+  const dir = lookDirection(yaw, pitch);
+  const rightX = Math.cos(yaw);
+  const rightY = -Math.sin(yaw);
+  return [
+    feet[0] - dir[0] * CHASE + rightX * SHOULDER,
+    feet[1] - dir[1] * CHASE + rightY * SHOULDER,
+    feet[2] + eye - dir[2] * CHASE + RISE,
+  ];
 }
 
-export function bindHearth(person, id, at) {
-  person.bound = { id, at: at.slice() };
-}
-
-export function wildernessDeath(person, tick) {
-  const corpse = {
-    tick,
-    at: person.position.slice(),
-    carried: person.carried.map((item) => ({ ...item })),
-  };
-  person.carried = [];
-  person.integrity = 40;
-  person.blood = 50;
-  person.pain = 40;
-  person.limbs = { armL: 70, armR: 70, legL: 70, legR: 70 };
-  person.recall = person.bound && person.cooldown === 0 ? 12 * HZ : 0;
-  return corpse;
-}
-
-export function stepBody(person, ticks = 1) {
-  for (let i = 0; i < ticks; i++) {
-    if (person.cooldown > 0) person.cooldown -= 1;
-    if (person.recall > 0) {
-      person.recall -= 1;
-      if (person.recall === 0 && person.bound) {
-        person.position = person.bound.at.slice();
-        person.cooldown = 10 * 60 * HZ;
-      }
-    }
+export function rayMisses(origin, dir, parts) {
+  for (const part of parts) {
+    const dx = part.origin[0] - origin[0];
+    const dy = part.origin[1] - origin[1];
+    const dz = part.origin[2] - origin[2];
+    const t = dx * dir[0] + dy * dir[1] + dz * dir[2];
+    if (t < 0) continue;
+    const dist = Math.hypot(
+      part.origin[0] - (origin[0] + dir[0] * t),
+      part.origin[1] - (origin[1] + dir[1] * t),
+      part.origin[2] - (origin[2] + dir[2] * t),
+    );
+    if (dist <= part.radius + 0.02) return false;
   }
-}
-
-export function canLoot(corpse, tick, fellowship = false) {
-  if (fellowship) return true;
-  return tick - corpse.tick >= 60 * HZ;
+  return true;
 }
