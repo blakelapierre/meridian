@@ -11,7 +11,7 @@ import {
 
 const params = new URLSearchParams(location.search);
 const me = params.get("id");
-const room = params.get("signal");
+const room = params.get("signal") || "ws://127.0.0.1:8787";
 const log = document.querySelector("pre");
 const identity = createIdentity();
 const pc = new RTCPeerConnection({ iceServers: [] });
