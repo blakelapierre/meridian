@@ -20,22 +20,22 @@ function fromHex(hex) {
   return bytes;
 }
 
-test("keep counts votes, presence, and checkpoints, and the crate is capped", () => {
+test("keep is paid for blocks on the chain, and the crate stays capped", () => {
   const ledger = createLedger("aa");
   assert.equal(keepOf(ledger), 0);
   assert.equal(crateFor(ledger), null);
-  for (let vote = 0; vote < 29; vote++) noteVote(ledger);
-  assert.equal(keepOf(ledger), 29);
-  assert.equal(crateFor(ledger), null);
   noteVote(ledger);
+  notePresence(ledger, 10 * 60 * 1000);
+  noteCheckpoint(ledger);
+  assert.equal(keepOf(ledger), 0);
+  ledger.blocks = 2;
+  assert.equal(keepOf(ledger), 20);
+  assert.equal(crateFor(ledger), null);
+  ledger.blocks = 3;
   assert.deepEqual(crateFor(ledger), { metal: 2, fiber: 1 });
   assert.deepEqual(claimCrate(ledger), { metal: 2, fiber: 1 });
   assert.equal(crateFor(ledger), null);
-  notePresence(ledger, 10 * 60 * 1000);
-  noteCheckpoint(ledger);
-  assert.equal(keepOf(ledger), 36);
-  assert.equal(claimCrate(ledger), null);
-  for (let vote = 0; vote < 24; vote++) noteVote(ledger);
+  ledger.blocks = 6;
   assert.equal(keepOf(ledger), 60);
   assert.deepEqual(claimCrate(ledger), { metal: 2, fiber: 1 });
   assert.equal(ledger.crates, 2);
@@ -45,9 +45,9 @@ test("keep counts votes, presence, and checkpoints, and the crate is capped", ()
 test("a receipt is signed by the archive key", () => {
   const identity = createIdentity();
   const ledger = createLedger("archive");
-  noteVote(ledger);
+  ledger.blocks = 1;
   const receipt = signReceipt(identity, ledger, 1000);
-  assert.equal(receipt.body.keep, 1);
+  assert.equal(receipt.body.keep, 10);
   assert.equal(receipt.body.at, 1000);
   assert.equal(packetValid({
     sig: fromHex(receipt.sig),

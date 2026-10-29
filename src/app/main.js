@@ -20,6 +20,8 @@ import { acceptShot, encodeShot } from "../net/shots.js";
 import { acceptPosition, encodePosition } from "../net/position.js";
 import { createEntry, entryLine, SMOKE, stepEntry } from "../sim/enter.js";
 import { pubkeyHex } from "../sim/keeper.js";
+import { acceptBlock, createChain, tipOf } from "../sim/chain.js";
+import { decodeBlock } from "../net/blocks.js";
 
 const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
@@ -57,6 +59,7 @@ const terrain = createTerrain({
 });
 const dummy = createDummy();
 const yard = createYard(atoll.placements.footing);
+const worldChain = createChain();
 const entry = createEntry(atoll);
 let entryState = { joined: false, prompt: "", notice: "" };
 const seenShots = new Set();
@@ -222,7 +225,10 @@ function publish() {
   const contract = entryState.joined ? "" : entryState.prompt;
   const strike = entryState.joined ? entryLine(entryState) : contract;
   const archives = links.filter((link) => link.role === "archive" && link.ops.readyState === "open").length;
-  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const tip = tipOf(worldChain).block;
+  const official = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "";
+  const chainNote = `block ${tip.height}${official ? ` ${official}` : ""}`;
+  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -231,6 +237,7 @@ function publish() {
   canvas.dataset.hash = terrain.hash();
   canvas.dataset.dummy = String(dummy.health);
   canvas.dataset.slot = slot;
+  canvas.dataset.block = String(tipOf(worldChain).block.height);
   canvas.dataset.prompt = entryState.prompt || "";
   canvas.dataset.scrip = entryState.scrip == null ? "" : String(entryState.scrip);
   canvas.dataset.body = entryState.body || "beach";
@@ -319,6 +326,13 @@ function fire(sample) {
 }
 
 function onOps(bytes) {
+  if (bytes[0] === 11) {
+    const decoded = decodeBlock(bytes);
+    if (!decoded.ok) return;
+    const accepted = acceptBlock(worldChain, decoded.block);
+    if (accepted.ok && accepted.tip) report = `block ${tipOf(worldChain).block.height}`;
+    return;
+  }
   if (bytes[0] === 10) {
     const accepted = acceptSalvage(bytes);
     if (!accepted.ok) return;
