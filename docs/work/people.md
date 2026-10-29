@@ -6,7 +6,7 @@ Other clients are bodies. Tab cycles them. Backtick cycles objects. Standing ins
 
 ## This pass
 
-When the target is a player you have a score for, the line adds the tier and the number, such as `acquaintance 12`.
+Firing the line while a person is targeted sets them hostile. Hostile shares nothing: no ground, no places, no sentences. Standing near them lets the score climb back from −1.
 
 ## Proves
 

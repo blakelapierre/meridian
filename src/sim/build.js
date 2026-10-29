@@ -80,11 +80,18 @@ export function tryPlaceWall(yard, cell, skill = 0) {
 
 function collapse(yard) {
   let fallen = 0;
+  const dropped = [];
   for (let i = yard.pieces.length - 1; i >= 0; i--) {
     if (yard.pieces[i].anchors) continue;
+    if (yard.pieces[i].id === "crate") continue;
     if (grounded(yard.pieces, i)) continue;
+    dropped.push(yard.pieces[i].at.slice());
     yard.pieces.splice(i, 1);
     fallen += 1;
+  }
+  for (const at of dropped) {
+    if (yard.pieces.some((piece) => piece.id === "crate" && sameCell(piece.at, at))) continue;
+    yard.pieces.push({ id: "crate", at, anchors: false });
   }
   if (fallen) yard.spoil = (yard.spoil || 0) + fallen * 3;
   return fallen;
@@ -93,11 +100,18 @@ function collapse(yard) {
 export function trySalvage(yard, cell) {
   if (!cell) return { ok: false, reason: "aim" };
   const index = yard.pieces.findIndex((piece) => piece.id === "wall" && sameCell(piece.at, cell));
-  if (index < 0) return { ok: false, reason: "none" };
-  yard.pieces.splice(index, 1);
-  yard.metal += 6;
-  const fallen = collapse(yard);
-  return { ok: true, metal: yard.metal, fallen };
+  if (index >= 0) {
+    yard.pieces.splice(index, 1);
+    yard.metal += 6;
+    const fallen = collapse(yard);
+    return { ok: true, metal: yard.metal, fallen };
+  }
+  const crate = yard.pieces.findIndex((piece) => piece.id === "crate" && sameCell(piece.at, cell));
+  if (crate < 0) return { ok: false, reason: "none" };
+  yard.pieces.splice(crate, 1);
+  yard.metal += 3;
+  yard.spoil = Math.max(0, (yard.spoil || 0) - 3);
+  return { ok: true, metal: yard.metal, fallen: 0 };
 }
 
 export function adoptSalvage(yard, cell) {
@@ -108,11 +122,23 @@ export function adoptSalvage(yard, cell) {
   return { ok: true, metal: yard.metal, fallen };
 }
 
-export function adoptWall(yard, cell, integrity = 80) {
+export function adoptWall(yard, cell, integrity = 80, yaw = 0) {
+  const existing = yard.pieces.find((piece) => piece.id === "wall" && sameCell(piece.at, cell));
+  if (existing) {
+    if (yaw) existing.yaw = 1;
+    return { ok: true, metal: yard.metal };
+  }
   if (yard.pieces.some((piece) => sameCell(piece.at, cell))) return { ok: true, metal: yard.metal };
   if (!support(yard.pieces, cell)) return { ok: false, reason: "support" };
-  yard.pieces.push({ id: "wall", at: cell.slice(), anchors: false, integrity });
+  yard.pieces.push({ id: "wall", at: cell.slice(), anchors: false, integrity, yaw: yaw ? 1 : 0 });
   return { ok: true, metal: yard.metal };
+}
+
+export function turnWall(yard, cell) {
+  const wall = yard.pieces.find((piece) => piece.id === "wall" && sameCell(piece.at, cell));
+  if (!wall) return { ok: false, reason: "none" };
+  wall.yaw = wall.yaw ? 0 : 1;
+  return { ok: true, yaw: wall.yaw };
 }
 
 export function pieceBoxes(pieces) {
@@ -149,10 +175,22 @@ export function pieceBoxes(pieces) {
         piece: piece.id,
       };
     }
+    if (piece.id === "crate") {
+      return {
+        type: "box",
+        min: [x - 0.22, y - 0.22, 0],
+        max: [x + 0.22, y + 0.22, 0.35],
+        color: [0.34, 0.24, 0.14, 1],
+        reflectivity: 0.1,
+        piece: piece.id,
+      };
+    }
+    const thin = piece.yaw ? 0.25 : 0.08;
+    const wide = piece.yaw ? 0.08 : 0.25;
     return {
       type: "box",
-      min: [x - 0.25, y - 0.08, 0],
-      max: [x + 0.25, y + 0.08, 2.2],
+      min: [x - wide, y - thin, 0],
+      max: [x + wide, y + thin, 2.2],
       color: WOOD,
       reflectivity: 0.12,
       piece: piece.id,

@@ -8,7 +8,7 @@ There is no narrator and no quest line. The names in the world are Cairn, Atoll,
 
 ## This pass
 
-A note is a memory, not a prompt. Hearing one from someone else uses the same book.
+A sentence someone told you is drawn in a cooler color than a sentence you wrote. It is still a memory, not a prompt.
 
 ## Proves
 

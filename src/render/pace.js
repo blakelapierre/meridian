@@ -39,6 +39,13 @@ export function easePixels(current, target, dt) {
   };
 }
 
+export function paceWord(mode, { still = false, arrived = false, holding = true } = {}) {
+  if (still && !holding) return `${mode} recover`;
+  if (still && arrived) return `${mode} native`;
+  if (still) return `${mode} still`;
+  return mode;
+}
+
 export function shouldPaint(active, elapsedMs) {
   return active || elapsedMs >= 1000;
 }

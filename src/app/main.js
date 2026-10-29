@@ -6,13 +6,13 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
 import { createFps } from "../render/fps.js";
-import { createPacer, easePixels, nativePixels, playPixels, viewStill } from "../render/pace.js";
+import { createPacer, easePixels, nativePixels, paceWord, playPixels, viewStill } from "../render/pace.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPlaceWall, trySalvage } from "../sim/build.js";
+import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPlaceWall, trySalvage, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -44,6 +44,7 @@ import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
+import { acceptHello, bytesHash } from "../net/hello.js";
 import { createIdentity } from "../net/identity.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom } from "../net/room.js";
@@ -87,6 +88,10 @@ const keys = new Set();
 const peer = Boolean(params.get("id"));
 
 const atoll = await fetch("/content/atoll.json").then((response) => response.json());
+const catalogHex = await Promise.all([
+  fetch("/content/atoll.json").then((response) => response.arrayBuffer()),
+  fetch("/content/catalog.json").then((response) => response.arrayBuffer()),
+]).then(([atollBytes, catalogBytes]) => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
 const home = agent ? AGENDAS[agendaName].home : null;
 const spawn = home
   ? { x: home[0] * 100, y: home[1] * 100, z: 0 }
@@ -125,6 +130,8 @@ let report = "";
 let useEdge = false;
 let buyEdge = false;
 let selectEdge = false;
+let turnEdge = false;
+let smokeTicks = 0;
 let actEdge = false;
 let cycleEdge = 0;
 let objectEdge = 0;
@@ -149,13 +156,13 @@ const notes = createNotes();
 let stepAt = null;
 const heardAt = new Map();
 
-function hear(name) {
+function hear(name, amount = 1) {
   if (quiet || !name) return;
   const now = performance.now();
   const wait = name === "step" ? 160 : name === "hurt" ? 700 : 40;
   if (now - (heardAt.get(name) || 0) < wait) return;
   heardAt.set(name, now);
-  listener.play(name);
+  listener.play(name, amount);
 }
 let stillPose = null;
 let stillFor = 0;
@@ -201,6 +208,7 @@ function shareWalls(link) {
       nonce,
       cell: piece.at,
       integrity: Math.round(piece.integrity || 80),
+      yaw: piece.yaw || 0,
     })]);
     nonce += 1;
   }
@@ -283,7 +291,10 @@ addEventListener("keydown", (event) => {
   if (event.code === "KeyR") {
     optics = OPTICS[(OPTICS.indexOf(optics) + 1) % OPTICS.length];
   }
-  if (event.code === "KeyC" && !event.repeat) brush = brush === "dig" ? "fill" : "dig";
+  if (event.code === "KeyC" && !event.repeat) {
+    brush = brush === "dig" ? "fill" : brush === "fill" ? "smooth" : "dig";
+  }
+  if (event.code === "KeyZ" && !event.repeat) turnEdge = true;
   if (event.code === "KeyK" && !event.repeat) listener.toggle();
   if (event.code === "Space") event.preventDefault();
 });
@@ -375,7 +386,7 @@ function turnWheel(direction) {
 function useRightClick() {
   if (followId || slot !== "hammer") return;
   const mark = refreshAim(input());
-  if (!mark.inRange || mark.kind !== "wall") {
+  if (!mark.inRange || (mark.kind !== "wall" && mark.kind !== "crate")) {
     if (agent) agent.salvage = false;
     report = "far";
     return;
@@ -500,6 +511,7 @@ function sceneFor(sample, width, height) {
     cameraOrigin: cameraPos,
     cameraDir: cameraLook,
     fov: aim.fov,
+    smoke: smokeTicks > 0 ? player.position : null,
   });
 }
 
@@ -516,7 +528,7 @@ function adoptTarget(subject) {
   const result = appraise(skills.appraisal.value, subject);
   if (result.known) {
     grantUse(skills, "appraisal", { tick });
-    writeNote(notes, skills, "seen", { line: result.line });
+    writeNote(notes, skills, subject.kind === "paper" ? "paper" : "seen", { line: result.line });
   }
   selection = { ...subject, id, line: result.line, canAct: result.canAct };
   notePlace(survey, {
@@ -813,6 +825,7 @@ function paintNotes() {
   list.replaceChildren(...notes.slice(-6).map((note) => {
     const item = document.createElement("li");
     item.textContent = note.line;
+    if (note.kind === "told") item.style.color = "#9cf";
     return item;
   }));
 }
@@ -830,11 +843,13 @@ function publish() {
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const flux = yard.pieces.some((piece) => piece.id === "fin") ? ` · flux ${finOutput(tick)}` : "";
   const boundNote = yard.bound ? " · bound" : "";
-  const legNote = vitals.legs < 100 ? ` · legs ${Math.ceil(vitals.legs)}` : "";
+  const legNote = (vitals.left < 100 || vitals.right < 100) ? ` · L${Math.ceil(vitals.left)} R${Math.ceil(vitals.right)}` : "";
   const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${legNote}`;
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}` : "";
-  const brushNote = slot === "bit" && brush === "fill" ? " · fill" : "";
-  const lightNote = ` · ${dayWord(tick)}`;
+  const brushNote = slot === "bit" && brush !== "dig" ? ` · ${brush}` : "";
+  const light = dayWord(tick);
+  const lightNote = ` · ${light}`;
+  listener.setLevel(light === "night" ? 0.45 : light === "dawn" || light === "dusk" ? 0.7 : 1);
   const muteNote = listener.muted ? " · muted" : "";
   const friendNote = selection?.kind === "player" && friends.has(selection.id)
     ? ` · ${friendTier(friends.get(selection.id))} ${friends.get(selection.id)}`
@@ -967,7 +982,8 @@ function fire(sample) {
     hitbox: shot.hitbox || "miss",
   });
   sendOps(frame);
-  hear("shot");
+  if (selection?.kind === "player") friends.set(selection.id, -1);
+  hear("shot", shot.hitbox ? 1 : 0.35);
 }
 
 function ownKeys() {
@@ -1049,7 +1065,7 @@ function onOps(bytes, from) {
   if (bytes[0] === 9) {
     const accepted = acceptWall(bytes);
     if (!accepted.ok || seenWalls.has(wallSeen(accepted.nonce, accepted.cell))) return;
-    const placed = adoptWall(yard, accepted.cell, accepted.integrity);
+    const placed = adoptWall(yard, accepted.cell, accepted.integrity, accepted.yaw);
     if (!placed.ok) return;
     seenWalls.add(wallSeen(accepted.nonce, accepted.cell));
     notePlace(survey, {
@@ -1115,6 +1131,7 @@ function ensureRoom() {
       url: params.get("signal") || "ws://127.0.0.1:8787",
       me: meId,
       role: "player",
+      catalog: catalogHex,
     });
     roomReady = room.start().then(() => room);
   }
@@ -1169,11 +1186,24 @@ async function openLink(to, offer, role) {
 async function link() {
   const targets = (params.get("to") || "").split(",").map((item) => item.trim()).filter(Boolean);
   const offerParam = params.get("offer") || "";
-  await Promise.all(targets.map((to) => openLink(
-    to,
-    offerParam === "1" || offerParam.split(",").includes(to),
-    "player",
-  )));
+  let peers = [];
+  try {
+    peers = await (await ensureRoom()).list();
+  } catch {
+    peers = [];
+  }
+  await Promise.all(targets.map((to) => {
+    const found = peers.find((peer) => peer.pubkey === to);
+    if (found && !acceptHello(catalogHex, found.catalog)) {
+      report = "catalog";
+      return null;
+    }
+    return openLink(
+      to,
+      offerParam === "1" || offerParam.split(",").includes(to),
+      "player",
+    );
+  }));
 }
 
 async function seekArchives() {
@@ -1181,7 +1211,7 @@ async function seekArchives() {
     const room = await ensureRoom();
     const peers = await room.list();
     for (const found of peers) {
-      if (found.role === "archive") openLink(found.pubkey, false, "archive");
+      if (found.role === "archive" && acceptHello(catalogHex, found.catalog)) openLink(found.pubkey, false, "archive");
     }
   } catch {
     // No lighthouse means no archive. Digs stay solo.
@@ -1299,6 +1329,8 @@ if (params.get("still") !== "1") {
         offer: buyOnce ? (entryState.joined ? SMOKE : null) : null,
       });
       if (entryState.notice) report = entryState.notice;
+      if (entryState.notice === "smoke") smokeTicks = 8 * 30;
+      if (smokeTicks > 0) smokeTicks -= 1;
       if (entryState.joined) writeNote(notes, skills, "strike");
       useOnce = false;
       buyOnce = false;
@@ -1390,7 +1422,7 @@ if (params.get("still") !== "1") {
         }
       }
       if (vitals.down > 0) sample.forward = 0;
-      sample.limp = limpFactor(vitals) < 1;
+      sample.limp = limpFactor(vitals);
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, sample, jump, skills.jump.value);
@@ -1413,7 +1445,8 @@ if (params.get("still") !== "1") {
         const dummyAt = [atoll.placements.dummy.x / 100, atoll.placements.dummy.y / 100];
         const nearDummy = Math.hypot(player.position[0] - dummyAt[0], player.position[1] - dummyAt[1]) < 1.6;
         if (nearDummy && dummy.health > 0) {
-          const hit = clubHit(vitals, 1 / 30);
+          const side = player.position[0] < dummyAt[0] ? "left" : "right";
+          const hit = clubHit(vitals, 1 / 30, side);
           if (hit.dead) {
             report = "down";
             hear("hurt");
@@ -1477,6 +1510,22 @@ if (params.get("still") !== "1") {
     drawChart();
     if (cycleOnce) cycle(cycleOnce, "player");
     if (objectOnce) cycle(objectOnce, "object");
+    if (turnEdge && slot === "hammer") {
+      const mark = refreshAim(sample);
+      if (mark.inRange && mark.kind === "wall") {
+        const turned = turnWall(yard, mark.cell);
+        if (turned.ok) {
+          sendOps(encodeWall(identity, {
+            nonce: Math.floor(tick),
+            cell: mark.cell,
+            integrity: pieceIntegrity(skills.building.value),
+            yaw: turned.yaw,
+          }));
+          report = turned.yaw ? "turned" : "wall";
+        }
+      }
+      turnEdge = false;
+    }
     if (selectOnce && selection?.kind === "hearth") {
       const bound = bindHearth(yard, selection.cell);
       if (bound.ok) {
@@ -1510,7 +1559,7 @@ if (params.get("still") !== "1") {
     viewScale = decision.scale;
     const native = nativePixels(boxW, boxH, window.devicePixelRatio || 1);
     const arrived = still && easedPixels && easedPixels.width >= native.width * 0.95 && easedPixels.height >= native.height * 0.95;
-    canvas.dataset.pace = still ? `${decision.mode}${arrived ? " native" : " still"}` : decision.mode;
+    canvas.dataset.pace = paceWord(decision.mode, { still, arrived, holding: decision.holding });
     if (params.get("nopaint") !== "1" && decision.paint) {
       if (painter) fitCanvas(canvas, viewScale, easedPixels);
       const started = performance.now();

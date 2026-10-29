@@ -16,7 +16,7 @@ Peers meet through the lighthouse and a WebRTC data channel. Positions are unrel
 
 ## This pass
 
-A fill travels as a terrain proposal with `mode: fill`. The witness runs the same accept rules as a dig, plus the air-to-solid check. Lore and pieces are unchanged.
+Hello carries the catalog hash, the blake3 of the atoll file and the catalog file. A peer who announces a different hash is not linked. A peer who announces none is still accepted, so an older client can meet you. A refusal says `catalog`.
 
 ## Proves
 

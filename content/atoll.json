@@ -60,6 +60,13 @@
   },
   "props": [
     {
+      "id": "paper.atoll",
+      "material": "paper",
+      "box": { "min": { "x": 470, "y": -15030, "z": 40 }, "max": { "x": 540, "y": -14970, "z": 55 } },
+      "blocksMove": false,
+      "blocksVision": false
+    },
+    {
       "id": "core.wall.south.west",
       "material": "wood",
       "box": { "min": { "x": -800, "y": -800, "z": 0 }, "max": { "x": -150, "y": -780, "z": 300 } },

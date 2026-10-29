@@ -4,16 +4,20 @@ import { createIdentity } from "../src/net/identity.js";
 import { acceptLore, encodeLore } from "../src/net/lore.js";
 import { createSurvey } from "../src/sim/map.js";
 import { friendTier, learnLore, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../src/sim/lore.js";
-import { createPlate, GEO_COLOR, samplePlate, stamp } from "../src/sim/plate.js";
+import { createPlate, GEO_COLOR, samplePlate, stamp, toldTint } from "../src/sim/plate.js";
 
 test("nearby players trade map findings by skill and friendliness", () => {
   assert.ok(shareRange({ mapping: 70, appraisal: 70 }) > shareRange({}));
   assert.equal(friendTier(0), "stranger");
+  assert.equal(friendTier(-1), "hostile");
   assert.equal(friendTier(nextFriend(11, true)), "acquaintance");
   const known = {
     ground: [{ kind: "sand", point: [1, -150, 0] }, { kind: "pit", point: [2, -149, 0] }],
     places: [{ id: "dummy", kind: "dummy", name: "dummy", point: [10, -125, 0] }],
   };
+  const hostile = offerLore({ skills: { mapping: 80, mining: 20, appraisal: 30 }, friend: -1, ...known });
+  assert.equal(hostile.ground.length, 0);
+  assert.equal(hostile.tier, "hostile");
   const stranger = offerLore({ skills: { mapping: 80, appraisal: 10 }, friend: 0, ...known });
   assert.equal(stranger.ground.length, 0);
   assert.equal(stranger.places.length, 0);
@@ -30,6 +34,6 @@ test("nearby players trade map findings by skill and friendliness", () => {
   const student = createSurvey();
   const learned = learnLore(student, plate, heard, { mapping: 20, mining: 10, appraisal: 20 }, stamp, GEO_COLOR);
   assert.ok(learned.ground > 0);
-  assert.deepEqual(samplePlate(plate, 1, -150).slice(0, 3), GEO_COLOR.sand.slice(0, 3));
+  assert.deepEqual(samplePlate(plate, 1, -150).slice(0, 3), toldTint(GEO_COLOR.sand).slice(0, 3));
   assert.equal(student.places.has("dummy"), true);
 });

@@ -33,6 +33,10 @@ export function acceptEdit(crust, proposal, { certified = false, localEdits = fa
     const previous = crust.sampleIndex(write.i, write.j, write.k);
     if (proposal.mode === "dig" && (previous > 0 || write.sdf_mm !== 500)) return { ok: false, reason: "dig" };
     if (proposal.mode === "fill" && (previous <= 0 || write.sdf_mm !== -500)) return { ok: false, reason: "fill" };
+    if (proposal.mode === "smooth") {
+      const delta = Math.abs(write.sdf_mm - previous);
+      if (delta === 0 || delta > 500 || Math.abs(write.sdf_mm) > Math.abs(previous)) return { ok: false, reason: "smooth" };
+    }
   }
   for (const write of proposal.writes) crust.write(write.i, write.j, write.k, write.sdf_mm);
   return { ok: true };

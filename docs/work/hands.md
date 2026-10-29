@@ -6,7 +6,7 @@
 
 ## This pass
 
-C cycles the bit between `dig` and `fill`. Dig opens a voxel. Fill closes one that is already open. The line shows `fill` while that brush is selected. Fill is the same reach and brush as dig.
+C cycles dig, fill, and smooth. Z turns the wall under the hammer by 90°. R stays the optic. The turn is sent with the wall.
 
 ## Proves
 

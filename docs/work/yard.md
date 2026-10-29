@@ -6,7 +6,7 @@ The crate starts as 30 metal, 8 stone, and one solar fin. The footing anchors pi
 
 ## This pass
 
-A wall that loses its path to the footing falls. Its metal does not return to the wallet. Half, rounded down, becomes spoil on the yard. One fallen wall is 3 spoil. The line shows `spoil` once any has fallen.
+A fallen wall becomes a crate you can see. Right-clicking the crate returns 3 metal, which is the half that had been spoil. The crate does not hold the wall up.
 
 ## Proves
 

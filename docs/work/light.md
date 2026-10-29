@@ -6,7 +6,7 @@ The sun is a direction on a 72-minute day. The picture brightens when the sun is
 
 ## This pass
 
-The line names the height: `noon`, `day`, `low`, or `night`. Noon is a sun at least halfway up. Night is at least halfway below. The fin number is unchanged.
+The low sun is `dawn` while it is rising and `dusk` while it is falling. Noon, day, and night are unchanged. The tones follow the word: dusk and dawn are quieter, night is quieter still.
 
 ## Proves
 

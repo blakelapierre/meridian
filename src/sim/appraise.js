@@ -29,6 +29,13 @@ export const SUBJECTS = {
     detail: "part of the yard",
     difficulty: 5,
   },
+  paper: {
+    name: "Paper",
+    material: "a note in the crate",
+    action: "read it",
+    detail: "the compound is north, the bit digs, a hearth binds, the fin drinks the sun",
+    difficulty: 0,
+  },
   dummy: {
     name: "Practice dummy",
     material: "padded linen",
@@ -79,6 +86,7 @@ export function subjectFromHit(hit, pieces = []) {
       };
     }
     if (piece?.id === "footing") return { ...SUBJECTS.footing, kind: "footing", cell, point: hit.point };
+    if (object.id === "paper.atoll") return { ...SUBJECTS.paper, id: "paper.atoll", kind: "paper", point: hit.point };
     if (object.type === "box") return { ...SUBJECTS.prop, kind: "prop", point: hit.point };
     return { ...SUBJECTS.sand, kind: "sand", cell, point: hit.point };
   }

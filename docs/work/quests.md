@@ -8,7 +8,7 @@ Nothing on the status line is an objective. The atoll paper is lore only. The ch
 
 ## This pass
 
-The notebook and the spoken sentence. No tracker, no order, no reward.
+The crate paper is an object beside the crate. Identifying it can leave one memory, once appraisal can keep it. The screen still has no objective.
 
 ## Proves
 

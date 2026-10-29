@@ -23,6 +23,15 @@ export function createPlate(size = 512, meters = 256, origin = [0, -80]) {
   };
 }
 
+export function toldTint(color) {
+  return [
+    Math.round(color[0] * 0.55 + 40),
+    Math.round(color[1] * 0.55 + 70),
+    Math.round(color[2] * 0.55 + 90),
+    color[3] ?? 255,
+  ];
+}
+
 export function worldToPixel(plate, x, y) {
   const mpp = plate.meters / plate.size;
   const left = plate.origin[0] - plate.meters / 2;

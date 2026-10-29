@@ -6,7 +6,7 @@ Walking into the compound volume offers `atoll-skirmish`. E joins the side you e
 
 ## This pass
 
-Staying outside the volume for five seconds abandons the strike body. The line says `beach`. Scrip is not paid for leaving. The match itself stays, with no win awarded for the walk-out.
+Buying smoke raises a gray volume around you for eight seconds. Shots that start inside it hit the smoke.
 
 ## Proves
 

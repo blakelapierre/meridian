@@ -20,7 +20,7 @@ K toggles the listener. The line says `muted` while it is off. The first cue als
 
 ## This pass
 
-Those nine cues, one listener, and the mute key. Nothing is positional yet. A second body does not make a footstep you can hear.
+A miss is quieter than a hit. Night, dusk, and dawn lower the whole listener. The nine cues are otherwise the same.
 
 ## Proves
 

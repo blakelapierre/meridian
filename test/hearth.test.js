@@ -42,15 +42,19 @@ test("a hearth is crafted from the crate, bound, and recalls a bruised body", ()
   bruise(vitals);
   assert.equal(vitals.integrity, 40);
   assert.equal(vitals.blood, 50);
-  assert.equal(vitals.legs, 70);
+  assert.equal(vitals.left, 70);
+  assert.equal(vitals.right, 70);
   assert.equal(limpFactor(vitals), 1);
-  vitals.legs = 40;
+  vitals.left = 40;
   assert.equal(limpFactor(vitals), 0.6);
+  vitals.right = 40;
+  assert.equal(limpFactor(vitals), 0.35);
   vitals.pain = 40;
   coolPain(vitals, 1);
   assert.equal(vitals.pain, 35);
   assert.equal(dayWord(DAY_TICKS / 4), "noon");
-  assert.equal(dayWord(0), "low");
+  assert.equal(dayWord(0), "dawn");
+  assert.equal(dayWord(Math.floor(DAY_TICKS * 0.55)), "dusk");
 });
 
 test("the solar fin spends metal and makes more flux at noon", () => {
