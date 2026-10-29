@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Meridian checks</title>
+    <style>
+      body { margin: 32px auto; max-width: 40rem; background: #111; color: #eee; font: 16px/1.45 sans-serif; }
+      a { color: #9cf; }
+      code { color: #fd8; }
+      h1 { font-size: 1.4rem; }
+      h2 { font-size: 1.05rem; margin-top: 1.6rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Meridian — what this build shows</h1>
+    <p>One beach, a software raycaster, and three peer checks. <code>npm start</code> only serves these files and introduces browsers. It does not decide a hit, a dig, or a death.</p>
+    <p>Pass means the sentence under each check actually happens. A red error, two different hashes, or a page that stays on “waiting” is a fail.</p>
+
+    <h2>1. Walk</h2>
+    <p>You stand on the south beach, looking north. The picture is 160×90, scaled up. The ground is the integer crust. The sky is blue because the sun is up.</p>
+    <p>Click the picture, then look with the mouse. W A S D move. A and D strafe; they do not turn you. Shift sprints. Space jumps and lands. Walk north and the wooden compound gets closer.</p>
+    <p>This page does not save a hole.</p>
+    <p><a href="/tools/view/index.html">Open the walk</a></p>
+
+    <h2>2. Position</h2>
+    <p>Two browsers trade an unreliable position. No island is drawn.</p>
+    <p>Pass: both logs say <code>snap open</code>, then <code>remote x,y,z</code> lines that keep changing.</p>
+    <p><a href="/tools/link/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/link/index.html?id=b&to=a">Tab B</a></p>
+
+    <h2>3. Signed shot</h2>
+    <p>A fixed shot from the accuracy pad into the dummy. You do not aim it.</p>
+    <p>Pass: tab A logs <code>verified hit</code>. Tab B logs <code>traced hit</code>.</p>
+    <p><a href="/tools/shot/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/shot/index.html?id=b&to=a">Tab B</a></p>
+
+    <h2>4. Certified dig</h2>
+    <p>Tab A proposes one voxel. Tab B signs the vote. Both apply the same op.</p>
+    <p>Pass: both pages say <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. Before that, the voxel is solid (a negative sample).</p>
+    <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a></p>
+  </body>
+</html>
