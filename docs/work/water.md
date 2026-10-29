@@ -8,7 +8,7 @@ The sea is still the edge of the beach. A dug pit whose floor is below −0.2 m 
 
 ## This pass
 
-Once a second a pool steps half a meter toward a lower floor, if there is one. Filling the hole still removes it.
+A pool may step twice in the same second, half a meter each time, and only downhill. Filling the hole still removes it.
 
 ## Proves
 

@@ -8,7 +8,7 @@ There is no war table, no overhead, and no company wallet. The AI clients are pe
 
 ## This pass
 
-`maySit` is false. The drop rule is still unused, because there is no table.
+The company wallet is 0. A charter can see `no spend`. You still cannot sit.
 
 ## Proves
 

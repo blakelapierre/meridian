@@ -16,7 +16,7 @@ Peers meet through the lighthouse and a WebRTC data channel. Positions are unrel
 
 ## This pass
 
-Interest reaches 80 m plus a tenth of a meter per point of mapping. Farther poses are still dropped.
+A pose is not sent to a peer whose last position is outside interest. The reach is still 80 m plus mapping.
 
 ## Proves
 

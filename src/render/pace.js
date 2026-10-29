@@ -30,6 +30,10 @@ export function nativePixels(boxW, boxH, dpr = 1) {
   };
 }
 
+export function soldierTarget(still, native, play) {
+  return still ? native : play;
+}
+
 export function easePixels(current, target, dt) {
   const shrinking = target.width < current.width || target.height < current.height;
   const step = Math.min(1, Math.max(0, dt) * (shrinking ? 4 : 1.2));

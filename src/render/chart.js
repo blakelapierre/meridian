@@ -26,7 +26,7 @@ function plateImage(plate) {
 export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plate, center, span }) {
   const here = center || self;
   const across = span || radius * 2;
-  if (read) read.textContent = `${formatFix(self[0], self[1], yaw)}  ·  ${abilityLine(skill)}  ·  ${Math.round(across)} m`;
+  if (read) read.textContent = `${formatFix(self[0], self[1], yaw)}  ·  ${abilityLine(skill)}  ·  sense ${Math.round(radius)} m  ·  ${Math.round(across)} m`;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const size = canvas.width;

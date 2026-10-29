@@ -10,7 +10,7 @@ Integrity starts at 100. Standing on the live dummy clubs it down. Eight seconds
 
 ## This pass
 
-Below 40 integrity, blood falls by 4 a second. A hard landing still costs 8 integrity.
+B, while you are not in a strike, spends one fiber. It gives back 15 blood and 8 integrity. You wake with two fiber.
 
 ## Proves
 

@@ -150,6 +150,25 @@ export function tryPlacePost(yard, cell) {
   return { ok: true, metal: yard.metal };
 }
 
+export function tryPlaceRoad(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if (yard.metal < 1) return { ok: false, reason: "metal" };
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "footing")) return { ok: false, reason: "occupied" };
+  yard.metal -= 1;
+  yard.pieces.push({ id: "road", at: cell.slice(), anchors: true });
+  return { ok: true, metal: yard.metal };
+}
+
+export function tryPlaceDoor(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if (yard.metal < 3) return { ok: false, reason: "metal" };
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "footing")) return { ok: false, reason: "occupied" };
+  if (!support(yard.pieces, cell)) return { ok: false, reason: "support" };
+  yard.metal -= 3;
+  yard.pieces.push({ id: "door", at: cell.slice(), anchors: true, open: false });
+  return { ok: true, metal: yard.metal };
+}
+
 export function turnWall(yard, cell) {
   const wall = yard.pieces.find((piece) => piece.id === "wall" && sameCell(piece.at, cell));
   if (!wall) return { ok: false, reason: "none" };
@@ -207,6 +226,27 @@ export function pieceBoxes(pieces) {
         max: [x + 0.08, y + 0.08, 1.2],
         color: WOOD,
         reflectivity: 0.1,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "road") {
+      return {
+        type: "box",
+        min: [x - 0.45, y - 0.45, 0],
+        max: [x + 0.45, y + 0.45, 0.05],
+        color: [0.28, 0.26, 0.22, 1],
+        reflectivity: 0.04,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "door") {
+      const open = piece.open ? 0.08 : 0.45;
+      return {
+        type: "box",
+        min: [x - 0.06, y - open, 0],
+        max: [x + 0.06, y + open, 1.6],
+        color: WOOD,
+        reflectivity: 0.12,
         piece: piece.id,
       };
     }

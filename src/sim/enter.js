@@ -40,6 +40,7 @@ function status(entry, inside, notice = "") {
     body: player.body,
     side: player.side,
     loadout: player.loadout.slice(),
+    channel: player.channel || "",
   };
 }
 
@@ -47,7 +48,8 @@ export function entryLine(state) {
   if (!state.joined) return state.prompt;
   const kit = state.loadout.length ? ` ${state.loadout.join(" ")}` : "";
   const secs = Math.max(0, Math.ceil(state.phaseTicks / 30));
-  return `strike ${state.side} ${state.body} scrip ${state.scrip}${kit} ${state.phase} ${secs}s`;
+  const channel = state.channel ? ` ${state.channel}` : "";
+  return `strike ${state.side} ${state.body} scrip ${state.scrip}${kit}${channel} ${state.phase} ${secs}s`;
 }
 
 export function stepEntry(entry, { position, use = false, buy = false, yard, offer = null }) {

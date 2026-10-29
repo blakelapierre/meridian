@@ -6,7 +6,7 @@ The beach is a crust field. A dig writes air, sample `500`, inside the brush. Th
 
 ## This pass
 
-A slope steeper than one voxel would slump by 250 mm. Certified sand does not slump yet, so a fill still hashes the same way. Carried spoil is unchanged.
+You can carry 4 spoil, plus 1 for every 20 mining. A dig past that says `full`. Certified sand still does not slump.
 
 ## Proves
 

@@ -8,7 +8,7 @@ Hands are the default. A strike is a contract you walk into. Leaving the volume 
 
 ## This pass
 
-The line says `paid` when the 8 metal arrives. The overhead is still your own coordinates.
+The line says `hands` on the beach and `strike` inside a contract. `paid` is unchanged.
 
 ## Proves
 

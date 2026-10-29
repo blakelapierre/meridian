@@ -8,7 +8,7 @@ The beach is two cells split at y = −40 m. South of that line is `atoll-0`. No
 
 ## This pass
 
-The interest radius above is how far a pose is allowed to matter. Quorum is still not applied to shots. Cell ids are unchanged.
+When another peer is linked, the line names whose turn it is. The turn rotates with the tick. It does not decide a hit. Cell ids are unchanged.
 
 ## Proves
 
