@@ -2,6 +2,7 @@ import { Crust } from "../sim/crust.js";
 import { pieceBoxes } from "../sim/build.js";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
+import { dummyTexture } from "./texture.js";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const DUMMY = [0.86, 0.22, 0.18, 1];
@@ -36,6 +37,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     color: DUMMY,
     reflectivity: 0.45,
     body: "dummy",
+    texture: dummyTexture(),
   });
   const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
   return {
