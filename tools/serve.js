@@ -37,7 +37,10 @@ export function createStaticServer(root, port = 0) {
       const info = await stat(target);
       if (info.isDirectory()) target = resolve(target, "index.html");
       const body = await readFile(target);
-      response.writeHead(200, { "content-type": types[extname(target)] || "application/octet-stream" });
+      response.writeHead(200, {
+        "content-type": types[extname(target)] || "application/octet-stream",
+        "cache-control": "no-store",
+      });
       response.end(body);
     } catch {
       response.writeHead(404);
