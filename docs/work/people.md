@@ -6,7 +6,7 @@ Other clients are bodies. Tab cycles them. Backtick cycles objects. Standing ins
 
 ## This pass
 
-The line lists fellowship names. Hostility still stops the trade.
+Dragging a downed friend would cut your pace to 1.6 m/s. Other bodies do not yet have a downed state, so it does not apply. The fellowship names stay.
 
 ## Proves
 

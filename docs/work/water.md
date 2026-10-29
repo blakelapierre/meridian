@@ -8,7 +8,7 @@ The sea is still the edge of the beach. A dug pit whose floor is below −0.2 m 
 
 ## This pass
 
-Filling a pit so the floor is no longer below −0.2 m removes the pool. Water still does not run.
+Once a second a pool steps half a meter toward a lower floor, if there is one. Filling the hole still removes it.
 
 ## Proves
 

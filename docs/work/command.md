@@ -8,7 +8,7 @@ There is no war table, no overhead, and no company wallet. The AI clients are pe
 
 ## This pass
 
-The drop rule exists: a table at integrity 0 would put you on its square. Nothing in the yard is a table, and you cannot sit.
+`maySit` is false. The drop rule is still unused, because there is no table.
 
 ## Proves
 

@@ -8,7 +8,7 @@ A bound hearth claims a 6 m radius. The binder may edit it. A stranger's certifi
 
 ## This pass
 
-H, while you have a hearth and a person targeted, hands them a key. A key may edit the claim. The holder still can.
+A wall you are more than 40 m from loses 1 integrity every 20 seconds. Keys are unchanged.
 
 ## Proves
 

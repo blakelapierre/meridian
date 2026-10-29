@@ -6,7 +6,7 @@
 
 ## This pass
 
-G throws one stone. It costs a stone from the crate and flies as a bolt. Z still turns a wall, and now a fin.
+The line will not fire again for 12 ticks. The line says `reload`. G still throws a stone.
 
 ## Proves
 

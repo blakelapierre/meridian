@@ -138,6 +138,11 @@ function sampleStep(sample) {
   return sample;
 }
 
+export function slumpChoice(here, neighbor) {
+  if (here - neighbor < 500) return null;
+  return here - 250;
+}
+
 export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 0 }) {
   const grant = 6667 + Math.floor((6667 * skill) / 140);
   crust.budgetCm3 += grant * ticks;

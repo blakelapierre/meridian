@@ -20,7 +20,7 @@ K toggles the listener. The line says `muted` while it is off. The first cue als
 
 ## This pass
 
-A shot is panned by the direction it left. Night is still quieter. There is still no music.
+South of y = −190 you hear the sea, a low tone. Shots still pan. There is still no music.
 
 ## Proves
 

@@ -8,7 +8,7 @@ The playable ground is still the Atoll tangent. Gravity is radial, toward a core
 
 ## This pass
 
-The floor follows the shell drop, and a pool lifts you. The picture is still the tangent plane.
+When the shell drop is more than 2 cm the line says `drop`. The picture is still flat.
 
 ## Proves
 

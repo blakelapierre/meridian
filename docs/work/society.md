@@ -8,7 +8,7 @@ Friendliness is still a score. Y offers a fellowship to the person you have targ
 
 ## This pass
 
-People who have both accepted are named on the line, after `with`. There is still no patron.
+Tithe is zero. There is no patron to pay. Fellowship names stay on the line.
 
 ## Proves
 

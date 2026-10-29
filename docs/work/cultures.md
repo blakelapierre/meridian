@@ -8,7 +8,7 @@ Everyone wakes in a culture. The default is Holds. `?culture=hosts` starts with 
 
 ## This pass
 
-The first skill to reach 40 can be a specialty, and a second one after it. A third cannot. The crate is unchanged.
+A specialty is marked with a star on the skill list. Two are still the cap.
 
 ## Proves
 

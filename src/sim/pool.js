@@ -19,3 +19,8 @@ export function drainPool(pools, { x, y, floor }) {
   pools.splice(index, 1);
   return true;
 }
+
+export function flowOnce(pool, floorHere, floorThere) {
+  if (!pool || floorThere >= floorHere) return pool;
+  return { ...pool, y: pool.y + 0.5, floor: floorThere, key: `${pool.x},${pool.y + 0.5}` };
+}

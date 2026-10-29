@@ -6,7 +6,7 @@ The beach is a crust field. A dig writes air, sample `500`, inside the brush. Th
 
 ## This pass
 
-A dig adds one spoil. A fill spends one and refuses when you are carrying none. Smooth does not spend it.
+A slope steeper than one voxel would slump by 250 mm. Certified sand does not slump yet, so a fill still hashes the same way. Carried spoil is unchanged.
 
 ## Proves
 

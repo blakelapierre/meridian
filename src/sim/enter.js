@@ -65,10 +65,12 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
   }
   setInside(entry.match, entry.id, inside);
   const player = entry.match.roster.get(entry.id);
-  if (use && inside && player.abandoned) rejoin(player);
   let notice = "";
+  if (use && inside && player.abandoned) {
+    rejoin(player);
+    notice = "reinsert";
+  }
   if (buy && offer) {
-    const player = entry.match.roster.get(entry.id);
     if (player.loadout.includes(offer.id)) notice = offer.id;
     else if (buyOffer(entry.match, entry.id, offer)) notice = offer.id;
     else notice = entry.match.phase === "buy" || entry.match.phase === "gap" ? "short" : "closed";
@@ -77,7 +79,10 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
   const previous = entry.match.phase;
   stepMatch(entry.match, 1);
   const paid = roundMaterials({ abandoned: player.abandoned, phase: entry.match.phase, previous });
-  if (paid) player.beach.metal += paid;
+  if (paid) {
+    player.beach.metal += paid;
+    if (!notice) notice = "paid";
+  }
   yard.metal = player.beach.metal;
   if (player.abandoned && !notice) notice = "beach";
   return status(entry, inside, notice);

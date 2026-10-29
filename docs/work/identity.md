@@ -8,7 +8,7 @@ Each client mints an Ed25519 key and signs proposals, shots, walls, lore, and pi
 
 ## This pass
 
-O prints the key as groups of four. Spaces are ignored when you paste `?key=`.
+Salvaging writes one line in a harm log kept on this client. It holds eight. The phrase is unchanged.
 
 ## Proves
 

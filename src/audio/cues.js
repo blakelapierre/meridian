@@ -8,6 +8,7 @@ export const CUES = {
   hurt: { freq: 70, dur: 0.22, gain: 0.14, wave: "sine" },
   bind: { freq: 440, dur: 0.28, gain: 0.08, wave: "sine" },
   recall: { freq: 220, dur: 0.4, gain: 0.1, wave: "sine" },
+  sea: { freq: 50, dur: 0.5, gain: 0.05, wave: "sine" },
 };
 
 export function cueFor(name) {
