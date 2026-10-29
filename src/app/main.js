@@ -15,7 +15,7 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, stepCamera, CHASE, BODY_COLORS } from "../sim/body.js";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
-import { inSense, mapAbilities, mapMarks } from "../sim/map.js";
+import { createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
 import { paintChart } from "../render/chart.js";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
@@ -109,6 +109,7 @@ let objectEdge = 0;
 let autoRun = false;
 let mapOpen = params.get("quiet") !== "1";
 const trail = [];
+const survey = createSurvey();
 const seenPeople = new Map();
 let orbitYaw = 0;
 let orbitPitch = 0;
@@ -439,7 +440,34 @@ function adoptTarget(subject) {
   const result = appraise(skills.appraisal.value, subject);
   if (result.known) grantUse(skills, "appraisal", { tick });
   selection = { ...subject, id, line: result.line, canAct: result.canAct };
+  notePlace(survey, {
+    id,
+    kind: subject.kind,
+    name: subject.name,
+    point: subject.point,
+  }, skillBag());
   report = result.line;
+}
+
+function skillBag() {
+  return {
+    mapping: skills.mapping.value,
+    mining: skills.mining.value,
+    building: skills.building.value,
+    appraisal: skills.appraisal.value,
+    eyesight: skills.eyesight.value,
+    ranging: skills.ranging.value,
+  };
+}
+
+function landmarks() {
+  const { dummy, footing, accuracyPad, crate } = atoll.placements;
+  return [
+    { id: "dummy", kind: "dummy", name: "dummy", point: [dummy.x / 100, dummy.y / 100, 0] },
+    { id: "footing", kind: "footing", name: "footing", point: [footing.x / 100, footing.y / 100, 0] },
+    { id: "pad", kind: "pad", name: "pad", point: [accuracyPad.x / 100, accuracyPad.y / 100, 0] },
+    { id: "crate", kind: "crate", name: "crate", point: [crate.x / 100, crate.y / 100, 0] },
+  ];
 }
 
 function showChart() {
@@ -485,6 +513,8 @@ function drawChart() {
     objects,
     trail,
     known: sensedPeople(),
+    ground: [...survey.ground.values()],
+    places: [...survey.places.values()],
   });
   paintChart(document.querySelector("#map"), document.querySelector("#fix"), {
     self: player.position,
@@ -797,6 +827,12 @@ function onOps(bytes) {
     const placed = adoptWall(yard, accepted.cell, accepted.integrity);
     if (!placed.ok) return;
     seenWalls.add(wallSeen(accepted.nonce, accepted.cell));
+    notePlace(survey, {
+      id: `wall:${accepted.cell[0]}:${accepted.cell[1]}`,
+      kind: "wall",
+      name: "wall",
+      point: [accepted.cell[0] * 0.5, accepted.cell[1] * 0.5],
+    }, skillBag());
     report = "wall";
     return;
   }
@@ -1064,6 +1100,12 @@ if (params.get("still") !== "1") {
                 integrity: pieceIntegrity(skills.building.value),
               });
               sendOps(frame);
+              notePlace(survey, {
+                id: `wall:${raising.cell[0]}:${raising.cell[1]}`,
+                kind: "wall",
+                name: "wall",
+                point: [raising.cell[0] * 0.5, raising.cell[1] * 0.5],
+              }, skillBag());
             }
             raising = null;
             work = null;
@@ -1105,6 +1147,15 @@ if (params.get("still") !== "1") {
         player.position[2] = floor;
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
+      const bag = skillBag();
+      noteSurvey(survey, {
+        x: player.position[0],
+        y: player.position[1],
+        yaw,
+        depthAt: (px, py) => columnFloor(terrain.log.crust, px, py),
+        skills: bag,
+      });
+      noteNearby(survey, player.position, landmarks(), bag);
       tick += 1;
       } finally {
         bank -= 1 / 30;
