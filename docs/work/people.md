@@ -6,7 +6,7 @@ Other clients are bodies. Tab cycles them. Backtick cycles objects. Standing ins
 
 ## This pass
 
-Firing the line while a person is targeted sets them hostile. Hostile shares nothing: no ground, no places, no sentences. Standing near them lets the score climb back from −1.
+The line lists fellowship names. Hostility still stops the trade.
 
 ## Proves
 

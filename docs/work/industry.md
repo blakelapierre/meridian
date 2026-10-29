@@ -8,7 +8,7 @@ Metal pays for walls, the hearth, and the fin. Spoil is a crate you can see. Whe
 
 ## This pass
 
-The wreck piece. Right-click it before the dummy stands back up.
+A vein near the crate yields 2 metal a dig, until 6 metal is gone. The wreck is unchanged.
 
 ## Proves
 

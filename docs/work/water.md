@@ -8,7 +8,7 @@ The sea is still the edge of the beach. A dug pit whose floor is below −0.2 m 
 
 ## This pass
 
-`notePool`. One sheet of water in a deep dig. Filling the hole does not yet empty it.
+Filling a pit so the floor is no longer below −0.2 m removes the pool. Water still does not run.
 
 ## Proves
 

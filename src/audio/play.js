@@ -32,7 +32,7 @@ export function createListener() {
     setLevel(level) {
       if (master) master.gain.value = 0.35 * Math.max(0, Math.min(1, level));
     },
-    play(name, amount = 1) {
+    play(name, amount = 1, pan = 0) {
       const cue = cueFor(name);
       if (!cue) return false;
       const audio = context();
@@ -45,7 +45,14 @@ export function createListener() {
       gain.gain.setValueAtTime(cue.gain * Math.max(0, amount), now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + cue.dur);
       osc.connect(gain);
-      gain.connect(master);
+      if (pan && audio.createStereoPanner) {
+        const stereo = audio.createStereoPanner();
+        stereo.pan.value = Math.max(-1, Math.min(1, pan));
+        gain.connect(stereo);
+        stereo.connect(master);
+      } else {
+        gain.connect(master);
+      }
       osc.start(now);
       osc.stop(now + cue.dur);
       return true;

@@ -6,7 +6,7 @@ The focused view aims at vsync. A hidden tab paints about once a second. Extra f
 
 ## This pass
 
-A still view that is missing vsync says `recover` and does not claim `native`. Holding the frame, and arriving at the window's pixels, still says `native`.
+While the pace says `recover`, the frame counter turns amber. The buffer stays one resolution. There is no sharper center.
 
 ## Proves
 

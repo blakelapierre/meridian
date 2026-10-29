@@ -6,7 +6,7 @@ Walking into the compound volume offers `atoll-skirmish`. E joins the side you e
 
 ## This pass
 
-Buying smoke raises a gray volume around you for eight seconds. Shots that start inside it hit the smoke.
+If you walked out and you are back inside the volume, E puts the strike body on again. Scrip is not refunded.
 
 ## Proves
 

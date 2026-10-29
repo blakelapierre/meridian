@@ -16,7 +16,7 @@ Peers meet through the lighthouse and a WebRTC data channel. Positions are unrel
 
 ## This pass
 
-Hello carries the catalog hash, the blake3 of the atoll file and the catalog file. A peer who announces a different hash is not linked. A peer who announces none is still accepted, so an older client can meet you. A refusal says `catalog`.
+A pose farther than 80 m is dropped. The catalog hash rule is unchanged.
 
 ## Proves
 

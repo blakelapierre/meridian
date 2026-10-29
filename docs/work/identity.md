@@ -8,7 +8,7 @@ Each client mints an Ed25519 key and signs proposals, shots, walls, lore, and pi
 
 ## This pass
 
-`exportKey` and `importKey`.
+O prints the key as groups of four. Spaces are ignored when you paste `?key=`.
 
 ## Proves
 

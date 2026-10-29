@@ -20,7 +20,7 @@ K toggles the listener. The line says `muted` while it is off. The first cue als
 
 ## This pass
 
-A miss is quieter than a hit. Night, dusk, and dawn lower the whole listener. The nine cues are otherwise the same.
+A shot is panned by the direction it left. Night is still quieter. There is still no music.
 
 ## Proves
 

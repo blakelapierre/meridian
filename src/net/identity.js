@@ -7,6 +7,10 @@ hashes.sha512 = sha512;
 const text = new TextEncoder();
 const textOut = new TextDecoder();
 
+export function keyPhrase(identity) {
+  return exportKey(identity).replace(/(.{4})/g, "$1 ").trim();
+}
+
 export function exportKey(identity) {
   const bytes = new Uint8Array(identity.secret.length + identity.pubkey.length);
   bytes.set(identity.secret, 0);
@@ -15,10 +19,11 @@ export function exportKey(identity) {
 }
 
 export function importKey(hex) {
-  if (!hex || hex.length < 4 || hex.length % 2) return null;
-  const bytes = new Uint8Array(hex.length / 2);
+  const cleaned = String(hex || "").replace(/\s+/g, "");
+  if (!cleaned || cleaned.length < 4 || cleaned.length % 2) return null;
+  const bytes = new Uint8Array(cleaned.length / 2);
   for (let i = 0; i < bytes.length; i++) {
-    const value = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    const value = Number.parseInt(cleaned.slice(i * 2, i * 2 + 2), 16);
     if (Number.isNaN(value)) return null;
     bytes[i] = value;
   }

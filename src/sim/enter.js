@@ -1,4 +1,4 @@
-import { buyOffer, createMatch, joinMatch, setInside, stepMatch } from "./strike.js";
+import { buyOffer, createMatch, joinMatch, rejoin, setInside, stepMatch } from "./strike.js";
 import { roundMaterials } from "./clocks.js";
 
 export const SMOKE = { id: "smoke", scrip: 300 };
@@ -64,6 +64,8 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
     return status(entry, true);
   }
   setInside(entry.match, entry.id, inside);
+  const player = entry.match.roster.get(entry.id);
+  if (use && inside && player.abandoned) rejoin(player);
   let notice = "";
   if (buy && offer) {
     const player = entry.match.roster.get(entry.id);
@@ -74,7 +76,6 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
   }
   const previous = entry.match.phase;
   stepMatch(entry.match, 1);
-  const player = entry.match.roster.get(entry.id);
   const paid = roundMaterials({ abandoned: player.abandoned, phase: entry.match.phase, previous });
   if (paid) player.beach.metal += paid;
   yard.metal = player.beach.metal;

@@ -12,7 +12,7 @@ import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPlaceWall, trySalvage, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPlacePost, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -28,10 +28,11 @@ import {
   stepDown,
   tryFinishFin,
   tryFinishHearth,
+  fallHurt,
 } from "../sim/hearth.js";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
-import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
+import { createSkills, claimSpecialty, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
@@ -45,13 +46,14 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { createIdentity, exportKey, importKey } from "../net/identity.js";
+import { createIdentity, exportKey, importKey, keyPhrase } from "../net/identity.js";
 import { firstCrate } from "../sim/culture.js";
-import { createPools, notePool } from "../sim/pool.js";
-import { deedVolume, mayEdit } from "../sim/deed.js";
+import { createPools, drainPool, notePool } from "../sim/pool.js";
+import { deedVolume, grantKey, mayEdit } from "../sim/deed.js";
 import { bondOpen, hearBond, offerBond } from "../sim/fellowship.js";
 import { boltHit, startBolt, stepBolt } from "../sim/bolt.js";
-import { cellId } from "../sim/cell.js";
+import { cellId, inInterest } from "../sim/cell.js";
+import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
 import { radialDown, shellDrop } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
@@ -115,6 +117,9 @@ const culture = firstCrate(params.get("culture") || "holds");
 const pools = createPools();
 const bonds = new Map();
 const bolts = [];
+const deedKeys = new Set();
+const vein = createVein([8, -148]);
+const WIND = [0.6, 0.1, 0];
 const terrain = createTerrain({
   identity,
   leader: params.get("offer") === "1" || !peer,
@@ -170,13 +175,13 @@ const notes = createNotes();
 let stepAt = null;
 const heardAt = new Map();
 
-function hear(name, amount = 1) {
+function hear(name, amount = 1, pan = 0) {
   if (quiet || !name) return;
   const now = performance.now();
   const wait = name === "step" ? 160 : name === "hurt" ? 700 : 40;
   if (now - (heardAt.get(name) || 0) < wait) return;
   heardAt.set(name, now);
-  listener.play(name, amount);
+  listener.play(name, amount, pan);
 }
 let stillPose = null;
 let stillFor = 0;
@@ -313,7 +318,28 @@ addEventListener("keydown", (event) => {
     offerBond(bonds, selection.id);
     report = bonds.get(selection.id) === "both" ? "fellowship" : "offered";
   }
-  if (event.code === "KeyO" && !event.repeat) report = exportKey(identity);
+  if (event.code === "KeyO" && !event.repeat) report = keyPhrase(identity);
+  if (event.code === "KeyG" && !event.repeat && yard.stone > 0) {
+    yard.stone -= 1;
+    const eye = [player.position[0], player.position[1], player.position[2] + 1.4];
+    bolts.push(startBolt(eye, lookDirection(yaw, pitch), 18));
+    hear("shot", 0.4);
+    report = "thrown";
+  }
+  if (event.code === "KeyP" && !event.repeat && slot === "hammer") {
+    const mark = refreshAim(input());
+    const placed = tryPlacePost(yard, mark.cell);
+    report = placed.ok ? "post" : placed.reason;
+  }
+  if (event.code === "KeyN" && !event.repeat && notes.length) {
+    const at = [Math.round(player.position[0] / 0.5), Math.round(player.position[1] / 0.5)];
+    yard.pieces.push({ id: "slip", at, anchors: true, text: notes[notes.length - 1].line });
+    report = "slip";
+  }
+  if (event.code === "KeyH" && !event.repeat && selection?.kind === "player" && yard.bound) {
+    grantKey(deedKeys, selection.id);
+    report = "key";
+  }
   if (event.code === "KeyK" && !event.repeat) listener.toggle();
   if (event.code === "Space") event.preventDefault();
 });
@@ -875,6 +901,8 @@ function publish() {
   const friendNote = selection?.kind === "player" && friends.has(selection.id)
     ? ` · ${friendTier(friends.get(selection.id))} ${friends.get(selection.id)}`
     : "";
+  const withYou = [...bonds.entries()].filter(([, state]) => state === "both").map(([id]) => id);
+  const bondNote = withYou.length ? ` · with ${withYou.join(" ")}` : "";
   const pace = canvas.dataset.pace || "vsync";
   const rate = canvas.dataset.fps || "0";
   const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
@@ -894,7 +922,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -1008,7 +1036,7 @@ function fire(sample) {
     bonds.delete(selection.id);
   }
   if (!shot.hitbox) bolts.push(startBolt(eye, shot.dir));
-  hear("shot", shot.hitbox ? 1 : 0.35);
+  hear("shot", shot.hitbox ? 1 : 0.35, Math.max(-1, Math.min(1, shot.dir[0])));
 }
 
 function ownKeys() {
@@ -1184,6 +1212,7 @@ async function openLink(to, offer, role) {
   channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data), to);
   channels.snap.onmessage = (event) => {
     const pose = acceptPosition(poses.get(to) || null, new Uint8Array(event.data));
+    if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]))) return;
     poses.set(to, pose);
     if (to === followId) followed = pose;
   };
@@ -1357,7 +1386,7 @@ if (params.get("still") !== "1") {
         if (wreck >= 0) yard.pieces.splice(wreck, 1);
       }
       for (let bolt = bolts.length - 1; bolt >= 0; bolt -= 1) {
-        stepBolt(bolts[bolt], 1 / 30);
+        stepBolt(bolts[bolt], 1 / 30, 9.81, WIND);
         const hit = boltHit(bolts[bolt], wreckAt);
         if (hit && dummy.health > 0) applyDummyHit(dummy, "chest");
         if (hit || bolts[bolt].age > 2 || bolts[bolt].position[2] < -1) bolts.splice(bolt, 1);
@@ -1367,7 +1396,7 @@ if (params.get("still") !== "1") {
       terrain.setDeed(yard.bound ? {
         allow(x, y, proposer) {
           const who = proposer instanceof Uint8Array ? pubkeyHex(proposer) : "";
-          return mayEdit(deedVolume(yard.bound, holder), x, y, who);
+          return mayEdit(deedVolume(yard.bound, holder), x, y, who, deedKeys);
         },
       } : null);
       if (cooldown > 0) cooldown -= 1;
@@ -1463,12 +1492,24 @@ if (params.get("still") !== "1") {
         raising = null;
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
-          terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush, cell: cellId(player.position[1]) });
-          const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
-          notePool(pools, { x: player.position[0], y: player.position[1], floor });
-          hear(brush === "fill" ? "fill" : "dig");
-          grantUse(skills, "mining", { tick, gap: 30 });
-          writeNote(notes, skills, brush === "fill" ? "fill" : "dig");
+          if (brush === "fill" && (yard.spoil || 0) < 1) {
+            report = "spoil";
+          } else {
+            terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush, cell: cellId(player.position[1]) });
+            const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
+            if (brush === "fill") {
+              yard.spoil = Math.max(0, (yard.spoil || 0) - 1);
+              drainPool(pools, { x: player.position[0], y: player.position[1], floor });
+            } else if (brush === "dig") {
+              yard.spoil = (yard.spoil || 0) + 1;
+              notePool(pools, { x: player.position[0], y: player.position[1], floor });
+              const found = tapVein(vein, player.position[0], player.position[1]);
+              if (found) yard.metal += found;
+            }
+            hear(brush === "fill" ? "fill" : "dig");
+            grantUse(skills, "mining", { tick, gap: 30 });
+            writeNote(notes, skills, brush === "fill" ? "fill" : "dig");
+          }
         } else if (!raising) {
           work = null;
         }
@@ -1478,6 +1519,10 @@ if (params.get("still") !== "1") {
       const down = radialDown(player.position[0], player.position[1], player.position[2]);
       world.gravity = [down[0] * 9.81, down[1] * 9.81, down[2] * 9.81];
       world.drop = shellDrop(player.position[0], player.position[1]);
+      if (pools.some((pool) => Math.hypot(pool.x - player.position[0], pool.y - player.position[1]) < 0.7)) {
+        world.gravity[2] += 14;
+      }
+      const falling = player.velocity[2];
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, sample, jump, skills.jump.value);
@@ -1531,6 +1576,8 @@ if (params.get("still") !== "1") {
         player.position[2] = floor;
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
+      if (falling < -9 && player.position[2] <= 0.05) vitals.integrity = fallHurt(vitals.integrity, falling);
+      claimSpecialty(skills);
       const bag = skillBag();
       noteSurvey(survey, {
         x: player.position[0],
@@ -1572,9 +1619,9 @@ if (params.get("still") !== "1") {
     if (objectOnce) cycle(objectOnce, "object");
     if (turnEdge && slot === "hammer") {
       const mark = refreshAim(sample);
-      if (mark.inRange && mark.kind === "wall") {
-        const turned = turnWall(yard, mark.cell);
-        if (turned.ok) {
+      if (mark.inRange && (mark.kind === "wall" || mark.kind === "fin")) {
+        const turned = mark.kind === "fin" ? turnFin(yard, mark.cell) : turnWall(yard, mark.cell);
+        if (turned.ok && mark.kind === "wall") {
           sendOps(encodeWall(identity, {
             nonce: Math.floor(tick),
             cell: mark.cell,
@@ -1626,6 +1673,8 @@ if (params.get("still") !== "1") {
       paint(sample);
       pacer.note(performance.now() - started, active, still);
       canvas.dataset.fps = String(fps.paint(now));
+      const fpsNode = document.querySelector("#fps");
+      if (fpsNode) fpsNode.style.color = String(canvas.dataset.pace || "").includes("recover") ? "#fc8" : "#9f9";
     }
     flush();
     } catch (error) {

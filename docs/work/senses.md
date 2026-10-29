@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints sand, pits, stone, and wood. The
 
 ## This pass
 
-Ground you were told is stamped in a cooler tint than ground you saw. Your own survey colors are unchanged.
+A dashed ring on the chart is the sense radius. Told ground stays the cooler tint.
 
 ## Proves
 

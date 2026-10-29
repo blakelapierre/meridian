@@ -8,7 +8,7 @@ A bound hearth claims a 6 m radius. The binder may edit it. A stranger's certifi
 
 ## This pass
 
-`deedVolume` and `mayEdit`. The terrain log drops a foreign edit whose aim is inside the claim.
+H, while you have a hearth and a person targeted, hands them a key. A key may edit the claim. The holder still can.
 
 ## Proves
 

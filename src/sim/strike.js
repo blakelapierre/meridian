@@ -240,3 +240,13 @@ function advancePhase(match) {
     }
   }
 }
+
+export function rejoin(player) {
+  if (!player?.abandoned) return false;
+  player.abandoned = false;
+  player.alive = true;
+  player.body = "strike";
+  player.health = 100;
+  player.outside = 0;
+  return true;
+}

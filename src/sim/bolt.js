@@ -9,7 +9,11 @@ export function startBolt(eye, dir, speed = 80) {
   };
 }
 
-export function stepBolt(bolt, dt, gravity = 9.81) {
+export function stepBolt(bolt, dt, gravity = 9.81, wind = null) {
+  if (wind) {
+    bolt.velocity[0] += wind[0] * dt;
+    bolt.velocity[1] += (wind[1] || 0) * dt;
+  }
   bolt.velocity[2] -= gravity * dt;
   bolt.position[0] += bolt.velocity[0] * dt;
   bolt.position[1] += bolt.velocity[1] * dt;

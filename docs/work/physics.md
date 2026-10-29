@@ -8,7 +8,7 @@ The beach body is a capsule with weight, a stop window, jump, and crouch. Gravit
 
 ## This pass
 
-`separate`. Debris, vehicles, buoyancy, wind, and blast are not running.
+Standing in a pool adds lift. Bodies still cannot overlap.
 
 ## Proves
 

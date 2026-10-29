@@ -6,7 +6,7 @@ The crate starts as 30 metal, 8 stone, and one solar fin. The footing anchors pi
 
 ## This pass
 
-A fallen wall becomes a crate you can see. Right-clicking the crate returns 3 metal, which is the half that had been spoil. The crate does not hold the wall up.
+P with the hammer places a post for 2 metal, if the cell has support and is empty. A fallen wall is still a crate.
 
 ## Proves
 

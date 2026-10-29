@@ -8,7 +8,7 @@ Friendliness is still a score. Y offers a fellowship to the person you have targ
 
 ## This pass
 
-`offerBond`, `hearBond`, `bondOpen`. No patron.
+People who have both accepted are named on the line, after `with`. There is still no patron.
 
 ## Proves
 

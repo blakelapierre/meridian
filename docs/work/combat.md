@@ -8,7 +8,7 @@ The line is a hitscan against the dummy when it connects. A miss becomes a bolt.
 
 ## This pass
 
-`startBolt` and `stepBolt`. A miss leaves the hitscan and flies.
+Bolts take a small wind from the west. A miss still flies and drops.
 
 ## Proves
 

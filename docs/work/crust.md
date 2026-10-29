@@ -6,7 +6,7 @@ The beach is a crust field. A dig writes air, sample `500`, inside the brush. Th
 
 ## This pass
 
-Smooth is a third edit mode. It moves a voxel toward zero, at most 500 mm, and refuses a change that would go farther or away from the surface. It does not spend spoil.
+A dig adds one spoil. A fill spends one and refuses when you are carrying none. Smooth does not spend it.
 
 ## Proves
 

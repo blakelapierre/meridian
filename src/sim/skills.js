@@ -26,3 +26,17 @@ export function grantUse(skills, name, { success = true, tick = 0, gap = 0 } = {
   if (gap > 0) skill.ready = tick + gap;
   return applied;
 }
+
+export function claimSpecialty(skills, cap = 2) {
+  const marked = SKILL_NAMES.filter((name) => skills[name]?.specialized).length;
+  if (marked >= cap) return null;
+  let best = null;
+  for (const name of SKILL_NAMES) {
+    const skill = skills[name];
+    if (!skill || skill.specialized || skill.value < 40) continue;
+    if (!best || skill.value > skills[best].value) best = name;
+  }
+  if (!best) return null;
+  skills[best].specialized = true;
+  return best;
+}

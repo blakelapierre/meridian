@@ -140,11 +140,28 @@ export function adoptWall(yard, cell, integrity = 80, yaw = 0) {
   return { ok: true, metal: yard.metal };
 }
 
+export function tryPlacePost(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if (yard.metal < 2) return { ok: false, reason: "metal" };
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell))) return { ok: false, reason: "occupied" };
+  if (!support(yard.pieces, cell)) return { ok: false, reason: "support" };
+  yard.metal -= 2;
+  yard.pieces.push({ id: "post", at: cell.slice(), anchors: false });
+  return { ok: true, metal: yard.metal };
+}
+
 export function turnWall(yard, cell) {
   const wall = yard.pieces.find((piece) => piece.id === "wall" && sameCell(piece.at, cell));
   if (!wall) return { ok: false, reason: "none" };
   wall.yaw = wall.yaw ? 0 : 1;
   return { ok: true, yaw: wall.yaw };
+}
+
+export function turnFin(yard, cell) {
+  const fin = yard.pieces.find((piece) => piece.id === "fin" && sameCell(piece.at, cell));
+  if (!fin) return { ok: false, reason: "none" };
+  fin.yaw = fin.yaw ? 0 : 1;
+  return { ok: true, yaw: fin.yaw };
 }
 
 export function pieceBoxes(pieces) {
@@ -172,12 +189,34 @@ export function pieceBoxes(pieces) {
       };
     }
     if (piece.id === "fin") {
+      const turned = piece.yaw ? 0.45 : 0.05;
+      const flat = piece.yaw ? 0.05 : 0.45;
       return {
         type: "box",
-        min: [x - 0.05, y - 0.45, 0.7],
-        max: [x + 0.05, y + 0.45, 1.8],
+        min: [x - turned, y - flat, 0.7],
+        max: [x + turned, y + flat, 1.8],
         color: [0.25, 0.32, 0.38, 1],
         reflectivity: 0.4,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "post") {
+      return {
+        type: "box",
+        min: [x - 0.08, y - 0.08, 0],
+        max: [x + 0.08, y + 0.08, 1.2],
+        color: WOOD,
+        reflectivity: 0.1,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "slip") {
+      return {
+        type: "box",
+        min: [x - 0.12, y - 0.08, 0.02],
+        max: [x + 0.12, y + 0.08, 0.06],
+        color: [0.86, 0.82, 0.7, 1],
+        reflectivity: 0.05,
         piece: piece.id,
       };
     }

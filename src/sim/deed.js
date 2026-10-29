@@ -10,7 +10,14 @@ export function insideDeed(deed, x, y) {
   return Math.hypot(dx, dy) <= deed.radius;
 }
 
-export function mayEdit(deed, x, y, who) {
+export function grantKey(keys, id) {
+  if (!id) return keys;
+  keys.add(id);
+  return keys;
+}
+
+export function mayEdit(deed, x, y, who, keys = null) {
   if (!insideDeed(deed, x, y)) return true;
-  return who === deed.holder;
+  if (who === deed.holder) return true;
+  return Boolean(keys && keys.has(who));
 }
