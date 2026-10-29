@@ -1,0 +1,200 @@
+{
+  "id": "atoll",
+  "frame": "tangent-cm-z-up",
+  "boxConvention": "half-open",
+  "worldSeed": "atoll-slice-1",
+  "cellId": "atoll-0",
+  "landRadiusCm": 25600,
+  "contract": {
+    "id": "atoll-skirmish",
+    "roundsToWin": 7,
+    "roundSec": 105,
+    "buySec": 15,
+    "gapSec": 6,
+    "outerSec": 1500,
+    "teamCap": 5,
+    "friendlyFire": false,
+    "siteId": "atoll"
+  },
+  "site": {
+    "id": "atoll",
+    "frozen": true,
+    "volume": {
+      "min": { "x": -2400, "y": -11000, "z": 0 },
+      "max": { "x": 2400, "y": 11000, "z": 800 }
+    },
+    "insertions": [
+      {
+        "id": "south",
+        "volume": {
+          "min": { "x": -700, "y": -10400, "z": 0 },
+          "max": { "x": 700, "y": -9200, "z": 300 }
+        }
+      },
+      {
+        "id": "north",
+        "volume": {
+          "min": { "x": -700, "y": 9200, "z": 0 },
+          "max": { "x": 700, "y": 10400, "z": 300 }
+        }
+      }
+    ],
+    "coreVolume": {
+      "min": { "x": -150, "y": -150, "z": 0 },
+      "max": { "x": 150, "y": 150, "z": 200 }
+    },
+    "propIds": [
+      "core.wall.south.west",
+      "core.wall.south.east",
+      "core.wall.north.west",
+      "core.wall.north.east",
+      "core.wall.west.south",
+      "core.wall.west.north",
+      "core.wall.east",
+      "door.south",
+      "door.north",
+      "door.west",
+      "cover.south",
+      "cover.north"
+    ]
+  },
+  "props": [
+    {
+      "id": "core.wall.south.west",
+      "material": "wood",
+      "box": { "min": { "x": -800, "y": -800, "z": 0 }, "max": { "x": -150, "y": -780, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    },
+    {
+      "id": "core.wall.south.east",
+      "material": "wood",
+      "box": { "min": { "x": 150, "y": -800, "z": 0 }, "max": { "x": 800, "y": -780, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    },
+    {
+      "id": "core.wall.north.west",
+      "material": "wood",
+      "box": { "min": { "x": -800, "y": 780, "z": 0 }, "max": { "x": -150, "y": 800, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    },
+    {
+      "id": "core.wall.north.east",
+      "material": "wood",
+      "box": { "min": { "x": 150, "y": 780, "z": 0 }, "max": { "x": 800, "y": 800, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    },
+    {
+      "id": "core.wall.west.south",
+      "material": "wood",
+      "box": { "min": { "x": -800, "y": -800, "z": 0 }, "max": { "x": -780, "y": -150, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    },
+    {
+      "id": "core.wall.west.north",
+      "material": "wood",
+      "box": { "min": { "x": -800, "y": 150, "z": 0 }, "max": { "x": -780, "y": 800, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    },
+    {
+      "id": "core.wall.east",
+      "material": "wood",
+      "box": { "min": { "x": 780, "y": -800, "z": 0 }, "max": { "x": 800, "y": 800, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    },
+    {
+      "id": "door.south",
+      "material": "wood",
+      "box": { "min": { "x": -150, "y": -800, "z": 0 }, "max": { "x": 150, "y": -780, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true,
+      "chargeable": true
+    },
+    {
+      "id": "door.north",
+      "material": "wood",
+      "box": { "min": { "x": -150, "y": 780, "z": 0 }, "max": { "x": 150, "y": 800, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true,
+      "chargeable": true
+    },
+    {
+      "id": "door.west",
+      "material": "wood",
+      "box": { "min": { "x": -800, "y": -150, "z": 0 }, "max": { "x": -780, "y": 150, "z": 300 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true,
+      "chargeable": true
+    },
+    {
+      "id": "cover.south",
+      "material": "wood",
+      "box": { "min": { "x": -200, "y": -5020, "z": 0 }, "max": { "x": 200, "y": -5000, "z": 250 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    },
+    {
+      "id": "cover.north",
+      "material": "wood",
+      "box": { "min": { "x": -200, "y": 5000, "z": 0 }, "max": { "x": 200, "y": 5020, "z": 250 } },
+      "blocksMove": true,
+      "blocksVision": true,
+      "resetsWithRound": true
+    }
+  ],
+  "placements": {
+    "spawnFeet": { "x": 0, "y": -15000, "z": 0 },
+    "crate": {
+      "x": 500,
+      "y": -15000,
+      "z": 0,
+      "contents": [
+        { "item": "bit", "n": 1 },
+        { "item": "metal", "n": 30 },
+        { "item": "stone", "n": 8 },
+        { "item": "fiber", "n": 4 },
+        { "item": "ration", "n": 2 },
+        { "item": "piece.solar-fin", "n": 1 },
+        { "item": "paper.atoll", "n": 1 }
+      ]
+    },
+    "footing": { "x": 0, "y": -14000, "z": 0, "piece": "footing" },
+    "accuracyPad": { "x": 0, "y": -12500, "z": 0 },
+    "dummy": {
+      "x": 1000,
+      "y": -12500,
+      "z": 0,
+      "strikeHealth": 100,
+      "resetSec": 5,
+      "votes": false
+    }
+  },
+  "metrics": {
+    "southInsertionCenterToSouthDoorCm": 9000,
+    "dummyFromAccuracyPadCm": 1000,
+    "spawnSouthOfStrikeVolumeCm": 4000
+  },
+  "paper": [
+    "The compound is north.",
+    "The bit digs.",
+    "A hearth binds.",
+    "The fin drinks sun."
+  ]
+}
