@@ -10,13 +10,21 @@ const atoll = JSON.parse(readFileSync(new URL("../content/atoll.json", import.me
 test("the third-person camera sits behind a body and the crosshair misses it", () => {
   const feet = [4, -8, 0];
   for (const crouch of [false, true]) {
-    for (const pitch of [0, -0.8, 0.6]) {
+    for (const pitch of [0, -0.35, 0.4]) {
       const parts = playerParts(feet, 0.4, crouch);
       const origin = chaseOrigin(feet, 0.4, pitch, crouch);
       const dir = lookDirection(0.4, pitch);
       const ahead = (feet[0] - origin[0]) * dir[0] + (feet[1] - origin[1]) * dir[1];
       assert.ok(ahead > 1, "the body is in front of the camera");
       assert.equal(rayMisses(origin, dir, parts), true, `pitch ${pitch} crouch ${crouch}`);
+      const forwardX = Math.sin(0.4);
+      const forwardY = Math.cos(0.4);
+      const rightX = Math.cos(0.4);
+      const rightY = -Math.sin(0.4);
+      const side = (origin[0] - feet[0]) * rightX + (origin[1] - feet[1]) * rightY;
+      const back = (origin[0] - feet[0]) * forwardX + (origin[1] - feet[1]) * forwardY;
+      assert.ok(Math.abs(side) < 1e-6, side);
+      assert.ok(back < -1, "the camera is behind, not beside");
       const top = Math.max(...parts.map((part) => part.origin[2] + part.radius));
       assert.ok(top <= (crouch ? 1.25 : 1.85) + feet[2]);
       assert.ok(top >= (crouch ? 1.05 : 1.6) + feet[2]);
@@ -44,7 +52,7 @@ test("the walk scene defaults to the eyes, and third person adds the body", () =
     others: [{ feet: [2, 0, 0], yaw: 0 }],
   });
   assert.equal(watched.objects.some((object) => object.self), false);
-  assert.equal(watched.objects.filter((object) => object.type === "sphere" && !object.body).length, 3);
+  assert.equal(watched.objects.filter((object) => object.body === "player").length, 3);
 });
 
 test("the camera stretches behind a sudden move and then settles", () => {

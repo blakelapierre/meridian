@@ -1,15 +1,15 @@
 import { lookDirection } from "./hands.js";
 
 export const CHASE = 3.4;
-export const SHOULDER = 0.72;
-export const RISE = 0.42;
+export const SHOULDER = 0;
+export const RISE = 0.55;
 
 const CLOTH = [0.2, 0.34, 0.58, 1];
 const OTHER = [0.55, 0.42, 0.22, 1];
 const SKIN = [0.76, 0.58, 0.44, 1];
 
 function sphere(x, y, z, radius, color, self) {
-  return { type: "sphere", origin: [x, y, z], radius, color, reflectivity: 0.04, self };
+  return { type: "sphere", origin: [x, y, z], radius, color, reflectivity: 0.04, self, body: self ? "self" : "player" };
 }
 
 export function playerParts(feet, yaw, crouch = false, { self = true, color = CLOTH } = {}) {
