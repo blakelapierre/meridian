@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Meridian archive</title>
+    <style>
+      body { margin: 32px auto; max-width: 40rem; background: #111; color: #eee; font: 16px/1.45 sans-serif; }
+      button { margin: 0 8px 8px 0; }
+      code, pre { color: #fd8; }
+      pre { white-space: pre-wrap; word-break: break-all; }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "@noble/ed25519": "/node_modules/@noble/ed25519/index.js",
+          "@noble/hashes/sha2.js": "/node_modules/@noble/hashes/sha2.js",
+          "@noble/hashes/blake3.js": "/node_modules/@noble/hashes/blake3.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Archive</h1>
+    <p>This process has no body and draws no world. Leave it open. It votes on terrain the players propose, and it keeps those ops so a later client can agree the same holes.</p>
+    <p>Keep is the score. Thirty keep offers one crate: 2 metal and 1 fiber, once per thirty keep, to the player key a quorum binds to this receipt. The suggested bounty is $0.02 a keep, capped at $40 a quarter. This page does not pay it and does not mint the metal. The rules are in <a href="/docs/keepers.md">the keeper note</a>.</p>
+    <p id="status">starting</p>
+    <p>
+      <button id="claim" type="button">Claim crate</button>
+      <button id="receipt" type="button">Copy receipt</button>
+      <a href="/">Checks</a>
+    </p>
+    <p id="note"></p>
+    <pre id="out"></pre>
+    <script type="module" src="./archive.js"></script>
+  </body>
+</html>

@@ -22,6 +22,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const signalPort = Number(process.env.SIGNAL_PORT || 8787);
   startDev(root, { httpPort, signalPort }).then(({ site, lighthouse }) => {
     console.log(`${site.url}/`);
+    console.log(`${site.url}/tools/archive/`);
     console.log(lighthouse.url);
     console.log("press q to stop");
     watchQuit();
