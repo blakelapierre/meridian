@@ -201,7 +201,7 @@ export function mapMarks({ self, skill = 0, others = [], target = null, objects 
         id: other.id,
         point,
         color: other.color,
-        name: ability.names ? other.id : "",
+        name: ability.names ? (other.label || other.id) : "",
       });
     }
   }

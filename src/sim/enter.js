@@ -74,5 +74,6 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
   stepMatch(entry.match, 1);
   const player = entry.match.roster.get(entry.id);
   yard.metal = player.beach.metal;
+  if (player.abandoned && !notice) notice = "beach";
   return status(entry, inside, notice);
 }

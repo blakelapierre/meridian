@@ -76,8 +76,7 @@ export function runSpeed(skill = 0) {
   return 6.6 * (1 + 0.35 * trained / 140);
 }
 
-export function wishSpeed(pool, { crouch = false, sprint = false, run = 0 } = {}) {
-  if (crouch) return 2.2;
-  if (sprint && !pool.locked && pool.value > 0) return runSpeed(run);
-  return 4.4;
+export function wishSpeed(pool, { crouch = false, sprint = false, run = 0, limp = false } = {}) {
+  const base = crouch ? 2.2 : sprint && !pool.locked && pool.value > 0 ? runSpeed(run) : 4.4;
+  return limp ? base * 0.6 : base;
 }

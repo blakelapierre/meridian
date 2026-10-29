@@ -78,9 +78,9 @@ export function createTerrain({ identity, leader }) {
     return adopted;
   }
 
-  function dig(eye, aim, { peer }) {
+  function dig(eye, aim, { peer, mode = "dig" }) {
     const saved = new Map(log.crust.overrides);
-    const writes = brushWrites(log.crust, { eye, aim, ticks: 1 });
+    const writes = brushWrites(log.crust, { eye, aim, ticks: 1, mode });
     if (!writes.length) return;
     const chunk = chunkOf(writes[0]);
     const budget = log.crust.budgetCm3;
@@ -98,7 +98,7 @@ export function createTerrain({ identity, leader }) {
         aim,
         chunk,
         before,
-        mode: "dig",
+        mode,
         writes,
       }),
     });

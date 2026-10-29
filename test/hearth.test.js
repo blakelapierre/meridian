@@ -4,15 +4,17 @@ import { readFileSync } from "node:fs";
 import { createIdentity } from "../src/net/identity.js";
 import { acceptPiece, encodePiece } from "../src/net/pieces.js";
 import { createYard, footingCell } from "../src/sim/build.js";
-import { DAY_TICKS } from "../src/sim/sun.js";
+import { DAY_TICKS, dayWord } from "../src/sim/sun.js";
 import {
   adoptPiece,
   bindHearth,
   bruise,
   clubHit,
+  coolPain,
   craftNeed,
   createVitals,
   finOutput,
+  limpFactor,
   recallPoint,
   stepDown,
   tryFinishFin,
@@ -40,6 +42,15 @@ test("a hearth is crafted from the crate, bound, and recalls a bruised body", ()
   bruise(vitals);
   assert.equal(vitals.integrity, 40);
   assert.equal(vitals.blood, 50);
+  assert.equal(vitals.legs, 70);
+  assert.equal(limpFactor(vitals), 1);
+  vitals.legs = 40;
+  assert.equal(limpFactor(vitals), 0.6);
+  vitals.pain = 40;
+  coolPain(vitals, 1);
+  assert.equal(vitals.pain, 35);
+  assert.equal(dayWord(DAY_TICKS / 4), "noon");
+  assert.equal(dayWord(0), "low");
 });
 
 test("the solar fin spends metal and makes more flux at noon", () => {

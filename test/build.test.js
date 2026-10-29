@@ -78,6 +78,7 @@ test("salvage returns the metal and a wall that lost its footing falls", () => {
   tryPlaceWall(yard, further);
   assert.equal(trySalvage(yard, next).ok, true);
   assert.equal(yard.metal, 24);
+  assert.equal(yard.spoil, 3);
   assert.equal(yard.pieces.some((piece) => piece.id === "wall"), false);
   const witness = createYard(atoll.placements.footing);
   tryPlaceWall(witness, next);

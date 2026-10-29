@@ -1,0 +1,27 @@
+# Wire
+
+## In the build
+
+Peers meet through the lighthouse and a WebRTC data channel. Positions are unreliable. Ops are reliable. The kinds in use:
+
+| Kind | Payload |
+|---|---|
+| 1–4 | Terrain proposal, vote, commit |
+| 7 | Shot |
+| 9 | Wall |
+| 10 | Salvage |
+| 11 | Block |
+| 12 | Lore |
+| 13 | Hearth or fin |
+
+## This pass
+
+A fill travels as a terrain proposal with `mode: fill`. The witness runs the same accept rules as a dig, plus the air-to-solid check. Lore and pieces are unchanged.
+
+## Proves
+
+`test/fill.test.js` for the edit. The frame is the existing terrain proposal.
+
+## Later
+
+A catalog hash on hello. Interest filters. Channels that are not all on one ops socket.
