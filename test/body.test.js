@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SPHERE_BUDGET } from "../src/render/gpu.js";
 import { chaseOrigin, createCameraSpring, playerParts, rayMisses, stepCamera } from "../src/sim/body.js";
 import { lookDirection } from "../src/sim/hands.js";
 import { buildScene } from "../src/render/scene.js";
@@ -61,4 +62,8 @@ test("the camera stretches behind a sudden move and then settles", () => {
   assert.ok(spring.pos[1] < 3, spring.pos[1]);
   for (let frame = 0; frame < 240; frame += 1) stepCamera(spring, [0, 6, 2], 1 / 30);
   assert.ok(Math.abs(spring.pos[1] - 6) < 0.2, spring.pos[1]);
+});
+
+test("the painter can hold the dummy and five bodies", () => {
+  assert.ok(SPHERE_BUDGET >= 1 + 5 * 3);
 });

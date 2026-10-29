@@ -45,7 +45,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     for (const part of playerParts(feet, yaw, crouch, { self: true })) objects.push(part);
   }
   for (const other of others) {
-    for (const part of playerParts(other.feet, other.yaw, !!other.crouch, { self: false, color: OTHER })) objects.push(part);
+    for (const part of playerParts(other.feet, other.yaw, !!other.crouch, { self: false, color: other.color || OTHER })) objects.push(part);
   }
   const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
   const dir = cameraDir || lookDirection(yaw, pitch);
