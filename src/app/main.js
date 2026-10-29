@@ -5,6 +5,9 @@ import { createGpuPainter, fitCanvas } from "../render/gpu.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { stepHands } from "../sim/hands.js";
 import { bitAim } from "../sim/bit.js";
+import { adoptWall, cellOnGround, createYard, tryPlaceWall } from "../sim/build.js";
+import { lookDirection } from "../sim/hands.js";
+import { acceptWall, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { createIdentity } from "../net/identity.js";
 import { createTerrain } from "../net/terrain.js";
@@ -42,8 +45,11 @@ const terrain = createTerrain({
   leader: params.get("offer") === "1" || !peer,
 });
 const dummy = createDummy();
+const yard = createYard(atoll.placements.footing);
 const seenShots = new Set();
+const seenWalls = new Set();
 let slot = params.get("look") === "dummy" ? "line" : "bit";
+let raising = null;
 let yaw = params.get("autobit") === "1" ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : 0);
 let pitch = params.get("autobit") === "1" ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let tick = (72 * 60 * 30) / 4;
@@ -57,7 +63,7 @@ const shotFrames = [];
 addEventListener("keydown", (event) => {
   keys.add(event.code);
   if (event.code === "Digit1") slot = "line";
-  if (event.code === "Digit3") slot = "bit";
+  if (event.code === "Digit3") slot = slot === "bit" ? "hammer" : "bit";
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
@@ -93,7 +99,10 @@ function publish() {
   const ground = voxel === null ? "sand is intact" : `voxel ${voxel} hash ${terrain.hash()}`;
   const body = dummy.health === 0 ? "dummy dead" : `dummy ${dummy.health}`;
   const bit = document.querySelector("#bit");
-  if (bit) bit.textContent = `${slot} · ${report ? `${report} · ` : ""}${body} · ${ground}`;
+  const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
+  if (bit) bit.textContent = `${slot} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground}`;
+  canvas.dataset.walls = String(walls);
+  canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = voxel === null ? "" : String(voxel);
   canvas.dataset.hash = terrain.hash();
   canvas.dataset.dummy = String(dummy.health);
@@ -110,6 +119,7 @@ function paint(sample) {
     tick,
     atoll,
     crust: terrain.log.crust,
+    pieces: yard.pieces,
     width: canvas.width,
     height: canvas.height,
   });
@@ -148,6 +158,7 @@ function fire(sample) {
     tick,
     atoll,
     crust: terrain.log.crust,
+    pieces: yard.pieces,
     width,
     height,
   });
@@ -179,6 +190,15 @@ function fire(sample) {
 }
 
 function onOps(bytes) {
+  if (bytes[0] === 9) {
+    const accepted = acceptWall(bytes);
+    if (!accepted.ok || seenWalls.has(accepted.nonce)) return;
+    const placed = adoptWall(yard, accepted.cell);
+    if (!placed.ok) return;
+    seenWalls.add(accepted.nonce);
+    report = "wall";
+    return;
+  }
   if (bytes[0] !== 7) {
     terrain.receive(bytes);
     return;
@@ -190,6 +210,7 @@ function onOps(bytes) {
     tick,
     atoll,
     crust: terrain.log.crust,
+    pieces: yard.pieces,
     width,
     height,
   });
@@ -270,9 +291,34 @@ if (params.get("still") !== "1") {
         fire(sample);
         shotQueued = false;
         cooldown = 3;
-      } else if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
-        const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
-        terrain.dig(aim.eye, aim.aim, { peer });
+      } else if (slot === "hammer" && trigger) {
+        const eye = [player.position[0], player.position[1], player.position[2] + (sample.crouch ? 1.1 : 1.65)];
+        const cell = cellOnGround(eye, lookDirection(sample.yaw, sample.pitch));
+        if (!raising || !cell || raising.cell[0] !== cell[0] || raising.cell[1] !== cell[1]) {
+          raising = cell ? { cell, ticks: 0 } : null;
+        }
+        if (raising) {
+          raising.ticks += 1;
+          report = `work ${Math.floor(raising.ticks / 30)}s`;
+          if (raising.ticks >= 12 * 30) {
+            const placed = tryPlaceWall(yard, raising.cell);
+            report = placed.ok ? "wall" : placed.reason;
+            if (placed.ok) {
+              const nonce = tick;
+              seenWalls.add(nonce);
+              const frame = encodeWall(identity, { nonce, cell: raising.cell });
+              if (ops && ops.readyState === "open") ops.send(frame);
+              else if (peer) shotFrames.push(frame);
+            }
+            raising = null;
+          }
+        }
+      } else {
+        raising = null;
+        if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
+          const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
+          terrain.dig(aim.eye, aim.aim, { peer });
+        }
       }
       stepHands(world, player, stamina, sample);
       tick += 1;
