@@ -1,0 +1,152 @@
+import { blake3 } from "@noble/hashes/blake3.js";
+
+export const VOXEL_CM = 50;
+export const CHUNK_VOXELS = 64;
+export const CHUNK_CM = VOXEL_CM * CHUNK_VOXELS;
+export const LAND_RADIUS_CM = 25600;
+export const VOXEL_CM3 = 125_000;
+export const DIG_SAMPLE_MM = 500;
+export const AIR_SAMPLE_MM = 500;
+
+export function isqrt(n) {
+  if (n <= 0) return 0;
+  let x = Math.floor(n);
+  let y = Math.floor((x + 1) / 2);
+  while (y < x) {
+    x = y;
+    y = Math.floor((x + Math.floor(n / x)) / 2);
+  }
+  return x;
+}
+
+export function seedSampleMm(cx, cy, cz) {
+  const h2 = cx * cx + cy * cy;
+  const plane = cz * 10;
+  if (h2 > LAND_RADIUS_CM * LAND_RADIUS_CM) {
+    const coast = (isqrt(h2) - LAND_RADIUS_CM) * 10;
+    return Math.min(2000, Math.max(coast, 1));
+  }
+  if (plane > 0) return Math.min(2000, plane);
+  return Math.max(-2000, plane);
+}
+
+function voxelIndex(cm) {
+  return Math.floor(cm / VOXEL_CM);
+}
+
+function centerCm(index) {
+  return index * VOXEL_CM + VOXEL_CM / 2;
+}
+
+export class Crust {
+  constructor(worldSeed = "atoll-slice-1", cellId = "atoll-0") {
+    this.worldSeed = worldSeed;
+    this.cellId = cellId;
+    this.overrides = new Map();
+    this.budgetCm3 = 0;
+  }
+
+  key(i, j, k) {
+    return `${i},${j},${k}`;
+  }
+
+  sampleIndex(i, j, k) {
+    const hit = this.overrides.get(this.key(i, j, k));
+    if (hit !== undefined) return hit;
+    return seedSampleMm(centerCm(i), centerCm(j), centerCm(k));
+  }
+
+  sampleMeters(point) {
+    const i = voxelIndex(point[0] * 100);
+    const j = voxelIndex(point[1] * 100);
+    const k = voxelIndex(point[2] * 100);
+    return this.sampleIndex(i, j, k) / 1000;
+  }
+
+  write(i, j, k, sample) {
+    const seeded = seedSampleMm(centerCm(i), centerCm(j), centerCm(k));
+    const key = this.key(i, j, k);
+    if (sample === seeded) this.overrides.delete(key);
+    else this.overrides.set(key, sample);
+  }
+
+  hash(chunkX, chunkY, chunkZ) {
+    const writes = [];
+    for (const [key, sample] of this.overrides) {
+      const [i, j, k] = key.split(",").map(Number);
+      const cx = Math.floor(i / CHUNK_VOXELS);
+      const cy = Math.floor(j / CHUNK_VOXELS);
+      const cz = Math.floor(k / CHUNK_VOXELS);
+      if (cx !== chunkX || cy !== chunkY || cz !== chunkZ) continue;
+      writes.push({
+        i: i - cx * CHUNK_VOXELS,
+        j: j - cy * CHUNK_VOXELS,
+        k: k - cz * CHUNK_VOXELS,
+        sample,
+      });
+    }
+    writes.sort((a, b) => a.k - b.k || a.j - b.j || a.i - b.i);
+    const seed = Buffer.from(this.worldSeed, "utf8");
+    const cell = Buffer.from(this.cellId, "utf8");
+    const body = Buffer.alloc(16 + writes.length * 8);
+    body.writeInt32LE(chunkX, 0);
+    body.writeInt32LE(chunkY, 4);
+    body.writeInt32LE(chunkZ, 8);
+    body.writeInt32LE(writes.length, 12);
+    writes.forEach((write, index) => {
+      const at = 16 + index * 8;
+      body.writeInt16LE(write.i, at);
+      body.writeInt16LE(write.j, at + 2);
+      body.writeInt16LE(write.k, at + 4);
+      body.writeInt16LE(write.sample, at + 6);
+    });
+    return Buffer.from(blake3(Buffer.concat([seed, Buffer.from([0]), cell, Buffer.from([0]), body])));
+  }
+}
+
+function dist2(a, b) {
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  const dz = a[2] - b[2];
+  return dx * dx + dy * dy + dz * dz;
+}
+
+export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 0 }) {
+  const grant = 6667 + Math.floor((6667 * skill) / 140);
+  crust.budgetCm3 += grant * ticks;
+  const writes = [];
+  const reach2 = 400 * 400;
+  const brush2 = 100 * 100;
+  while (crust.budgetCm3 >= VOXEL_CM3) {
+    let best = null;
+    let bestD = Infinity;
+    const minI = voxelIndex(aim[0] - 100);
+    const maxI = voxelIndex(aim[0] + 100);
+    const minJ = voxelIndex(aim[1] - 100);
+    const maxJ = voxelIndex(aim[1] + 100);
+    const minK = voxelIndex(aim[2] - 100);
+    const maxK = voxelIndex(aim[2] + 100);
+    for (let i = minI; i <= maxI; i++) {
+      for (let j = minJ; j <= maxJ; j++) {
+        for (let k = minK; k <= maxK; k++) {
+          const center = [centerCm(i), centerCm(j), centerCm(k)];
+          if (dist2(center, aim) > brush2 || dist2(center, eye) > reach2) continue;
+          const sample = crust.sampleIndex(i, j, k);
+          if (mode === "dig" && sample > 0) continue;
+          if (mode === "fill" && sample <= 0) continue;
+          const d = dist2(center, aim);
+          if (d < bestD || (d === bestD && best && (i < best.i || (i === best.i && (j < best.j || (j === best.j && k < best.k)))))) {
+            bestD = d;
+            best = { i, j, k, sample };
+          }
+        }
+      }
+    }
+    if (!best) break;
+    crust.budgetCm3 -= VOXEL_CM3;
+    const next = mode === "dig" ? DIG_SAMPLE_MM : -DIG_SAMPLE_MM;
+    crust.write(best.i, best.j, best.k, next);
+    writes.push({ i: best.i, j: best.j, k: best.k, sdf_mm: next });
+  }
+  return writes;
+}
