@@ -4,23 +4,15 @@ From the concept. Creation is a body and a key, not a role. Three starting cultu
 
 ## In the build
 
-Everyone wakes with the same beach kit: a bit, metal, stone, a fin. There is no culture, no neighbor pack, and no way to leave one.
+Everyone wakes in a culture. The default is Holds. `?culture=hosts` starts with more metal and less stone. `?culture=veil` starts with less of both. Skills do not change. You can still walk away with what you are carrying.
 
-## Not in this build
+## This pass
 
-| Culture | Wins by |
-|---|---|
-| Holds | Still being there. Deeds, walls, crops, quality goods |
-| Hosts | Arriving with industry. Crawlers, field factories, wrecks |
-| Veil | Knowing which door matters. Sensors, breaches, contracts, papers |
+`firstCrate`. Holds 20 metal and 12 stone. Hosts 40 and 4. Veil 16 and 4.
 
-Skills rise by use. You may train widely and specialize only a few. Specialization is public to your allegiance and slow to undo. The list named in the concept is marksmanship, close combat, breach, fieldcraft, surgery, building, mining, smithing, fabrication, survey, mapping, command, logistics, signals, husbandry, and run. The beach trains a shorter list.
+## Proves
 
-There is no spellbook. Practices are devices or trained hands, with a cost, a windup, and a tell. Resonance is rare, locational, and not a class. The planet notices when you use it.
-
-## Next when this opens
-
-A new body can be told it woke among Holds, Hosts, or Veil. That choice changes the first crate, not the skills. Leaving is walking away with what you can carry.
+`test/concept.test.js`.
 
 ## Later
 

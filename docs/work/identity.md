@@ -4,17 +4,15 @@ From the concept. A key you hold. Not an account we own.
 
 ## In the build
 
-Each client mints an Ed25519 key and signs proposals, shots, walls, lore, and pieces. The lighthouse learns a peer id, which is a short name for the session (`a`, `surveyor`), not a vouched name. Losing the page loses the key.
+Each client mints an Ed25519 key and signs proposals, shots, walls, lore, and pieces. O prints the key on the line. A new tab can paste it as `?key=`. The same pubkey keeps the bind. The peer id can still change. Losing the page without the paste still loses the key.
 
-## Not in this build
+## This pass
 
-Recovery by a phrase. Names vouched by an allegiance. A new key is always cheap. Reputation does not follow it. Sybils are expected. History is the witness log of structural harm, not a ban list we operate.
+`exportKey` and `importKey`.
 
-Solo offline may show an empty Cairn from the seed. It must not pretend a deed is safe when no archive holds it.
+## Proves
 
-## Next when this opens
-
-The key can be exported and pasted into a new tab. The same pubkey keeps the bind. The peer id can still change.
+`test/concept.test.js`.
 
 ## Later
 

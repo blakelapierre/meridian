@@ -4,19 +4,15 @@ From [concept.md](../concept.md). Working name **Cairn**. One world, no shards, 
 
 ## In the build
 
-The playable ground is the Atoll beach, a flat cell. Down is −Z. The sea is a wall you cannot walk off. The sun moves, but the ground does not curve.
+The playable ground is still the Atoll tangent. Gravity is radial, toward a core 320 km down. The drop of that sphere is computed. At a kilometer it is about a meter and a half. The picture does not yet bend the beach.
 
-## Not in this build
+## This pass
 
-- Radius about 320 km. Horizon about a kilometer on flat ground. A shot does not cross the curve.
-- Gravity toward the core for people, shells, vehicles, and water. Surface weight is Earth-like. Mass is not simulated.
-- Poles are ordinary crust. Coordinates must not tear the mesh there.
-- Far from anyone, geology is a function of the world seed. Only edits persist: digs, fills, buildings, claims, inventories, names, allegiance.
-- A thin orbital edge. Hops are transport. They are visible, expensive, and interceptable. They are not a second map.
+`shellDrop` and `radialDown`. The body is pulled on that vector, and the floor follows the drop. Near the crate the drop is too small to see.
 
-## Next when this opens
+## Proves
 
-One cell on a sphere, big enough to walk until the beach drops over the horizon. The same body, the same crust edits, radial down. Not a globe you can fly around.
+`test/concept.test.js`.
 
 ## Later
 

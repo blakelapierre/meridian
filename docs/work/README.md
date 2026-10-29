@@ -2,9 +2,9 @@
 
 [game.md](../game.md) is the rulebook. [concept.md](../concept.md) is the logline. A note says what the build does now.
 
-Beach notes are live. Each implementation pass rewrites **This pass** on every beach note, then the code is brought up to those sections. A beach note does not describe work that is not in the build.
+Beach notes and concept notes are both live. Each implementation pass rewrites **This pass** on every one of them, then the code is brought up to those sections. A note does not describe work that is not in the build.
 
-Concept notes are the rest of the logline. The prose for the world is in [docs/lore](../lore/README.md). The errands are in [docs/quests](../quests/README.md).
+The prose for the world is in [docs/lore](../lore/README.md). The errands are in [docs/quests](../quests/README.md).
 
 ## Beach
 

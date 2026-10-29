@@ -4,19 +4,15 @@ From the concept. Deeds reserve volume. They are crude law the sim enforces. The
 
 ## In the build
 
-Anyone may dig the beach and place on the footing. There is no claim, no key list, and no upkeep.
+A bound hearth claims a 6 m radius. The binder may edit it. A stranger's certified dig inside it is refused. Upkeep is not charged.
 
-## Not in this build
+## This pass
 
-A deed says who may build, who holds keys, and what the upkeep is. Inside someone else's deed, dig, fill, smooth, and place fail unless your key is allowed. Salvage of your own piece still needs the mask. The holder can always edit.
+`deedVolume` and `mayEdit`. The terrain log drops a foreign edit whose aim is inside the claim.
 
-You take a deed by holding its core through a strike, or by letting the upkeep lapse. Both are legitimate. They attract different enemies.
+## Proves
 
-A town nobody maintains becomes a dungeon someone else will strip. Oxidation, rot, and power loss are the bill.
-
-## Next when this opens
-
-One deed volume around a placed hearth. The binder may edit it. A stranger's dig inside it is refused. Upkeep is not charged yet.
+`test/concept.test.js`.
 
 ## Later
 

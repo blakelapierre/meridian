@@ -13,7 +13,7 @@ export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, pools = [], bolts = [] }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -52,6 +52,26 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     body: "dummy",
     texture: dummyTexture(),
   });
+  for (const pool of pools) {
+    objects.push({
+      type: "box",
+      min: [pool.x - 0.45, pool.y - 0.45, pool.floor + 0.02],
+      max: [pool.x + 0.45, pool.y + 0.45, pool.floor + 0.14],
+      color: [0.2, 0.45, 0.62, 1],
+      reflectivity: 0.35,
+      id: "pool",
+    });
+  }
+  for (const bolt of bolts) {
+    objects.push({
+      type: "sphere",
+      origin: bolt.position,
+      radius: 0.06,
+      color: [0.95, 0.9, 0.4, 1],
+      reflectivity: 0.2,
+      body: "bolt",
+    });
+  }
   if (view === "third" && self) {
     for (const part of playerParts(feet, yaw, crouch, { self: true })) objects.push(part);
   }

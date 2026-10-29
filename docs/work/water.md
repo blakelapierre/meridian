@@ -4,17 +4,15 @@ From the concept. The crust is the only map. Water is part of the crust.
 
 ## In the build
 
-The sea is the edge of the beach. It does not flow. You cannot drain it, and nothing floods.
+The sea is still the edge of the beach. A dug pit whose floor is below −0.2 m holds a pool. The pool sits in that hole. It does not run downhill.
 
-## Not in this build
+## This pass
 
-Water moves on the volumetric shell. Breach a water table and a mine becomes a well, then a grave. Drain a bay and you have a road, and an enemy of everyone who fished it. The sea should reflect the coast you actually changed.
+`notePool`. One sheet of water in a deep dig. Filling the hole does not yet empty it.
 
-Far from you the same data is a cheaper surface. Near you it is a shell you can tunnel.
+## Proves
 
-## Next when this opens
-
-One pool in a dug pit. It sits in the hole. It does not yet run downhill.
+`test/concept.test.js`.
 
 ## Later
 

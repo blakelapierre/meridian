@@ -4,19 +4,15 @@ From the concept. Two stocks. They do not teleport.
 
 ## In the build
 
-Metal is a number on the yard. It pays for walls, the hearth, and the fin. Spoil is half the metal of a wall that lost its footing. Flux is a number on a placed fin while the sun is up. Nothing is hauled. Nothing is reclaimed from a wreck.
+Metal pays for walls, the hearth, and the fin. Spoil is a crate you can see. When the dummy is down, its wreck can be salvaged for 12 metal. It is not a vein and it is not a fabber.
 
-## Not in this build
+## This pass
 
-- Metal comes from veins, from inefficient cracking, and above all from reclaim. Veins deplete. A battlefield is a deposit.
-- Flux comes from sun, wind, combustion, and geothermal rifts. It does not travel for free. Night kills turrets, fabbers, and lights in a known order.
-- Streaming construction exists only on a logistics graph: roads, pipes, cables, radio. Beyond the last road, crates move on trucks, boats, and backs. Cutting a road is often worth more than a duel.
-- Fabbers and hands build the same pieces. A fabber is faster in the open and helpless in a smoked stair. The commander's rig is the strongest builder and a poor front-line body.
-- There is no global auction. Local boards and couriers. A price on the day side and a price on the night side can both be true.
+The wreck piece. Right-click it before the dummy stands back up.
 
-## Next when this opens
+## Proves
 
-A wreck of the dummy, after it is destroyed, can be reclaimed into metal with the hammer. One crate. No fabber. No road.
+The salvage path in `src/sim/build.js`. A pure test is not required for the metal number beyond the crate rules already in `test/build.test.js`.
 
 ## Later
 
