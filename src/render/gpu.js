@@ -103,15 +103,55 @@ bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
   return dot(p.xy, p.xy) <= 256.0 * 256.0;
 }
 
-bool dugHere(vec3 p) {
-  if (uDigs <= 0) return false;
-  ivec2 ij = ivec2(floor(p.xy * 2.0));
-  for (int n = 0; n < 16; n++) {
-    if (n >= uDigs) return false;
-    vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
-    if (abs(dig.x - float(ij.x)) < 0.1 && abs(dig.y - float(ij.y)) < 0.1 && dig.w < 0.0) return true;
+bool cavity(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t, out vec3 p, out vec3 n) {
+  float t0 = 0.0;
+  float t1 = 1.0e30;
+  int enterAxis = 2;
+  int exitAxis = 2;
+  float enterSign = 1.0;
+  float exitSign = 1.0;
+  for (int axis = 0; axis < 3; axis++) {
+    float d = rd[axis];
+    float o = ro[axis];
+    if (abs(d) < 1.0e-8) {
+      if (o < bmin[axis] || o > bmax[axis]) return false;
+      continue;
+    }
+    float ta = (bmin[axis] - o) / d;
+    float tb = (bmax[axis] - o) / d;
+    float sa = -1.0;
+    float sb = 1.0;
+    if (ta > tb) {
+      float swapT = ta;
+      ta = tb;
+      tb = swapT;
+      float swapS = sa;
+      sa = sb;
+      sb = swapS;
+    }
+    if (ta > t0) {
+      t0 = ta;
+      enterAxis = axis;
+      enterSign = sa;
+    }
+    if (tb < t1) {
+      t1 = tb;
+      exitAxis = axis;
+      exitSign = sb;
+    }
+    if (t0 > t1) return false;
   }
-  return false;
+  if (t1 < 0.02) return false;
+  bool throughMouth = t0 > 0.02 && enterAxis == 2 && enterSign > 0.0;
+  bool inside = t0 <= 0.02;
+  if (!throughMouth && !inside) return false;
+  if (exitAxis == 2 && exitSign > 0.0) return false;
+  t = t1;
+  p = ro + rd * t;
+  if (exitAxis == 0) n = vec3(-exitSign, 0.0, 0.0);
+  else if (exitAxis == 1) n = vec3(0.0, -exitSign, 0.0);
+  else n = vec3(0.0, 0.0, -exitSign);
+  return true;
 }
 
 bool boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t) {
@@ -210,13 +250,32 @@ void main() {
     bool found = false;
     float t;
     vec3 p;
-    if (sandPlane(ro, rd, t, p) && t < bestT) {
-      bestT = t;
-      bestP = p;
+    float sandT = 1.0e30;
+    vec3 sandP = ro;
+    bool sand = sandPlane(ro, rd, sandT, sandP);
+    bool openMouth = false;
+    if (uDigs > 0) {
+      ivec2 mouth = ivec2(floor(sandP.xy * 2.0));
+      for (int n = 0; n < 32; n++) {
+        if (n >= uDigs) break;
+        vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
+        if (sand && abs(dig.x - float(mouth.x)) < 0.1 && abs(dig.y - float(mouth.y)) < 0.1) openMouth = true;
+        vec3 bmin = vec3(dig.x * 0.5, dig.y * 0.5, dig.z);
+        vec3 bmax = vec3(bmin.x + 0.5, bmin.y + 0.5, 0.0);
+        if (!cavity(ro, rd, bmin, bmax, t, p, bestN) || t <= 0.02 || t >= bestT) continue;
+        bestT = t;
+        bestP = p;
+        bestRgb = vec3(0.16, 0.13, 0.10);
+        bestRef = 0.04;
+        found = true;
+      }
+    }
+    if (sand && !openMouth && sandT < bestT) {
+      bestT = sandT;
+      bestP = sandP;
       bestN = vec3(0.0, 0.0, 1.0);
-      bool pit = dugHere(p);
-      bestRgb = pit ? vec3(0.16, 0.13, 0.10) : vec3(0.55, 0.48, 0.32);
-      bestRef = pit ? 0.04 : 0.2;
+      bestRgb = vec3(0.55, 0.48, 0.32);
+      bestRef = 0.2;
       found = true;
     }
     for (int i = 0; i < ${MAX_BOXES}; i++) {
@@ -377,14 +436,23 @@ void main() {
           boxColor[at + 3] = object.reflectivity || 0;
           boxes += 1;
         } else if (object.type === "crust" && object.field) {
+          const columns = new Map();
           for (const [key, sample] of object.field.overrides) {
-            if (digs >= MAX_DIGS) break;
+            if (sample <= 0) continue;
             const [i, j, k] = key.split(",").map(Number);
+            const bottom = k * 0.5;
+            const id = `${i},${j}`;
+            const prev = columns.get(id);
+            if (prev === undefined || bottom < prev) columns.set(id, bottom);
+          }
+          for (const [id, bottom] of columns) {
+            if (digs >= MAX_DIGS) break;
+            const [i, j] = id.split(",").map(Number);
             const at = digs * 4;
             digData[at] = i;
             digData[at + 1] = j;
-            digData[at + 2] = k;
-            digData[at + 3] = sample / 1000;
+            digData[at + 2] = bottom;
+            digData[at + 3] = 1;
             digs += 1;
           }
         }

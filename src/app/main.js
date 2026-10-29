@@ -6,6 +6,7 @@ import { createFps } from "../render/fps.js";
 import { createPacer } from "../render/pace.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { DAY_TICKS } from "../sim/sun.js";
+import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
@@ -412,6 +413,11 @@ if (params.get("still") !== "1") {
         }
       }
       stepHands(world, player, stamina, sample);
+      const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
+      if (floor < -0.01 && player.position[2] <= 0.02) {
+        player.position[2] = floor;
+        if (player.velocity[2] < 0) player.velocity[2] = 0;
+      }
       tick += 1;
       bank -= 1 / 30;
     }
