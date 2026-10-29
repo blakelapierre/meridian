@@ -112,7 +112,7 @@ canvas.addEventListener("mousedown", (event) => {
     const saved = trySalvage(yard, mark.cell);
     report = saved.ok ? "salvage" : saved.reason;
     if (!saved.ok) return;
-    const nonce = tick;
+    const nonce = Math.floor(tick);
     const frame = encodeSalvage(identity, { nonce, cell: mark.cell });
     sendOps(frame);
     return;
@@ -272,7 +272,7 @@ function fire(sample) {
     seed: tick,
     objects: scene.objects,
   });
-  const nonce = tick;
+  const nonce = Math.floor(tick);
   seenShots.add(nonce);
   if (!shot.hitbox) {
     report = "miss";
@@ -457,6 +457,7 @@ if (params.get("still") !== "1") {
     useEdge = false;
     buyEdge = false;
     while (bank >= 1 / 30) {
+      try {
       stepDummy(dummy);
       if (cooldown > 0) cooldown -= 1;
       entryState = stepEntry(entry, {
@@ -471,9 +472,9 @@ if (params.get("still") !== "1") {
       buyOnce = false;
       const striking = entryState.body === "strike";
       if (slot === "line" && (trigger || shotQueued) && cooldown === 0) {
-        fire(sample);
         shotQueued = false;
         cooldown = 3;
+        fire(sample);
       } else if (striking && (slot === "hammer" || slot === "bit") && trigger) {
         raising = null;
         work = null;
@@ -496,7 +497,7 @@ if (params.get("still") !== "1") {
             const placed = tryPlaceWall(yard, raising.cell);
             report = placed.ok ? "wall" : placed.reason;
             if (placed.ok) {
-              const nonce = tick;
+              const nonce = Math.floor(tick);
               seenWalls.add(nonce);
               const frame = encodeWall(identity, { nonce, cell: raising.cell });
               sendOps(frame);
@@ -523,7 +524,9 @@ if (params.get("still") !== "1") {
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
       tick += 1;
-      bank -= 1 / 30;
+      } finally {
+        bank -= 1 / 30;
+      }
     }
     publishPose();
     }
