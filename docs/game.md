@@ -519,7 +519,7 @@ Success is defined per skill: a certified hit for marksmanship, a certified edit
 | Smithing | Crafted weapon quality roll ceiling. The roll is `20 + skill * 80/140`, seeded, then clamped to 100 |
 | Fabrication | Personal work rate, §9 |
 | Survey | Vein and mast radius × `1 + skill/140` |
-| Mapping | Sensed-map radius is `16 + skill/140*64` meters. Ground is kept from 4, places from 16, people at 28, objects at 48, names at 70. Mining reads pits. Building and appraisal save places. Eyesight extends ground ahead. Rangefinding keeps a finer coordinate. Unsensed people stay off the map |
+| Mapping | Sensed-map radius is `16 + skill/140*64` meters. Looking paints a persistent geography image; later findings update it. Ground notes from 4, places from 16, people at 28, objects at 48, names at 70. The chart zooms and pans on its own. Unsensed people stay off the map |
 | Command | Table radius, §12. Specialization required to sit as commander |
 | Logistics | Carry mass limits +50% at 140. Link upkeep −25% at 140 |
 | Signals | Aggregate subscribe range. Does not reveal unsensed bodies |
