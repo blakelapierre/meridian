@@ -61,7 +61,12 @@ function features(box) {
 }
 
 function place(url, name, box) {
-  const win = window.open(url, name, features(box));
+  let win = null;
+  try {
+    win = window.open(url, name, features(box));
+  } catch {
+    return null;
+  }
   if (!win) return null;
   try {
     win.resizeTo(box.width, box.height);
@@ -72,33 +77,55 @@ function place(url, name, box) {
   return win;
 }
 
-export function openChecks(href, origin, screenBox) {
+const names = ["meridian-primary", "meridian-second", "meridian-follow"];
+
+export function openChecks(href, origin, screenBox, already = []) {
   const urls = trio(href, origin);
   const boxes = tiles(screenBox.width, screenBox.height, screenBox.left, screenBox.top);
-  const names = ["meridian-primary", "meridian-second", "meridian-follow"];
-  return urls.map((url, index) => place(url, names[index], boxes[index]));
+  return urls.map((url, index) => {
+    if (already[index] && !already[index].closed) return already[index];
+    return place(url, names[index], boxes[index]);
+  });
 }
 
 if (typeof document !== "undefined") {
   let watch = 0;
-  const onClick = (event) => {
-    if (!event.isTrusted) return;
-    const link = event.target.closest?.("a[href^='/tools/']");
-    if (!link) return;
-    event.preventDefault();
-    const opened = openChecks(link.getAttribute("href"), location.origin, {
-      width: screen.availWidth,
-      height: screen.availHeight,
-      left: screen.availLeft || 0,
-      top: screen.availTop || 0,
-    });
-    const note = document.querySelector("#windows");
-    const openedCount = opened.filter(Boolean).length;
-    if (note) {
-      note.textContent = openedCount === 3
-        ? "Three windows are open. The wide one is the primary."
-        : `The browser opened ${openedCount} of 3 windows. Allow popups for this site, then click the check again.`;
+  let opened = [null, null, null];
+  let armedHref = "";
+  const screenBox = () => ({
+    width: screen.availWidth,
+    height: screen.availHeight,
+    left: screen.availLeft || 0,
+    top: screen.availTop || 0,
+  });
+  const toolLink = (event) => {
+    if (!event.isTrusted || (event.button !== undefined && event.button !== 0)) return null;
+    return event.target.closest?.("a[href^='/tools/']") || null;
+  };
+  const openNext = (link) => {
+    const href = link.getAttribute("href");
+    if (href !== armedHref) {
+      opened = [null, null, null];
+      armedHref = href;
     }
+    const urls = trio(href, location.origin);
+    const view = screenBox();
+    const boxes = tiles(view.width, view.height, view.left, view.top);
+    for (let index = 0; index < 3; index += 1) {
+      if (opened[index] && !opened[index].closed) continue;
+      opened[index] = place(urls[index], names[index], boxes[index]);
+      return;
+    }
+  };
+  const report = () => {
+    const note = document.querySelector("#windows");
+    if (!note) return;
+    const count = opened.filter((win) => win && !win.closed).length;
+    note.textContent = count === 3
+      ? "Three windows are open. The wide one is the primary."
+      : `The browser opened ${count} of 3 windows. Allow popups for this site, then click the check again.`;
+  };
+  const watchPrimary = () => {
     const primary = opened[0];
     if (!primary) return;
     clearInterval(watch);
@@ -116,5 +143,25 @@ if (typeof document !== "undefined") {
       }
     }, 400);
   };
-  document.addEventListener("click", onClick, true);
+  let armedLink = null;
+  document.addEventListener("pointerdown", (event) => {
+    const link = toolLink(event);
+    if (!link) return;
+    armedLink = link;
+    openNext(link);
+  }, true);
+  document.addEventListener("pointerup", (event) => {
+    if (!event.isTrusted || !armedLink) return;
+    openNext(armedLink);
+    report();
+  }, true);
+  document.addEventListener("click", (event) => {
+    const link = toolLink(event) || armedLink;
+    if (!link || !event.isTrusted) return;
+    event.preventDefault();
+    openNext(link);
+    report();
+    watchPrimary();
+    armedLink = null;
+  }, true);
 }
