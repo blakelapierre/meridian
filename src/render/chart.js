@@ -36,7 +36,25 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius }) {
   ctx.fillText("N", half, 16);
   for (const mark of marks) {
     const at = placeMark(self, mark.point, radius, size);
-    if (mark.kind === "trail") {
+    if (mark.kind === "sand" || mark.kind === "pit") {
+      if (!at.inside) continue;
+      ctx.fillStyle = mark.kind === "pit" ? "#3d5c72" : "#c2a56a";
+      ctx.fillRect(at.x - 4, at.y - 4, 8, 8);
+    } else if (mark.kind === "place") {
+      ctx.fillStyle = "#fc8";
+      ctx.beginPath();
+      ctx.moveTo(at.x, at.y - 5);
+      ctx.lineTo(at.x + 4, at.y);
+      ctx.lineTo(at.x, at.y + 5);
+      ctx.lineTo(at.x - 4, at.y);
+      ctx.closePath();
+      ctx.fill();
+      if (mark.name && at.inside) {
+        ctx.fillStyle = "#ffe";
+        ctx.font = "10px sans-serif";
+        ctx.fillText(mark.name, at.x, at.y - 8);
+      }
+    } else if (mark.kind === "trail") {
       if (!at.inside) continue;
       ctx.fillStyle = "rgba(160, 190, 200, 0.45)";
       ctx.fillRect(at.x - 1.5, at.y - 1.5, 3, 3);
