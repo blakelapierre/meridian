@@ -71,8 +71,13 @@ export function stepStamina(pool, { sprint = false, jump = false } = {}) {
   if (pool.locked && pool.value >= 20) pool.locked = false;
 }
 
-export function wishSpeed(pool, { crouch = false, sprint = false } = {}) {
+export function runSpeed(skill = 0) {
+  const trained = Math.max(0, Math.min(140, skill));
+  return 6.6 * (1 + 0.35 * trained / 140);
+}
+
+export function wishSpeed(pool, { crouch = false, sprint = false, run = 0 } = {}) {
   if (crouch) return 2.2;
-  if (sprint && !pool.locked && pool.value > 0) return 6.6;
+  if (sprint && !pool.locked && pool.value > 0) return runSpeed(run);
   return 4.4;
 }

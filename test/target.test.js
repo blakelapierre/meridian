@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cycleTarget, listTargets } from "../src/sim/target.js";
+import { cycleTarget, listObjects, listPlayers, listTargets } from "../src/sim/target.js";
 import { worldToScreen } from "../src/engine/cast.js";
 import { chaseOrigin } from "../src/sim/body.js";
 import { createPacer } from "../src/render/pace.js";
@@ -17,6 +17,27 @@ test("tab cycles interesting targets and skips the landscape", () => {
   assert.equal(cycleTarget(list, null, 1).kind, "prop");
   assert.equal(cycleTarget(list, list[0].id, 1).id, list[1].id);
   assert.equal(cycleTarget(list, list[0].id, -1).id, list[2].id);
+});
+
+test("tab stays on people and backtick stays on objects", () => {
+  const options = {
+    dummy: { x: 0, y: 400, z: 0 },
+    others: [
+      { id: "miner", feet: [2, 0, 0], yaw: 0 },
+      { id: "surveyor", feet: [4, 0, 0], yaw: 0 },
+    ],
+    pieces: [{ id: "wall", at: [2, 2] }],
+    props: [{ id: "door.south", box: { min: { x: 0, y: 0, z: 0 }, max: { x: 100, y: 100, z: 100 } } }],
+    feet: [0, 0, 0],
+  };
+  const people = listPlayers(options);
+  const objects = listObjects(options);
+  assert.deepEqual(people.map((item) => item.id), ["miner", "surveyor"]);
+  assert.equal(people.some((item) => item.kind !== "player"), false);
+  assert.equal(objects.some((item) => item.kind === "player"), false);
+  assert.deepEqual(objects.map((item) => item.kind), ["prop", "wall", "dummy"]);
+  assert.equal(cycleTarget(people, "miner", 1).id, "surveyor");
+  assert.equal(cycleTarget(objects, "door.south", 1).kind, "wall");
 });
 
 test("a point straight ahead lands on the screen center", () => {

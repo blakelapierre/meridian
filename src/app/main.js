@@ -10,11 +10,11 @@ import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPlaceWall, trySalvage } from "../sim/build.js";
-import { lookDirection, stepHands } from "../sim/hands.js";
+import { lookDirection, moveIntent, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, stepCamera, CHASE, BODY_COLORS } from "../sim/body.js";
-import { cycleTarget, listTargets } from "../sim/target.js";
+import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -103,6 +103,8 @@ let buyEdge = false;
 let selectEdge = false;
 let actEdge = false;
 let cycleEdge = 0;
+let objectEdge = 0;
+let autoRun = false;
 let orbitYaw = 0;
 let orbitPitch = 0;
 let cameraDistance = CHASE;
@@ -177,7 +179,7 @@ addEventListener("keydown", (event) => {
   keys.add(event.code);
   if (event.code === "Digit1") slot = "line";
   if (event.code === "Digit3") slot = slot === "bit" ? "hammer" : "bit";
-  if (event.code === "Tab") event.preventDefault();
+  if (event.code === "Tab" || event.code === "Backquote") event.preventDefault();
   if (event.repeat) return;
   if (event.code === "KeyE") {
     if (entryState.prompt) useEdge = true;
@@ -186,6 +188,8 @@ addEventListener("keydown", (event) => {
   if (event.code === "KeyB") buyEdge = true;
   if (event.code === "KeyU") actEdge = true;
   if (event.code === "Tab") cycleEdge = event.shiftKey ? -1 : 1;
+  if (event.code === "Backquote") objectEdge = event.shiftKey ? -1 : 1;
+  if (event.code === "KeyQ" && !followId) autoRun = !autoRun;
   if (event.code === "KeyV" && !followId && !agent) {
     if (view === "third") {
       view = "first";
@@ -254,14 +258,21 @@ addEventListener("mousemove", (event) => {
 });
 
 function input() {
+  const intent = moveIntent({
+    forward: keys.has("KeyW") ? 1 : 0,
+    back: keys.has("KeyS") ? 1 : 0,
+    sprint: keys.has("ShiftLeft") || keys.has("ShiftRight"),
+    auto: autoRun,
+  });
   return {
     yaw,
     pitch,
-    forward: (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0),
+    forward: intent.forward,
     strafe: (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0),
-    sprint: keys.has("ShiftLeft") || keys.has("ShiftRight"),
+    sprint: intent.sprint,
     crouch: keys.has("ControlLeft") || keys.has("ControlRight"),
     jump: keys.has("Space"),
+    run: skills.run.value,
   };
 }
 
@@ -308,6 +319,7 @@ function otherActors() {
   for (const [id, pose] of poses) {
     if (pose.yaw === undefined) continue;
     list.push({
+      id,
       feet: [pose.x, pose.y, pose.z],
       yaw: pose.yaw,
       color: BODY_COLORS[id] || [0.55, 0.42, 0.22, 1],
@@ -400,16 +412,18 @@ function adoptTarget(subject) {
   report = result.line;
 }
 
-function cycle(step) {
-  const next = cycleTarget(listTargets({
+function cycle(step, kind) {
+  const options = {
     dummy: atoll.placements.dummy,
     others: otherActors(),
     pieces: yard.pieces,
     props: atoll.props,
     feet: player.position,
-  }), selection?.id, step);
+  };
+  const list = kind === "player" ? listPlayers(options) : listObjects(options);
+  const next = cycleTarget(list, selection?.id, step);
   if (!next) {
-    report = "nothing to target";
+    report = kind === "player" ? "no one to target" : "nothing to target";
     return;
   }
   adoptTarget(next);
@@ -550,7 +564,8 @@ function publish() {
   const charge = jump.lift ? " · rising" : "";
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const autoNote = autoRun ? " · auto" : "";
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -897,9 +912,11 @@ if (params.get("still") !== "1") {
     const selectOnce = selectEdge;
     const actOnce = actEdge;
     const cycleOnce = cycleEdge;
+    const objectOnce = objectEdge;
     selectEdge = false;
     actEdge = false;
     cycleEdge = 0;
+    objectEdge = 0;
     const aimed = refreshAim(sample);
     if (followId) {
       bank = 0;
@@ -989,6 +1006,7 @@ if (params.get("still") !== "1") {
       }
       const moved = stepHands(world, player, stamina, agent ? input() : sample, jump, skills.jump.value);
       if (moved.jump) grantUse(skills, "jump", { tick });
+      if (moved.running) grantUse(skills, "run", { tick, gap: 30 });
       const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
       if (floor < -0.01 && player.position[2] <= 0.02) {
         player.position[2] = floor;
@@ -1015,7 +1033,12 @@ if (params.get("still") !== "1") {
     }
     showSight(aimed);
     aimCamera(sample, dt);
-    if (cycleOnce) cycle(cycleOnce);
+    if (selection?.kind === "player") {
+      const live = otherActors().find((actor) => actor.id === selection.id);
+      if (live) selection.point = [live.feet[0], live.feet[1], live.feet[2] + 1];
+    }
+    if (cycleOnce) cycle(cycleOnce, "player");
+    if (objectOnce) cycle(objectOnce, "object");
     if (selectOnce) identify(sample);
     if (actOnce) actOn(sample);
     if (!work && selection?.point) {

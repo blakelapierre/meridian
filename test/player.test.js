@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPlayer, createPlayerWorld, createStamina, stepPlayer, stepStamina, STOP_ACCEL, TANGENT_GRAVITY, wishSpeed } from "../src/sim/player.js";
+import { createPlayer, createPlayerWorld, createStamina, runSpeed, stepPlayer, stepStamina, STOP_ACCEL, TANGENT_GRAVITY, wishSpeed } from "../src/sim/player.js";
 
 test("opposite strafe stops a sprint inside 140 to 180 ms", () => {
   const player = createPlayer([0, 0, 0], [6.6, 0, 0]);
@@ -53,6 +53,8 @@ test("stamina drains while sprinting and will not sprint again until 20", () => 
   for (let step = 0; step < 30; step++) stepStamina(pool, {});
   assert.equal(pool.value, 20);
   assert.equal(wishSpeed(pool, { sprint: true }), 6.6);
+  assert.ok(runSpeed(140) > 6.6);
+  assert.equal(wishSpeed(createStamina(), { sprint: true, run: 140 }), runSpeed(140));
   const jumped = createStamina();
   stepStamina(jumped, { jump: true });
   assert.equal(jumped.value, 88);

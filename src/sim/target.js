@@ -17,7 +17,7 @@ export function listTargets({ dummy = null, others = [], pieces = [], props = []
   for (const other of others) {
     const point = [other.feet[0], other.feet[1], other.feet[2] + 1];
     list.push({
-      id: `player:${point[0].toFixed(1)}:${point[1].toFixed(1)}`,
+      id: other.id || `player:${point[0].toFixed(1)}:${point[1].toFixed(1)}`,
       ...SUBJECTS.player,
       kind: "player",
       point,
@@ -50,6 +50,14 @@ export function listTargets({ dummy = null, others = [], pieces = [], props = []
   }
   list.sort((a, b) => pointDistance(a.point, feet) - pointDistance(b.point, feet) || (a.id < b.id ? -1 : 1));
   return list;
+}
+
+export function listPlayers(options) {
+  return listTargets(options).filter((item) => item.kind === "player");
+}
+
+export function listObjects(options) {
+  return listTargets({ ...options, others: [] });
 }
 
 export function cycleTarget(list, currentId, step = 1) {
