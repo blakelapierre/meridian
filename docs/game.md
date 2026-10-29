@@ -313,7 +313,7 @@ The wilderness tool is the **bit**. Modes, cycled with a key: dig, fill, smooth.
 | Minimum feature | 0.5 m SDF resolution near the body |
 | Heat line | 400 m below the local surface datum of the cell. Deeper samples deal 5 integrity/s and the edit is refused |
 
-Each channel that changes the SDF emits one `TerrainEdit` at least every **0.5 s**, not every tick. `before_hash` is the chunk hash the WebRTC spec already requires.
+Each channel that changes the SDF emits one `TerrainEdit` at least every **0.5 s**, not every tick. `before_hash` is the chunk hash the WebRTC spec already requires. The integer voxel, the budget, the spoil item, and the hash bytes are [crust.md](crust.md). That file wins over the decimal rates in this section.
 
 Fill takes dirt from a carried spoil stack. Dig creates spoil. Spoil mass counts toward encumbrance. Smooth does not create spoil; it moves height inside the brush and refuses if the move would exceed 0.5 m.
 
@@ -642,7 +642,7 @@ Network phases in the WebRTC spec still gate the sockets. This section is what t
 
 ### 18.1 The island
 
-- Playable land about **512 m** across, sea around it, cell anchor at the island’s center.
+- Playable land about **512 m** across, sea around it, cell anchor at the island’s center. The disc, compound, insertions, doors, crate, footing, and dummy are [content/atoll.json](../content/atoll.json). Where a distance here says "about", the JSON `metrics` win.
 - Strike volume is the inner compound, not the beach.
 - North insertion and South insertion, each a box a player can recognize, each about **90 m** of path from the core door.
 - One core, one plant volume, two or three doors as strike props, a few wooden walls that stop the line rifle and not the spire.

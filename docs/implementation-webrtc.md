@@ -391,7 +391,7 @@ The log is the game. New features are new bodies, not new transports. Each body 
 
 | Body | Commit checks |
 |---|---|
-| `TerrainEdit {chunks, before_hash, after_ops}` | Reach, tool, `before_hash` still current. Ops are add/remove of quantized SDF samples, not “set the mesh to this blob.” |
+| `TerrainEdit {chunks, before_hash, after_ops}` | Reach, tool, `before_hash` still current. Ops are add/remove of quantized SDF samples, not “set the mesh to this blob.” Sample layout is [crust.md](crust.md). |
 | `Place {blueprint, site, materials}` | Deed rights, logistics link or carried materials, support graph accepts the load. |
 | `DamageCommit {shot_hash, target, delta}` | Only the leader synthesizes this, and only from a vote majority. Clients **MUST NOT** propose it directly. |
 | `Transfer {from, to, stack, qty}` | Both inventories in this cell or in a certified handover. No negative stacks. |
@@ -456,7 +456,7 @@ render, every frame:
   never read the socket
 ```
 
-The GPU path is hybrid, as in the concept: raster primary, ray-traced shadows and reflections against a BLAS rebuilt when a chunk hash changes. That rebuild is allowed to be a frame late. The hash is not.
+The GPU path in the concept is hybrid: raster primary, ray-traced shadows and reflections. **The Atoll slice does not build that.** Until the Atoll acceptance tests pass, the renderer is raster only, as [engineering.md](engineering.md) locks. After that, a chunk-hash change may rebuild a ray-tracing structure, and that rebuild is allowed to be a frame late. The hash is not.
 
 ---
 
