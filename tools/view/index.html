@@ -18,6 +18,7 @@
       #target::after { inset: 7px; border-color: #fff; box-shadow: none; }
       #target[data-edge="edge"] { border-radius: 0; }
       #target[data-edge="edge"]::before { border-radius: 0; }
+      #range { position: fixed; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); z-index: 4; font: 13px/1 sans-serif; color: #efe; text-shadow: 0 1px 2px #000; pointer-events: none; }
       #sight { display: none; position: fixed; left: 50%; top: 50%; z-index: 3; pointer-events: none; }
       #sight[data-tool="line"] { width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 1px solid #fff; border-radius: 50%; }
       #sight[data-tool="bit"] { width: 18px; height: 18px; margin: -9px 0 0 -9px; }
@@ -50,7 +51,7 @@
   <body>
     <aside>
       <h1>Walk check</h1>
-      <p>The camera sits directly behind your body. The wheel moves it closer or farther. Hold the right mouse and move to orbit around the body. Let go and it stays where you left it. A quick right-click, without moving, still salvages a wall. Press V for the eyes, and V again to come back out. The line starts with <code>third</code>.</p>
+      <p>The camera sits directly behind your body. The wheel moves it closer or farther. Zoom in close enough and you go to the eyes. From there the wheel zooms further, as far as eyesight and the equipped optic allow. Press R to cycle none, glasses, binoculars, and a telescope. The number under the crosshair is the range to whatever is centered. Bare eyes are coarse. Rangefinding skill and a telescope make it finer and reach farther. Hold the right mouse and move to orbit. Let go and the camera swings back behind the body. A quick right-click, without moving, still salvages a wall. Press V for the eyes, and V again to come back out.</p>
       <p>Press E to identify what the crosshair is on. That becomes your action target. Tab cycles the next interesting thing: people, the dummy, walls, and props. Not the sand. Shift+Tab goes backward. A ring marks the current target. At appraisal 0 you can name sand. A dummy is harder until the skill rises. When the line includes an action, press U to do it. The panel at the lower right is the skill list. A successful identify, jump, dig, hit, or finished wall fills that skill. At a contract door, E still enters.</p>
       <p>Click the picture to look. W A S D move. A and D strafe. Shift sprints. Tap Space for a short hop. Hold Space to rise higher, up to the jump skill. The line says <code>rising</code> while you are still climbing. The primary holds <code>vsync</code> while it is focused. The other two frames run as fast as they can, and the line says <code>free</code>. If the primary misses vsync they drop frames and the line says <code>yield</code>. A hidden tab still drops to <code>1fps</code>.</p>
       <p>Press 3 until the line says <code>hammer</code>. The amber square is the hammer sight. Press 3 again for the bit. The cyan cross is the bit sight. A bright sight means the target is in reach and it lights up. A dim sight means it is too far, and nothing lights.</p>
@@ -65,9 +66,10 @@
     </aside>
     <canvas width="160" height="90"></canvas>
     <div id="target"></div>
+    <div id="range"></div>
     <ul id="skills"></ul>
     <div id="sight"></div>
     <div id="fps">0 fps</div>
-    <script type="module" src="/src/app/main.js?v=25"></script>
+    <script type="module" src="/src/app/main.js?v=26"></script>
   </body>
 </html>

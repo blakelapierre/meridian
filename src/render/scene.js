@@ -13,7 +13,7 @@ export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70 }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -61,7 +61,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     camera: {
       origin,
       dir,
-      fov: 70,
+      fov,
       aspect: width / height,
       planeDistance: 1,
     },

@@ -15,6 +15,7 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, stepCamera, CHASE } from "../sim/body.js";
 import { cycleTarget, listTargets } from "../sim/target.js";
+import { OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
@@ -101,6 +102,9 @@ let orbitPitch = 0;
 let cameraDistance = CHASE;
 let rightDown = false;
 let rightMoved = false;
+let optics = "none";
+let zoom = { distance: CHASE, first: false, level: 0, forced: false };
+let rangeText = "";
 let selection = null;
 const skills = createSkills();
 const jump = createJump();
@@ -166,8 +170,18 @@ addEventListener("keydown", (event) => {
   if (event.code === "KeyU") actEdge = true;
   if (event.code === "Tab") cycleEdge = event.shiftKey ? -1 : 1;
   if (event.code === "KeyV" && !followId) {
-    view = view === "third" ? "first" : "third";
+    if (view === "third") {
+      view = "first";
+      zoom = { ...zoom, first: true, forced: true, level: 0 };
+    } else {
+      view = "third";
+      zoom = { distance: CHASE, first: false, level: 0, forced: false };
+      cameraDistance = CHASE;
+    }
     cameraSpring = null;
+  }
+  if (event.code === "KeyR") {
+    optics = OPTICS[(OPTICS.indexOf(optics) + 1) % OPTICS.length];
   }
   if (event.code === "Space") event.preventDefault();
 });
@@ -204,7 +218,11 @@ canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("click", () => canvas.requestPointerLock());
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
-  cameraDistance = Math.min(12, Math.max(1.2, cameraDistance + Math.sign(event.deltaY) * 0.45));
+  const before = zoom.level;
+  const wasFirst = zoom.first;
+  zoom = stepZoom(zoom, Math.sign(event.deltaY) || 1, skills.eyesight.value, optics);
+  cameraDistance = zoom.distance;
+  if ((zoom.first && !wasFirst) || zoom.level > before) grantUse(skills, "eyesight", { tick, gap: 30 });
 }, { passive: false });
 addEventListener("mousemove", (event) => {
   if (document.pointerLockElement !== canvas) return;
@@ -251,25 +269,39 @@ function otherActors() {
 function cameraAim(sample = {}) {
   const bodyYaw = sample.yaw ?? yaw;
   const bodyPitch = sample.pitch ?? pitch;
-  if (!followId && view === "first") return { yaw: bodyYaw, pitch: bodyPitch, distance: null, third: false };
+  const first = zoom.first || (view === "first" && !followId);
+  if (first) {
+    return {
+      yaw: bodyYaw,
+      pitch: bodyPitch,
+      distance: null,
+      third: false,
+      fov: zoomFov(zoom.level, skills.eyesight.value, optics),
+    };
+  }
   return {
     yaw: bodyYaw + orbitYaw,
     pitch: Math.max(-1.2, Math.min(1.2, bodyPitch + orbitPitch)),
     distance: cameraDistance,
     third: true,
+    fov: 70,
   };
 }
 
 function aimCamera(sample, dt) {
+  const eased = relaxOrbit(orbitYaw, orbitPitch, dt, rightDown);
+  orbitYaw = eased.yaw;
+  orbitPitch = eased.pitch;
   const aim = cameraAim(sample);
-  if (!aim.third) {
-    cameraSpring = null;
-    cameraPos = null;
-    return;
-  }
   const feet = followId && followed && followed.yaw !== undefined
     ? [followed.x, followed.y, followed.z]
     : player.position;
+  if (!aim.third) {
+    const eye = followId ? 1.65 : (sample.crouch ? 1.1 : 1.65);
+    cameraPos = [feet[0], feet[1], feet[2] + eye];
+    cameraSpring = null;
+    return;
+  }
   const ideal = chaseOrigin(feet, aim.yaw, aim.pitch, followId ? false : !!sample.crouch, aim.distance);
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
@@ -289,10 +321,11 @@ function sceneFor(sample, width, height) {
     width,
     height,
     view: followId ? "third" : view,
-    self: !followId && view === "third",
+    self: !followId && aim.third,
     others: otherActors(),
     cameraOrigin: cameraPos,
-    cameraDir: aim.third ? lookDirection(aim.yaw, aim.pitch) : null,
+    cameraDir: aim.third ? lookDirection(aim.yaw, aim.pitch) : lookDirection(aim.yaw, aim.pitch),
+    fov: aim.fov,
   });
 }
 
@@ -458,8 +491,13 @@ function publish() {
     .filter(([, skill]) => skill.value > 0)
     .map(([name, skill]) => `${name} ${Math.floor(skill.value)}`)
     .join(" ");
+  const eyeView = zoom.first || view === "first";
   const charge = jump.lift ? " · rising" : "";
-  if (bit) bit.textContent = `${view} · ${skillNote || "skills 0"}${charge}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const opticNote = optics === "none" ? "" : ` · ${optics}`;
+  const rangeNote = rangeText ? ` · ${rangeText}` : "";
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const range = document.querySelector("#range");
+  if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -503,6 +541,10 @@ function paint(sample) {
   markTarget(scene);
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
+  const ranged = cast(scene.camera.origin, dir, scene.objects.filter((object) => !object.self), scene.miss);
+  const reading = rangeRead(ranged?.object ? ranged.t : null, skills.ranging.value, optics);
+  rangeText = reading?.text || "";
+  if (reading?.meters != null) grantUse(skills, "ranging", { tick, gap: 45 });
   const color = hit.color || scene.miss;
   canvas.dataset.center = `${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)}`;
   showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);

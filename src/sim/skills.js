@@ -1,4 +1,4 @@
-export const SKILL_NAMES = ["appraisal", "jump", "marksmanship", "mining", "masonry"];
+export const SKILL_NAMES = ["appraisal", "jump", "marksmanship", "mining", "masonry", "eyesight", "ranging"];
 
 export function useGain(value, specialized = false) {
   return (1 / (1 + value / 20)) * (specialized ? 1.5 : 1);
