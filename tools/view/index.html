@@ -45,7 +45,7 @@
       <p>With the hammer, walk north to the stone slab and look at the ground beside it. The cell lights amber when it is in reach. Hold the left mouse. A cyan column rises while the line counts <code>work</code>. After 12 seconds it says <code>wall</code> and <code>metal 24</code>. Look at that wall, right-click, and it says <code>salvage</code> with the metal back at <code>30</code>. Empty sand says <code>support</code>.</p>
       <p>With the bit, look down at the sand. The cross goes bright and the voxel lights up when it is in reach. Hold the left mouse. A pit opens under you, the line reads <code>voxel 500</code>, and you drop to the floor. The hole is only a lower floor. It does not grow a wall.</p>
       <p>From the south gate, walk north a step. The line says <code>atoll-skirmish</code>. Press E. Pass: <code>strike south</code>, <code>scrip 800</code>, and <code>metal 30</code>. Press B while it says <code>buy</code>. Pass: <code>smoke</code> and <code>scrip 500</code>. Metal stays <code>30</code>. The line rifle is too expensive. Digging or raising a wall now says <code>frozen</code>. <a href="/tools/view/index.html?gate=1">Start at the gate</a>.</p>
-      <p>An <a href="/tools/archive/">archive</a> is a client with no body. Leave it open in another tab. This line gains <code>archive</code> when it links, and a dig is witnessed even if no other player is here.</p>
+      <p>An <a href="/tools/archive/">archive</a> is a client with no body. Leave it open in another tab. This line gains <code>archive</code> when it links. A dig says <code>provisional</code> until that archive mines a block, then it says <code>official</code>.</p>
       <p>Press 1 for the line. The white dot is the sight. Click the red dummy. Pass: <code>chest 28</code> and <code>dummy 72</code>. Four standing hits kill it. It stands back up after 5 seconds. A wall in the way is a miss. <a href="/tools/view/index.html?look=dummy">Start on the pad, already aimed</a>.</p>
       <p id="bit">sand is intact</p>
       <p id="link"></p>
@@ -54,6 +54,6 @@
     <canvas width="160" height="90"></canvas>
     <div id="sight"></div>
     <div id="fps">0 fps</div>
-    <script type="module" src="/src/app/main.js?v=18"></script>
+    <script type="module" src="/src/app/main.js?v=19"></script>
   </body>
 </html>

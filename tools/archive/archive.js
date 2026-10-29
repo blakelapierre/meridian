@@ -1,7 +1,18 @@
 import { createIdentity } from "../../src/net/identity.js";
 import { connectPeer, createRoom } from "../../src/net/room.js";
+import { decodeBlock, encodeBlock } from "../../src/net/blocks.js";
 import { signReceipt } from "../../src/net/receipt.js";
 import { createTerrain } from "../../src/net/terrain.js";
+import { decode } from "../../src/sim/cbor.js";
+import {
+  acceptBlock,
+  blocksByMiner,
+  createChain,
+  LIVE_BITS,
+  mine,
+  prepareBlock,
+  tipOf,
+} from "../../src/sim/chain.js";
 import {
   bountyCents,
   claimCrate,
@@ -17,7 +28,9 @@ import {
 const identity = createIdentity();
 const roomId = `archive-${pubkeyHex(identity.pubkey).slice(0, 8)}`;
 const terrain = createTerrain({ identity, leader: false });
-const ledger = createLedger(pubkeyHex(identity.pubkey));
+const chain = createChain();
+const miner = pubkeyHex(identity.pubkey);
+const ledger = createLedger(miner);
 const links = [];
 const opening = new Set();
 const params = new URLSearchParams(location.search);
@@ -31,6 +44,73 @@ function $(id) {
   return document.querySelector(id);
 }
 
+let candidate = null;
+
+function editsAfterTip() {
+  const seq = tipOf(chain).block.seq;
+  const ops = [];
+  for (const op of terrain.log.ops) {
+    if (op.seq <= seq) continue;
+    const body = decode(op.proposal).body;
+    ops.push({
+      seq: op.seq,
+      eye: body.eye,
+      aim: body.aim,
+      chunk: body.chunk,
+      before: body.before,
+      mode: body.mode,
+      writes: body.writes,
+    });
+  }
+  return ops;
+}
+
+function rememberTip() {
+  ledger.blocks = blocksByMiner(chain, miner);
+  ledger.height = tipOf(chain).block.height;
+}
+
+function consider(block) {
+  const accepted = acceptBlock(chain, block);
+  if (!accepted.ok) return accepted;
+  rememberTip();
+  if (accepted.tip) candidate = null;
+  return accepted;
+}
+
+function hunt() {
+  if (!candidate) {
+    const ops = editsAfterTip();
+    if (!ops.length) return;
+    const parent = tipOf(chain);
+    const prepared = prepareBlock({
+      parent: parent.block,
+      crust: chain.crusts.get(chain.tip),
+      ops,
+      miner,
+      time: Date.now(),
+      bits: LIVE_BITS,
+    });
+    if (!prepared.ok) return;
+    candidate = prepared.block;
+  }
+  const found = mine(candidate, { limit: 4000 });
+  if (found) {
+    consider(found.block);
+    const frame = encodeBlock(identity, found.block);
+    for (const link of links) {
+      if (link.ops.readyState !== "open") continue;
+      try {
+        link.ops.send(frame);
+      } catch {
+        // The next slice sends the same block again if it is still the tip.
+      }
+    }
+    candidate = null;
+  }
+  paint();
+}
+
 function paint() {
   const open = links.filter((link) => link.ops.readyState === "open").map((link) => link.to);
   const crate = crateFor(ledger);
@@ -38,6 +118,8 @@ function paint() {
   $("status").textContent = [
     roomId,
     open.length ? `linked ${open.join(" ")}` : "waiting for a player",
+    `block ${tipOf(chain).block.height}`,
+    candidate ? `mining ${candidate.nonce}` : "idle",
     `ops ${terrain.log.ops.length}`,
     `keep ${keepOf(ledger)}`,
     crate ? `crate ready ${crate.metal} metal ${crate.fiber} fiber` : "crate not ready",
@@ -76,7 +158,13 @@ async function openPlayer(to) {
   }
   links.push({ to, ops: channels.ops });
   channels.ops.onmessage = (event) => {
-    terrain.receive(new Uint8Array(event.data));
+    const bytes = new Uint8Array(event.data);
+    if (bytes[0] === 11) {
+      const decoded = decodeBlock(bytes);
+      if (decoded.ok) consider(decoded.block);
+    } else {
+      terrain.receive(bytes);
+    }
     outgoing();
   };
   try {
@@ -128,6 +216,7 @@ room.start().then(() => {
   paint();
   seek();
   setInterval(seek, 3000);
+  setInterval(hunt, 40);
   setInterval(() => {
     if (links.some((link) => link.ops.readyState === "open")) notePresence(ledger, 1000);
     outgoing();

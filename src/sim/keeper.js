@@ -1,6 +1,4 @@
-export const VOTE_KEEP = 1;
-export const PRESENCE_MS = 10 * 60 * 1000;
-export const CHECKPOINT_KEEP = 5;
+export const BLOCK_KEEP = 10;
 export const CRATE_KEEP = 30;
 export const CRATE = { metal: 2, fiber: 1 };
 export const BOUNTY_CENTS_PER_KEEP = 2;
@@ -21,14 +19,14 @@ export function createLedger(pubkey) {
     checkpoints: 0,
     presenceMs: 0,
     ops: 0,
+    blocks: 0,
+    height: 0,
     crates: 0,
   };
 }
 
 export function keepOf(ledger) {
-  return ledger.votes * VOTE_KEEP
-    + ledger.checkpoints * CHECKPOINT_KEEP
-    + Math.floor(ledger.presenceMs / PRESENCE_MS);
+  return (ledger.blocks || 0) * BLOCK_KEEP;
 }
 
 export function crateFor(ledger) {
@@ -52,6 +50,8 @@ export function receiptBody(ledger, now) {
     checkpoints: ledger.checkpoints,
     presenceMs: ledger.presenceMs,
     ops: ledger.ops,
+    blocks: ledger.blocks,
+    height: ledger.height,
     crates: ledger.crates,
     keep: keepOf(ledger),
     at: now,
