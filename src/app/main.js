@@ -20,7 +20,8 @@ import { acceptShot, encodeShot } from "../net/shots.js";
 import { acceptPosition, encodePosition } from "../net/position.js";
 import { createEntry, entryLine, SMOKE, stepEntry } from "../sim/enter.js";
 import { pubkeyHex } from "../sim/keeper.js";
-import { acceptBlock, createChain, tipOf } from "../sim/chain.js";
+import { acceptBlock, createChain, hex, installTip, tipOf } from "../sim/chain.js";
+import { decode } from "../sim/cbor.js";
 import { decodeBlock } from "../net/blocks.js";
 
 const canvas = document.querySelector("canvas");
@@ -60,6 +61,7 @@ const terrain = createTerrain({
 const dummy = createDummy();
 const yard = createYard(atoll.placements.footing);
 const worldChain = createChain();
+const fromChain = new Set();
 const entry = createEntry(atoll);
 let entryState = { joined: false, prompt: "", notice: "" };
 const seenShots = new Set();
@@ -215,7 +217,12 @@ function showSight(mark) {
 
 function publish() {
   const voxel = terrain.voxel();
-  const ground = voxel === null ? "sand is intact" : `voxel ${voxel} hash ${terrain.hash()}`;
+  const tip = tipOf(worldChain).block;
+  const tipWrite = tip.ops.at(-1)?.writes.at(-1);
+  const shown = voxel !== null ? voxel : tipWrite ? terrain.log.crust.sampleIndex(tipWrite[0], tipWrite[1], tipWrite[2]) : null;
+  let hash = terrain.hash();
+  if (!hash && tip.height) hash = hex(terrain.log.crust.hash(tip.chunk[0], tip.chunk[1], tip.chunk[2]));
+  const ground = shown === null ? "sand is intact" : `voxel ${shown} hash ${hash}`;
   const body = dummy.health === 0 ? "dummy dead" : `dummy ${dummy.health}`;
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
@@ -225,7 +232,6 @@ function publish() {
   const contract = entryState.joined ? "" : entryState.prompt;
   const strike = entryState.joined ? entryLine(entryState) : contract;
   const archives = links.filter((link) => link.role === "archive" && link.ops.readyState === "open").length;
-  const tip = tipOf(worldChain).block;
   const official = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "";
   const chainNote = `block ${tip.height}${official ? ` ${official}` : ""}`;
   if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
@@ -233,8 +239,8 @@ function publish() {
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
-  canvas.dataset.voxel = voxel === null ? "" : String(voxel);
-  canvas.dataset.hash = terrain.hash();
+  canvas.dataset.voxel = shown === null ? "" : String(shown);
+  canvas.dataset.hash = hash;
   canvas.dataset.dummy = String(dummy.health);
   canvas.dataset.slot = slot;
   canvas.dataset.block = String(tipOf(worldChain).block.height);
@@ -325,12 +331,30 @@ function fire(sample) {
   sendOps(frame);
 }
 
+function ownKeys() {
+  const keys = new Set();
+  for (const op of terrain.log.ops) {
+    const body = decode(op.proposal).body;
+    for (const write of body.writes) keys.add(`${write[0]},${write[1]},${write[2]}`);
+  }
+  return keys;
+}
+
 function onOps(bytes) {
   if (bytes[0] === 11) {
     const decoded = decodeBlock(bytes);
     if (!decoded.ok) return;
     const accepted = acceptBlock(worldChain, decoded.block);
-    if (accepted.ok && accepted.tip) report = `block ${tipOf(worldChain).block.height}`;
+    if (!accepted.ok || accepted.duplicate) return;
+    installTip(terrain.log.crust, worldChain, fromChain, ownKeys());
+    if (accepted.tip) report = `block ${tipOf(worldChain).block.height}`;
+    for (const link of openLinks()) {
+      try {
+        link.ops.send(bytes);
+      } catch {
+        // A peer that already has the block will ignore the extra copy.
+      }
+    }
     return;
   }
   if (bytes[0] === 10) {

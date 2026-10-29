@@ -7,6 +7,7 @@ import { decode } from "../../src/sim/cbor.js";
 import {
   acceptBlock,
   blocksByMiner,
+  chainEdits,
   createChain,
   LIVE_BITS,
   mine,
@@ -47,22 +48,18 @@ function $(id) {
 let candidate = null;
 
 function editsAfterTip() {
-  const seq = tipOf(chain).block.seq;
-  const ops = [];
-  for (const op of terrain.log.ops) {
-    if (op.seq <= seq) continue;
+  const sealed = terrain.log.ops.map((op) => {
     const body = decode(op.proposal).body;
-    ops.push({
-      seq: op.seq,
+    return {
       eye: body.eye,
       aim: body.aim,
       chunk: body.chunk,
       before: body.before,
       mode: body.mode,
       writes: body.writes,
-    });
-  }
-  return ops;
+    };
+  });
+  return chainEdits(chain, [...sealed, ...terrain.openEdits()]);
 }
 
 function rememberTip() {

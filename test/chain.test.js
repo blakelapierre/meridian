@@ -8,12 +8,15 @@ import { decode } from "../src/sim/cbor.js";
 import {
   acceptBlock,
   blocksByMiner,
+  chainEdits,
   createChain,
+  installTip,
   mine,
   prepareBlock,
   tipOf,
   workOf,
 } from "../src/sim/chain.js";
+import { Crust } from "../src/sim/crust.js";
 import { keepOf } from "../src/sim/keeper.js";
 
 function edits() {
@@ -102,4 +105,46 @@ test("a signed block round-trips and still has to pass the work check", () => {
   decoded.block.miner = "someone-else";
   const lied = encodeBlock(identity, decoded.block);
   assert.equal(decodeBlock(lied).reason, "miner");
+});
+
+function lone(shift) {
+  const terrain = createTerrain({ identity: createIdentity(), leader: true });
+  const aim = bitAim([shift, -150, 0], 0, -1.2);
+  for (let step = 0; step < 40; step += 1) terrain.dig(aim.eye, aim.aim, { peer: false });
+  const op = terrain.log.ops[0];
+  const body = decode(op.proposal).body;
+  return {
+    seq: op.seq,
+    eye: body.eye,
+    aim: body.aim,
+    chunk: body.chunk,
+    before: body.before,
+    mode: body.mode,
+    writes: body.writes,
+  };
+}
+
+test("the heaviest tip is what a client draws, and a local prediction survives it", () => {
+  const left = lone(0);
+  const right = lone(80);
+  const chain = createChain();
+  assert.equal(acceptBlock(chain, mined(chain, [left], "miner", 8)).tip, true);
+  const viewer = new Crust();
+  const fromChain = new Set();
+  viewer.write(1, 2, 3, 500);
+  installTip(viewer, chain, fromChain);
+  const [i, j, k] = left.writes[0];
+  assert.equal(viewer.sampleIndex(i, j, k), 500);
+  assert.equal(viewer.sampleIndex(1, 2, 3), 500);
+  const heavyParent = createChain();
+  assert.equal(acceptBlock(chain, mined(heavyParent, [right], "other", 10)).tip, true);
+  installTip(viewer, chain, fromChain);
+  assert.equal(viewer.sampleIndex(i, j, k) > 0, false);
+  const [u, v, w] = right.writes[0];
+  assert.equal(viewer.sampleIndex(u, v, w), 500);
+  assert.equal(viewer.sampleIndex(1, 2, 3), 500);
+  const numbered = chainEdits(chain, [{ ...left, seq: 99 }, { ...right, seq: 40 }]);
+  assert.equal(numbered.length, 1);
+  assert.equal(numbered[0].seq, tipOf(chain).block.seq + 1);
+  assert.equal(numbered[0].writes[0][0], left.writes[0][0]);
 });
