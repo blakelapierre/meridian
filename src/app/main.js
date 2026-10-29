@@ -12,6 +12,7 @@ import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
 import { lookDirection, stepHands } from "../sim/hands.js";
 import { chaseOrigin, createCameraSpring, stepCamera } from "../sim/body.js";
+import { appraise, appraisalGain, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { createIdentity } from "../net/identity.js";
@@ -81,6 +82,10 @@ let cooldown = 0;
 let report = "";
 let useEdge = false;
 let buyEdge = false;
+let selectEdge = false;
+let actEdge = false;
+let appraisal = 0;
+let selection = null;
 let ops = null;
 const links = [];
 let followed = null;
@@ -136,6 +141,8 @@ addEventListener("keydown", (event) => {
   if (event.repeat) return;
   if (event.code === "KeyE") useEdge = true;
   if (event.code === "KeyB") buyEdge = true;
+  if (event.code === "KeyF") selectEdge = true;
+  if (event.code === "KeyU") actEdge = true;
   if (event.code === "KeyV" && !followId) {
     view = view === "third" ? "first" : "third";
     cameraSpring = null;
@@ -244,6 +251,82 @@ function refreshAim(sample = {}) {
   return toolAim(slot, eyeOf(sample), lookDirection(yawNow, pitchNow), objects, yard.pieces);
 }
 
+function identify(sample) {
+  const scene = sceneFor(sample, 16, 9);
+  const dir = project(0.5, 0.5, scene.camera);
+  const hit = cast(scene.camera.origin, dir, scene.objects.filter((object) => !object.self), scene.miss);
+  const subject = subjectFromHit(hit, yard.pieces);
+  if (!subject) {
+    selection = null;
+    report = "nothing to identify";
+    return;
+  }
+  const result = appraise(appraisal, subject);
+  if (result.known) appraisal += appraisalGain(appraisal);
+  selection = { ...subject, line: result.line, canAct: result.canAct };
+  report = result.line;
+}
+
+function actOn(sample) {
+  if (!selection) {
+    report = "no target";
+    return;
+  }
+  if (!selection.canAct) {
+    report = "You do not know what to do with that.";
+    return;
+  }
+  const eye = eyeOf(sample);
+  const point = selection.point || eye;
+  const dist = Math.hypot(point[0] - eye[0], point[1] - eye[1], (point[2] || 0) - eye[2]);
+  if (selection.kind === "sand") {
+    if (dist > 4) {
+      report = "too far";
+      return;
+    }
+    terrain.dig(eye, point, { peer: witnessed() });
+    report = "dig";
+    return;
+  }
+  if (selection.kind === "wall" && selection.cell) {
+    if (dist > 4) {
+      report = "too far";
+      return;
+    }
+    const saved = trySalvage(yard, selection.cell);
+    report = saved.ok ? "salvage" : saved.reason;
+    if (!saved.ok) return;
+    sendOps(encodeSalvage(identity, { nonce: Math.floor(tick), cell: selection.cell }));
+    return;
+  }
+  if (selection.kind === "dummy") {
+    const pad = atoll.placements.dummy;
+    const target = [pad.x / 100, pad.y / 100, 0.9];
+    const delta = [target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]];
+    const reach = Math.hypot(delta[0], delta[1], delta[2]);
+    if (reach > 40 || reach < 1e-6) {
+      report = "too far";
+      return;
+    }
+    const shot = resolveShot({
+      eye,
+      forward: delta.map((value) => value / reach),
+      speed: Math.hypot(player.velocity[0], player.velocity[1]),
+      airborne: player.position[2] > 0.05,
+      seed: tick,
+      objects: sceneFor(sample, 16, 9).objects.filter((object) => !object.self),
+    });
+    if (!shot.hitbox) {
+      report = "miss";
+      return;
+    }
+    const applied = applyDummyHit(dummy, shot.hitbox);
+    report = `${applied.hitbox} ${applied.damage}`;
+    return;
+  }
+  report = selection.action;
+}
+
 function showSight(mark) {
   const sight = document.querySelector("#sight");
   if (!sight) return;
@@ -275,7 +358,8 @@ function publish() {
   const official = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "";
   const chainNote = `block ${tip.height}${official ? ` ${official}` : ""}`;
   const seen = poses.size;
-  if (bit) bit.textContent = `${view} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const known = selection ? ` · ${selection.line}` : "";
+  if (bit) bit.textContent = `${view} · appraise ${Math.floor(appraisal)}${known} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -582,6 +666,10 @@ if (params.get("still") !== "1") {
     bank += dt;
     last = now;
     const sample = input();
+    const selectOnce = selectEdge;
+    const actOnce = actEdge;
+    selectEdge = false;
+    actEdge = false;
     const aimed = refreshAim(sample);
     if (followId) {
       bank = 0;
@@ -680,6 +768,11 @@ if (params.get("still") !== "1") {
     }
     showSight(aimed);
     aimCamera(sample, dt);
+    if (selectOnce) identify(sample);
+    if (actOnce) actOn(sample);
+    if (!work && selection?.point) {
+      work = { x: selection.point[0], y: selection.point[1], height: 1.6, mode: 4 };
+    }
     const active = !document.hidden && document.hasFocus();
     const decision = pacer.consider(now, active);
     viewScale = pacer.scale;
