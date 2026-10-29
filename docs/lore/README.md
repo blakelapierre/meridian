@@ -8,4 +8,4 @@ What a person on Cairn can know. Not a plot. The planet does not have a main que
 | [atoll.md](atoll.md) | The island the beach build is |
 | [voices.md](voices.md) | How the game is allowed to speak |
 
-The beach speaks only the errand line in [quests](../quests/beach.md). Anything not listed there is not yet said in the client.
+The beach does not speak a quest. Notes the character writes are in [quests](../quests/beach.md). Anything else is not said in the client.

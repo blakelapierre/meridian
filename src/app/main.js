@@ -1,7 +1,7 @@
 import { paintFrame } from "../engine/frame.js";
 import { hearStep } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
-import { createErrands, errandLine, noteErrand } from "../sim/errands.js";
+import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
@@ -145,7 +145,7 @@ const vitals = createVitals();
 let loreNote = "";
 let brush = "dig";
 const listener = createListener();
-const errands = createErrands();
+const notes = createNotes();
 let stepAt = null;
 const heardAt = new Map();
 
@@ -514,7 +514,10 @@ function refreshAim(sample = {}) {
 function adoptTarget(subject) {
   const id = subject.id || (subject.cell ? `${subject.kind}:${subject.cell[0]}:${subject.cell[1]}` : subject.kind);
   const result = appraise(skills.appraisal.value, subject);
-  if (result.known) grantUse(skills, "appraisal", { tick });
+  if (result.known) {
+    grantUse(skills, "appraisal", { tick });
+    writeNote(notes, skills, "seen", { line: result.line });
+  }
   selection = { ...subject, id, line: result.line, canAct: result.canAct };
   notePlace(survey, {
     id,
@@ -801,6 +804,19 @@ function paintSkills() {
   }));
 }
 
+function paintNotes() {
+  const list = document.querySelector("#notes");
+  if (!list) return;
+  const lines = notes.map((note) => note.line).join("\n");
+  if (list.dataset.lines === lines) return;
+  list.dataset.lines = lines;
+  list.replaceChildren(...notes.slice(-6).map((note) => {
+    const item = document.createElement("li");
+    item.textContent = note.line;
+    return item;
+  }));
+}
+
 function publish() {
   const voxel = terrain.voxel();
   const tip = tipOf(worldChain).block;
@@ -819,8 +835,6 @@ function publish() {
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}` : "";
   const brushNote = slot === "bit" && brush === "fill" ? " · fill" : "";
   const lightNote = ` · ${dayWord(tick)}`;
-  const paper = errandLine(errands);
-  const errandNote = paper ? ` · ${paper}` : "";
   const muteNote = listener.muted ? " · muted" : "";
   const friendNote = selection?.kind === "player" && friends.has(selection.id)
     ? ` · ${friendTier(friends.get(selection.id))} ${friends.get(selection.id)}`
@@ -844,7 +858,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${errandNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -861,6 +875,7 @@ function publish() {
   canvas.dataset.scrip = entryState.scrip == null ? "" : String(entryState.scrip);
   canvas.dataset.body = entryState.body || "beach";
   paintSkills();
+  paintNotes();
 }
 
 function markTarget(scene) {
@@ -978,9 +993,10 @@ function exchangeLore() {
       ground: [...survey.ground.values()],
       places: [...survey.places.values()],
     });
-    if (!offer.ground.length && !offer.places.length) continue;
+    const spoken = offerNotes(notes, bag, offer.tier);
+    if (!offer.ground.length && !offer.places.length && !spoken.length) continue;
     const packed = packLore(offer);
-    sendOps(encodeLore(identity, { nonce: tick, friend: score, ...packed }));
+    sendOps(encodeLore(identity, { nonce: tick, friend: score, notes: spoken, ...packed }));
     loreNote = `${offer.tier} ${other.id}`;
   }
 }
@@ -1015,7 +1031,12 @@ function onOps(bytes, from) {
     const heard = unpackLore(accepted);
     const learned = learnLore(survey, plate, heard, skillBag(), stamp, GEO_COLOR);
     if (from) friends.set(from, nextFriend(Math.max(friends.get(from) || 0, accepted.friend || 0), true));
+    let told = 0;
+    for (const line of accepted.notes || []) {
+      if (takeTold(notes, skillBag(), line)) told += 1;
+    }
     if (learned.ground || learned.places) loreNote = `heard ${learned.ground + learned.places}`;
+    else if (told) loreNote = "heard a note";
     return;
   }
   if (bytes[0] === 10) {
@@ -1278,7 +1299,7 @@ if (params.get("still") !== "1") {
         offer: buyOnce ? (entryState.joined ? SMOKE : null) : null,
       });
       if (entryState.notice) report = entryState.notice;
-      if (entryState.joined) noteErrand(errands, "strike");
+      if (entryState.joined) writeNote(notes, skills, "strike");
       useOnce = false;
       buyOnce = false;
       const striking = entryState.body === "strike";
@@ -1324,8 +1345,8 @@ if (params.get("still") !== "1") {
             report = placed.ok ? job : placed.reason;
             if (placed.ok) {
               hear("place");
-              if (job === "fin") noteErrand(errands, "fin");
               grantUse(skills, "building", { tick });
+              writeNote(notes, skills, job === "wall" ? "wall" : job);
               const nonce = Math.floor(tick);
               if (job === "wall") {
                 seenWalls.add(wallSeen(nonce, raising.cell));
@@ -1362,8 +1383,8 @@ if (params.get("still") !== "1") {
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
           terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush });
           hear(brush === "fill" ? "fill" : "dig");
-          if (brush === "dig") noteErrand(errands, "dig");
           grantUse(skills, "mining", { tick, gap: 30 });
+          writeNote(notes, skills, brush === "fill" ? "fill" : "dig");
         } else if (!raising) {
           work = null;
         }
@@ -1460,7 +1481,7 @@ if (params.get("still") !== "1") {
       const bound = bindHearth(yard, selection.cell);
       if (bound.ok) {
         hear("bind");
-        noteErrand(errands, "bind");
+        writeNote(notes, skills, "bind");
       }
       report = bound.ok ? "bound" : bound.reason;
     } else if (selectOnce) identify(sample);

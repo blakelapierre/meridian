@@ -4,12 +4,7 @@ The first island. A beach, a ruined footing, a practice dummy, and a compound wi
 
 ## What is here
 
-The footing was already in the sand when you woke. Nobody in the build claims to have poured it. The crate beside the yard holds a bit, metal, stone, and a fin. The paper in that crate is four lines, and they are the only instructions the place gives:
-
-- The compound is north.
-- The bit digs.
-- A hearth binds.
-- The fin drinks sun.
+The footing was already in the sand when you woke. Nobody in the build claims to have poured it. The crate beside the yard holds a bit, metal, stone, a fin, and a paper. The paper's four lines are the compound is north, the bit digs, a hearth binds, the fin drinks sun. The client does not display that paper and does not track it.
 
 The dummy is padded linen on a stake. It is not a person and it does not vote. Standing on it is how you learn that the wilderness hits back. The compound is a strike volume. Inside, you are a round. Outside, you are your body again.
 
