@@ -4,18 +4,16 @@ The prose lives in [docs/lore](../lore/README.md). This note is what the build i
 
 ## In the build
 
-The atoll paper is four errands, spoken as one line under the skills: dig the beach, bind a hearth, set the fin, enter the compound. There is no narrator, no dialogue tree, and no codex screen.
-
-The names already in the world are the ones the lore uses: Cairn for the planet, Atoll for this island, the compound for the strike, the dummy for the practice body, the footing for the old stone.
+There is no narrator and no quest line. The names in the world are Cairn, Atoll, the compound, the dummy, and the footing. The character's own notes are the only new sentences, and only when a skill clears the bar in [the paper note](../quests/beach.md).
 
 ## This pass
 
-The line advances when you actually do the thing. Reading the document does not complete it.
+A note is a memory, not a prompt. Hearing one from someone else uses the same book.
 
 ## Proves
 
-`test/audio.test.js` covers the errand order.
+`test/audio.test.js`.
 
 ## Later
 
-A voucher's name. A township charter you can read because someone wrote it in the world, not because we shipped a chapter.
+A voucher's name. A charter that exists because someone wrote it on an object.

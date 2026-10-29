@@ -1,21 +1,14 @@
 # Quests
 
-The design lives in [docs/quests](../quests/README.md). The concept refuses a theme park. These are errands the place already asked for.
+The design lives in [docs/quests](../quests/README.md). There is no quest UI, and there will not be one.
 
 ## In the build
 
-One line, in order:
-
-1. Dig the beach.
-2. Bind a hearth.
-3. Set the fin.
-4. Enter the compound.
-
-Finishing one reveals the next. Finishing the last clears the line. There is no reward window, no turn-in, and no quest log. The strike is still the strike. The hearth is still the hearth.
+Nothing on the status line is an objective. The atoll paper is lore only. The character keeps a short notebook of sentences their skills can support. Another player nearby can be told a sentence, and can keep it only if they can read it.
 
 ## This pass
 
-That paper, and nothing else. A fellowship offer, a road, and a patron are documents only.
+The notebook and the spoken sentence. No tracker, no order, no reward.
 
 ## Proves
 
@@ -23,4 +16,4 @@ That paper, and nothing else. A fellowship offer, a road, and a patron are docum
 
 ## Later
 
-Errands that another player wrote. A contract that pays materials when the world changes, not when a giver nods.
+A paper you can pick up and read because it is an object. A sentence someone else wrote into the world.
