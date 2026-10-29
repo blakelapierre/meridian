@@ -39,6 +39,16 @@ if (painter) {
 const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
+const followId = params.get("follow");
+const poseChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("meridian-pose") : null;
+let followed = null;
+if (poseChannel && followId) {
+  poseChannel.onmessage = (event) => {
+    const data = event.data;
+    if (!data || data.id !== followId) return;
+    followed = data;
+  };
+}
 const keys = new Set();
 const peer = Boolean(params.get("id"));
 
@@ -105,7 +115,7 @@ addEventListener("mouseup", (event) => {
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("click", () => canvas.requestPointerLock());
 addEventListener("mousemove", (event) => {
-  if (document.pointerLockElement !== canvas) return;
+  if (followId || document.pointerLockElement !== canvas) return;
   yaw += event.movementX * 0.0022;
   pitch = Math.max(-1.2, Math.min(1.2, pitch - event.movementY * 0.0022));
 });
@@ -373,6 +383,47 @@ publish();
 canvas.dataset.ready = "1";
 canvas.dataset.pace = "vsync";
 
+const FOLLOW_M = 3.5;
+
+function publishPose() {
+  if (!poseChannel || followId) return;
+  poseChannel.postMessage({
+    id: params.get("id") || "a",
+    pose: {
+      x: player.position[0],
+      y: player.position[1],
+      z: player.position[2],
+      yaw,
+      pitch,
+    },
+    digs: [...terrain.log.crust.overrides],
+    pieces: yard.pieces.map((piece) => ({ ...piece, at: [...piece.at] })),
+  });
+}
+
+function applyFollow() {
+  if (!followed?.pose) return;
+  const pose = followed.pose;
+  yaw = pose.yaw;
+  pitch = pose.pitch;
+  player.position[0] = pose.x - Math.sin(yaw) * FOLLOW_M;
+  player.position[1] = pose.y - Math.cos(yaw) * FOLLOW_M;
+  player.position[2] = pose.z;
+  player.velocity[0] = 0;
+  player.velocity[1] = 0;
+  player.velocity[2] = 0;
+  if (followed.digs) terrain.log.crust.overrides = new Map(followed.digs);
+  if (followed.pieces) yard.pieces = followed.pieces.map((piece) => ({ ...piece, at: [...piece.at] }));
+  work = null;
+  const linkLine = document.querySelector("#link");
+  if (linkLine) linkLine.textContent = `following ${followId} from ${FOLLOW_M} m behind`;
+}
+
+function waitFollow() {
+  const linkLine = document.querySelector("#link");
+  if (linkLine) linkLine.textContent = `waiting for ${followId}`;
+}
+
 if (params.get("still") !== "1") {
   if (peer) link().catch((error) => {
     const linkLine = document.querySelector("#link");
@@ -388,6 +439,11 @@ if (params.get("still") !== "1") {
     last = now;
     const sample = input();
     const aimed = refreshAim(sample);
+    if (followId) {
+      bank = 0;
+      if (followed) applyFollow();
+      else waitFollow();
+    } else {
     while (bank >= 1 / 30) {
       stepDummy(dummy);
       if (cooldown > 0) cooldown -= 1;
@@ -443,7 +499,9 @@ if (params.get("still") !== "1") {
       tick += 1;
       bank -= 1 / 30;
     }
-    if (!raising) {
+    publishPose();
+    }
+    if (!raising && !followId) {
       if (aimed.inRange) {
         work = {
           x: aimed.x,

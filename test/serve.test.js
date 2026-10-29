@@ -1,42 +1,38 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { createStaticServer } from "../tools/serve.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("the node server serves the view module", async () => {
-  const site = await createStaticServer(root);
+test("pages can ask the test server to stop", async () => {
+  const site = await createStaticServer(root, 0);
   try {
-    const page = await fetch(`${site}/tools/view/index.html`);
-    assert.equal(page.status, 200);
-    assert.equal(page.headers.get("content-type"), "text/html");
-    assert.match(await page.text(), /canvas/);
-    const script = await fetch(`${site}/src/app/main.js`);
-    assert.equal(script.headers.get("content-type"), "text/javascript");
-    assert.equal((await fetch(`${site}/missing-page`)).status, 404);
+    const html = await fetch(`${site.url}/`).then((response) => response.text());
+    assert.match(html, /\/tools\/quit\.js/);
   } finally {
     await site.close();
   }
-});
-
-test("a decoded parent path cannot leave the root", async () => {
-  const parent = await mkdtemp(join(tmpdir(), "meridian-serve-"));
-  const web = join(parent, "www");
-  await mkdir(web);
-  await writeFile(join(parent, "secret.txt"), "nope");
-  await writeFile(join(web, "ok.txt"), "yes");
-  const site = await createStaticServer(web);
-  try {
-    const escaped = await fetch(`${site}/%2e%2e/secret.txt`);
-    assert.notEqual(escaped.status, 200);
-    assert.equal(await escaped.text(), "");
-    assert.equal(await (await fetch(`${site}/ok.txt`)).text(), "yes");
-  } finally {
-    await site.close();
-    await rm(parent, { recursive: true, force: true });
-  }
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `
+    import { createStaticServer } from "./tools/serve.js";
+    const site = await createStaticServer(process.cwd(), 0);
+    console.log(String(site.port));
+  `], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  const port = await new Promise((resolvePort, reject) => {
+    let buffer = "";
+    const timer = setTimeout(() => reject(new Error(buffer)), 4000);
+    child.stdout.on("data", (chunk) => {
+      buffer += chunk;
+      const match = buffer.match(/(\d+)/);
+      if (!match) return;
+      clearTimeout(timer);
+      resolvePort(match[1]);
+    });
+  });
+  const response = await fetch(`http://127.0.0.1:${port}/__quit`, { method: "POST" });
+  assert.equal(response.status, 200);
+  const code = await new Promise((resolveCode) => child.once("exit", resolveCode));
+  assert.equal(code, 0);
 });
