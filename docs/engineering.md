@@ -1,48 +1,48 @@
 # MERIDIAN
 ## Engineering locks (pre-implementation)
 
-Decisions that have to be true before the first client commit. Player rules stay in [game.md](game.md). Packets stay in [implementation-webrtc.md](implementation-webrtc.md). The island numbers are [content/atoll.json](../content/atoll.json). The dig brush is [crust.md](crust.md). Keys are [keymap.md](keymap.md).
+Decisions that have to be true before the first client commit. Player rules stay in [game.md](game.md). Packets stay in [implementation-webrtc.md](implementation-webrtc.md). The island numbers are [content/atoll.json](../content/atoll.json). The dig brush is [crust.md](crust.md). Keys are [keymap.md](keymap.md). The renderer and the motion integrator are [engine.md](engine.md).
 
 Nothing in this repository is implemented.
 
-On conflict about **how the slice is built**, this document wins. It does not override a damage number or a packet field.
+On conflict about **how the slice is built**, this document wins, except that [engine.md](engine.md) wins on what draws the frame and what integrates motion. Neither overrides a damage number or a packet field.
 
 ---
 
 ## 1. What the first client is allowed to be
 
-Raster. A capsule, the Atoll boxes, a hole, one sun direction, Lambert if you want a color. The sea is the edge of the disc in `content/atoll.json`.
+The picture is the software raycaster pinned in [engine.md](engine.md). The motion is that repo's N-body `tick`. Not a WebGL rasterizer, and not a second physics engine beside it.
 
-**Forbidden until every Atoll acceptance test in game.md §18.3 is passing:**
+Still forbidden:
 
-- Ray queries, path tracing, software ray-marched shadows, reflections, ReSTIR
-- A cube-sphere or icosphere planet, virtual texturing, impostor crowds
-- Rapier or any other rigid-body engine
-- Debris that is not "the piece is gone"
-- WebGPU as a requirement. WebGL2 is enough. WebGPU is allowed only as a raster backend.
+- WebGL or WebGPU as the primary path
+- Rapier or any other rigid-body library
+- A cube-sphere mesh, virtual texturing, impostor crowds
+- Path tracing, reflections, ReSTIR
 
-Hybrid ray tracing remains the concept's renderer. It is not this milestone. The GPU paragraph in the WebRTC spec describes that later renderer.
+Primary rays are the point of this caster. One sun-shadow ray is allowed. Both go through `cast`.
 
-Camera-relative float32 for the GPU. The sim does not store render precision. Feet and voxels are integers, per [crust.md](crust.md).
+Feet and voxels stay integers, per [crust.md](crust.md). Body positions inside the integrator are meters, floating point, and ephemeral.
 
 SharedArrayBuffer is optional. If a worker needs it, the dev server sends `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` from that commit onward. Do not block the first pawn on isolation headers.
 
 ## 2. Physics
 
-The body is a **kinematic capsule** with the speeds, accel, and stop-window in game.md §4.2. Gravity is radial in the function, even though Atoll's up is almost constant: accelerate toward the planet center, then express the move in the tangent frame.
+See [engine.md](engine.md). Short form: a `Mass` integrates with the leapfrog in `tick`. Control writes `acceleration`. The planet writes `gravity` through the pairwise pass. The 140–180 ms stop window is still the test. Merge-on-overlap is the demo policy, not the character policy.
 
-No dynamic rigid bodies in the slice. A falling player is the capsule. A collapsed wall is an op that removes the piece.
+A collapsed wall is an op that removes the piece. Debris, if it exists, is a `Mass` with `merge` or `separate`. It is not Rapier.
 
 ## 3. Where code will go
 
 Do not invent a second layout when implementation starts.
 
 ```text
-src/sim/        pure TypeScript. No DOM, no WebRTC, no WebGL. Importable from Node.
+src/engine/       port of the pinned raycaster and N-body tick. Pure. No DOM except frame.js's buffer.
+src/sim/        game tick. Calls engine tick. No DOM, no WebRTC. Importable from Node.
 src/content/    JSON catalogs. Atoll already lives in /content until it moves here unchanged.
 src/net/        browser only. RTCPeerConnection and the codec.
-src/render/     raster view of sim state. Forbidden list in §1.
-src/app/        wires the three. The only place that touches the canvas and the socket.
+src/render/     calls paintFrame. Does not integrate and does not decide hits.
+src/app/        wires them. The only place that touches the canvas element and the socket.
 tools/signal/   local signaling lighthouse. Not imported by src/sim.
 ```
 
@@ -85,7 +85,7 @@ Entity position is the **capsule feet**. Boxes in content are **half-open**: a p
 
 ## 6. Sun
 
-`tick →` sun direction is a pure function, 72 real minutes per cairn-day, dawn and dusk 6 minutes. A debug multiplier may speed it and **MUST** default to 1. The slice does not cast ray-traced shadows. A directional color is enough to see that the solar fin's number tracks elevation.
+`tick →` sun direction is a pure function, 72 real minutes per cairn-day, dawn and dusk 6 minutes. A debug multiplier may speed it and **MUST** default to 1. The raycaster may spend one extra ray at that direction to darken a hit. The fin's flux number still comes from the dot product, not from the picture.
 
 ## 7. License
 
@@ -93,14 +93,15 @@ Entity position is the **capsule feet**. Boxes in content are **half-open**: a p
 
 ## 8. Order of the first commits
 
-1. `src/sim` movement test, no window.
-2. Damage-number test.
-3. Crust brush and chunk hash.
-4. Load `content/atoll.json` and check the three distances.
-5. A raster view of the disc, the compound boxes, and the capsule.
-6. `tools/signal` and one unreliable position between two browsers.
+1. Port `tick` and the demo scene from the pinned repo. No window.
+2. Port `cast`. A ray through the demo sun hits the sun.
+3. Damage-number test.
+4. Crust brush, chunk hash, and a crust raymarch that sees a dug voxel.
+5. Load `content/atoll.json` and check the three distances. A ray from the pad hits the dummy.
+6. Player `Mass` with `separate`, and the stop-window test.
+7. `tools/signal` and one unreliable position between two browsers.
 
-Not before step 6: weapons beyond the damage test, the buy menu, the hearth, the fin, ray tracing, a second island.
+Not before step 7: the buy menu, the hearth, a GPU backend, a second island.
 
 ## 9. Keys
 

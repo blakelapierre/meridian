@@ -80,7 +80,7 @@ Cannot stand up if the ceiling refuses the standing capsule.
 
 ### 4.2 Movement feel
 
-This is a stop-and-shoot body, not a slide. The test that matters: from a full sprint, holding the opposite strafe, horizontal speed **MUST** fall below **0.8 m/s** in **140–180 ms**. Tuning accel and friction is legal. Missing that window is not.
+This is a stop-and-shoot body, not a slide. The test that matters: from a full sprint, holding the opposite strafe, horizontal speed **MUST** fall below **0.8 m/s** in **140–180 ms**. Tuning the control `acceleration` is legal. Missing that window is not. Replacing the integrator to make the window easier is not legal either: motion is the N-body step in [engine.md](engine.md).
 
 | | Value |
 |---|---|

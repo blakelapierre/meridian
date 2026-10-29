@@ -170,9 +170,9 @@ Lockstep is wrong for gunfights and right for the slow economic tick. We use bot
 
 ### Seeing it
 
-**Hybrid real-time ray tracing.** Primary visibility is rasterized, because a full path-traced planet in a tab is a trailer, not a game. Secondary rays are traced against the live scene: sunlight and local lights as real shadows, reflections on water, visors, and metal, short-range occlusion, and many dynamic lights (muzzles, lava, flux coils, burning wrecks) resolved with a reservoir sampler so a firefight does not turn into baked blobs.
+**The primary picture is a software raycaster.** The integrator and the caster are the ones in `nbody-raycaster`: a canvas, one ray per pixel, spheres as the body primitive, and an N-body step for motion. Boxes and the crust are further tests in that same cast, not a second renderer. A GPU hybrid (raster primary, traced shadows and reflections, reservoir-sampled firefight lights) is a later backend behind the same cast. It is not what the first client draws.
 
-The look this must produce: contact-tight shadows on a curved horizon, a sea that reflects the actual coast you just ruined, wet stone that picks up a muzzle flash, night side that is dark unless something burns. Hardware ray queries are used where the machine has them. Where it does not, compute traces the same budget. A cinematic camera may spend more rays. The soldier’s view never drops the frame budget to chase a screenshot.
+The look this must produce, whichever backend is active: contact-tight shadows on a curved horizon, a sea that reflects the actual coast you just ruined, wet stone that picks up a muzzle flash, night side that is dark unless something burns. The soldier’s view never drops the frame budget to chase a screenshot. The first budget is the caster’s 160×90, scaled up.
 
 The planet itself is a cube-sphere or icosphere with virtual textures and impostors at range. Curvature is in the camera, not a shader trick on a flat map. Edits to terrain update the acceleration structure; otherwise reflections will show a hill you already removed, and the fantasy dies.
 
@@ -185,7 +185,7 @@ The planet itself is a cube-sphere or icosphere with virtual textures and impost
 | Structural collapse from loads and blast | Dayline flux | Soft-body flesh |
 | Character capsule with weight, slopes, and push | Distant armies as aggregates | |
 
-The character is physical enough that slopes, weight, and explosions move you, and kinematic enough that peeking and stopping stay fair. Pure ragdoll infantry would wreck the CS clock. We will not do it.
+The character is a body in that same N-body step: physical enough that slopes, weight, and explosions move you, and constrained enough that peeking and stopping stay fair. Pure ragdoll infantry would wreck the CS clock. We will not do it. Merge-on-contact, which the toy solar system uses when two masses overlap, is not how people collide.
 
 Local firefights are capped in the dozens, not the hundreds. Past that, reinforcements arrive in waves and the overhead shows **aggregates**. The crater is still one persistent place. Five hundred hit-scans in one browser cell is not a feature we are pretending to ship.
 
