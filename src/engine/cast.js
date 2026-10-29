@@ -50,6 +50,23 @@ export function cameraBasis(camera) {
   return { forward, right, up };
 }
 
+export function worldToScreen(point, camera) {
+  const { forward, right, up } = cameraBasis(camera);
+  const dx = point[0] - camera.origin[0];
+  const dy = point[1] - camera.origin[1];
+  const dz = point[2] - camera.origin[2];
+  const depth = dx * forward[0] + dy * forward[1] + dz * forward[2];
+  if (depth <= 0.05) return null;
+  const half = Math.tan((camera.fov * Math.PI / 180) / 2) * camera.planeDistance;
+  const rx = dx * right[0] + dy * right[1] + dz * right[2];
+  const uy = dx * up[0] + dy * up[1] + dz * up[2];
+  const scale = camera.planeDistance / depth;
+  return {
+    x: (rx * scale / (camera.aspect * half) + 1) / 2,
+    y: (1 - uy * scale / half) / 2,
+  };
+}
+
 export function project(x, y, camera) {
   const half = Math.tan((camera.fov * Math.PI / 180) / 2) * camera.planeDistance;
   const px = (x * 2 - 1) * camera.aspect * half;

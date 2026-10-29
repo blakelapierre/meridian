@@ -13,7 +13,7 @@ export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -48,7 +48,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     for (const part of playerParts(other.feet, other.yaw, !!other.crouch, { self: false, color: OTHER })) objects.push(part);
   }
   const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
-  const dir = lookDirection(yaw, pitch);
+  const dir = cameraDir || lookDirection(yaw, pitch);
   const origin = cameraOrigin
     ? cameraOrigin.slice()
     : view === "third"

@@ -25,15 +25,15 @@ export function playerParts(feet, yaw, crouch = false, { self = true, color = CL
   ];
 }
 
-export function chaseOrigin(feet, yaw, pitch, crouch = false) {
+export function chaseOrigin(feet, yaw, pitch, crouch = false, distance = CHASE) {
   const eye = crouch ? 1.1 : 1.65;
   const dir = lookDirection(yaw, pitch);
   const rightX = Math.cos(yaw);
   const rightY = -Math.sin(yaw);
   return [
-    feet[0] - dir[0] * CHASE + rightX * SHOULDER,
-    feet[1] - dir[1] * CHASE + rightY * SHOULDER,
-    feet[2] + eye - dir[2] * CHASE + RISE,
+    feet[0] - dir[0] * distance + rightX * SHOULDER,
+    feet[1] - dir[1] * distance + rightY * SHOULDER,
+    feet[2] + eye - dir[2] * distance + RISE,
   ];
 }
 
