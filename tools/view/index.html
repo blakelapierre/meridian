@@ -39,7 +39,7 @@
   <body>
     <aside>
       <h1>Walk check</h1>
-      <p>You start behind your own body. It is three spheres: hips, chest, and a head, in front of the camera and left of the crosshair. Press V for the eyes, and V again to come back out. The line starts with <code>third</code>. The follow frame also draws the player it is chasing.</p>
+      <p>You start behind your own body. The camera is on a spring: when you run or turn it stretches, then it catches up. Press V for the eyes, and V again to come back out. The line starts with <code>third</code>. Another client shows your body, and the line says <code>seen 1</code>. The follow frame draws only the player it is chasing. It does not grow a body of its own.</p>
       <p>Click the picture to look. W A S D move. A and D strafe. Shift sprints. Space jumps and lands. While this window is focused the line ends in <code>vsync</code>. Click another window and it changes to <code>1fps</code>. The pixel size steps down if a frame misses the screen, and steps back up when there is room.</p>
       <p>Press 3 until the line says <code>hammer</code>. The amber square is the hammer sight. Press 3 again for the bit. The cyan cross is the bit sight. A bright sight means the target is in reach and it lights up. A dim sight means it is too far, and nothing lights.</p>
       <p>With the hammer, walk north to the stone slab and look at the ground beside it. The cell lights amber when it is in reach. Hold the left mouse. A cyan column rises while the line counts <code>work</code>. After 12 seconds it says <code>wall</code> and <code>metal 24</code>. Look at that wall, right-click, and it says <code>salvage</code> with the metal back at <code>30</code>. Empty sand says <code>support</code>.</p>
@@ -54,6 +54,6 @@
     <canvas width="160" height="90"></canvas>
     <div id="sight"></div>
     <div id="fps">0 fps</div>
-    <script type="module" src="/src/app/main.js?v=21"></script>
+    <script type="module" src="/src/app/main.js?v=22"></script>
   </body>
 </html>

@@ -37,6 +37,22 @@ export function chaseOrigin(feet, yaw, pitch, crouch = false) {
   ];
 }
 
+export function createCameraSpring(origin) {
+  return { pos: origin.slice(), vel: [0, 0, 0] };
+}
+
+export function stepCamera(spring, ideal, dt) {
+  const stiffness = 9;
+  const damping = 6.5;
+  const step = Math.max(0, Math.min(dt, 0.05));
+  for (let i = 0; i < 3; i += 1) {
+    const pull = (ideal[i] - spring.pos[i]) * stiffness - spring.vel[i] * damping;
+    spring.vel[i] += pull * step;
+    spring.pos[i] += spring.vel[i] * step;
+  }
+  return spring.pos;
+}
+
 export function rayMisses(origin, dir, parts) {
   for (const part of parts) {
     const dx = part.origin[0] - origin[0];

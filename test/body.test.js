@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chaseOrigin, playerParts, rayMisses } from "../src/sim/body.js";
+import { chaseOrigin, createCameraSpring, playerParts, rayMisses, stepCamera } from "../src/sim/body.js";
 import { lookDirection } from "../src/sim/hands.js";
 import { buildScene } from "../src/render/scene.js";
 import { readFileSync } from "node:fs";
@@ -32,4 +32,25 @@ test("the walk scene defaults to the eyes, and third person adds the body", () =
   const third = buildScene({ feet, yaw: 0, pitch: 0, atoll, width: 16, height: 9, view: "third" });
   assert.ok(third.camera.origin[1] < feet[1]);
   assert.equal(third.objects.filter((object) => object.self).length, 3);
+  const watched = buildScene({
+    feet: [0, 0, 0],
+    yaw: 0,
+    pitch: 0,
+    atoll,
+    width: 16,
+    height: 9,
+    view: "third",
+    self: false,
+    others: [{ feet: [2, 0, 0], yaw: 0 }],
+  });
+  assert.equal(watched.objects.some((object) => object.self), false);
+  assert.equal(watched.objects.filter((object) => object.type === "sphere" && !object.body).length, 3);
+});
+
+test("the camera stretches behind a sudden move and then settles", () => {
+  const spring = createCameraSpring([0, 0, 2]);
+  stepCamera(spring, [0, 6, 2], 1 / 30);
+  assert.ok(spring.pos[1] < 3, spring.pos[1]);
+  for (let frame = 0; frame < 240; frame += 1) stepCamera(spring, [0, 6, 2], 1 / 30);
+  assert.ok(Math.abs(spring.pos[1] - 6) < 0.2, spring.pos[1]);
 });
