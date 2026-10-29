@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { tiles, trio } from "../tools/launch.js";
+import { benchHref, tiles, trio } from "../tools/launch.js";
 
 test("a check opens a primary, the other client, and a follow view", () => {
   const [primary, second, follow] = trio("/tools/view/index.html?look=dummy");
@@ -21,7 +21,16 @@ test("a check opens a primary, the other client, and a follow view", () => {
   assert.match(behind, /follow=b/);
 });
 
-test("the primary window is widescreen and the three do not overlap", () => {
+test("a check is one window whose frames are the three clients", () => {
+  const href = benchHref("/tools/view/index.html?look=dummy");
+  const bench = new URL(href, "http://127.0.0.1");
+  assert.equal(bench.pathname, "/tools/bench/index.html");
+  assert.match(bench.searchParams.get("primary"), /look=dummy/);
+  assert.match(bench.searchParams.get("primary"), /id=a/);
+  assert.match(bench.searchParams.get("second"), /id=b/);
+  assert.match(bench.searchParams.get("follow"), /follow=a/);
+});
+test("the primary pane is widescreen and the three panes do not overlap", () => {
   const boxes = tiles(1920, 1080, 0, 0);
   const aspect = boxes[0].width / boxes[0].height;
   assert.ok(Math.abs(aspect - 16 / 9) < 0.02, String(aspect));
