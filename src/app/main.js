@@ -19,6 +19,7 @@ import { connectPeer, createRoom } from "../net/room.js";
 import { acceptShot, encodeShot } from "../net/shots.js";
 import { acceptPosition, encodePosition } from "../net/position.js";
 import { createEntry, entryLine, SMOKE, stepEntry } from "../sim/enter.js";
+import { pubkeyHex } from "../sim/keeper.js";
 
 const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
@@ -220,7 +221,8 @@ function publish() {
   const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
   const contract = entryState.joined ? "" : entryState.prompt;
   const strike = entryState.joined ? entryLine(entryState) : contract;
-  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const archives = links.filter((link) => link.role === "archive" && link.ops.readyState === "open").length;
+  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -373,44 +375,88 @@ if (params.get("autobit") === "1") {
   for (let step = 0; step < 40; step++) terrain.dig(aim.eye, aim.aim, { peer });
 }
 
-async function link() {
-  const targets = (params.get("to") || "").split(",").map((item) => item.trim()).filter(Boolean);
-  const offerParam = params.get("offer") || "";
-  const room = createRoom({
-    url: params.get("signal") || "ws://127.0.0.1:8787",
-    me: params.get("id"),
-  });
+const meId = params.get("id") || `p-${pubkeyHex(identity.pubkey).slice(0, 8)}`;
+const opening = new Set();
+let roomReady = null;
+
+function witnessed() {
+  return peer || links.some((link) => link.role === "archive");
+}
+
+function ensureRoom() {
+  if (!roomReady) {
+    const room = createRoom({
+      url: params.get("signal") || "ws://127.0.0.1:8787",
+      me: meId,
+      role: "player",
+    });
+    roomReady = room.start().then(() => room);
+  }
+  return roomReady;
+}
+
+async function openLink(to, offer, role) {
+  if (!to || to === meId || links.some((link) => link.to === to) || opening.has(to)) return;
+  opening.add(to);
+  const room = await ensureRoom();
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  const channels = {};
+  for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false]]) {
+    const options = { negotiated: true, id: spec[1], ordered: spec[2] };
+    if (!spec[2]) options.maxRetransmits = 0;
+    const channel = pc.createDataChannel(spec[0], options);
+    channel.binaryType = "arraybuffer";
+    channels[spec[0]] = channel;
+  }
+  const link = { to, role, ops: channels.ops, snap: channels.snap };
+  links.push(link);
+  if (!ops) ops = channels.ops;
+  channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data));
+  channels.snap.onmessage = (event) => {
+    if (to !== followId) return;
+    followed = acceptPosition(followed, new Uint8Array(event.data));
+  };
   const linkLine = document.querySelector("#link");
-  await room.start();
-  await Promise.all(targets.map(async (to) => {
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-    const channels = {};
-    for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false]]) {
-      const options = { negotiated: true, id: spec[1], ordered: spec[2] };
-      if (!spec[2]) options.maxRetransmits = 0;
-      const channel = pc.createDataChannel(spec[0], options);
-      channel.binaryType = "arraybuffer";
-      channels[spec[0]] = channel;
-    }
-    links.push({ to, ops: channels.ops, snap: channels.snap });
-    if (!ops) ops = channels.ops;
-    channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data));
-    channels.snap.onmessage = (event) => {
-      if (to !== followId) return;
-      followed = acceptPosition(followed, new Uint8Array(event.data));
-    };
+  try {
     await connectPeer({
       pc,
       room,
-      me: params.get("id"),
+      me: meId,
       to,
-      offer: offerParam === "1" || offerParam.split(",").includes(to),
+      offer,
       isOpen: () => channels.ops.readyState === "open",
       status: (line) => {
-        if (linkLine && !followed) linkLine.textContent = targets.length > 1 ? `${to} ${line}` : line;
+        if (linkLine && !followed) linkLine.textContent = role === "archive" ? `archive ${line}` : line;
       },
     });
-  }));
+  } catch (error) {
+    opening.delete(to);
+    const index = links.indexOf(link);
+    if (index >= 0) links.splice(index, 1);
+    if (linkLine) linkLine.textContent = String(error);
+  }
+}
+
+async function link() {
+  const targets = (params.get("to") || "").split(",").map((item) => item.trim()).filter(Boolean);
+  const offerParam = params.get("offer") || "";
+  await Promise.all(targets.map((to) => openLink(
+    to,
+    offerParam === "1" || offerParam.split(",").includes(to),
+    "player",
+  )));
+}
+
+async function seekArchives() {
+  try {
+    const room = await ensureRoom();
+    const peers = await room.list();
+    for (const found of peers) {
+      if (found.role === "archive") openLink(found.pubkey, false, "archive");
+    }
+  } catch {
+    // No lighthouse means no archive. Digs stay solo.
+  }
 }
 
 const first = input();
@@ -462,6 +508,10 @@ if (params.get("still") !== "1") {
     const linkLine = document.querySelector("#link");
     if (linkLine) linkLine.textContent = String(error);
   });
+  if (!followId) {
+    seekArchives();
+    setInterval(() => { seekArchives(); }, 3000);
+  }
   const pacer = createPacer();
   let last = performance.now();
   let bank = 0;
@@ -536,7 +586,7 @@ if (params.get("still") !== "1") {
         raising = null;
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
-          terrain.dig(aim.eye, aim.aim, { peer });
+          terrain.dig(aim.eye, aim.aim, { peer: witnessed() });
         } else if (!raising) {
           work = null;
         }

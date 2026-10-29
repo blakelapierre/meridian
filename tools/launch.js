@@ -75,6 +75,8 @@ if (typeof document !== "undefined") {
     if (!event.isTrusted || (event.button !== undefined && event.button !== 0)) return;
     const link = event.target.closest?.("a[href^='/tools/']");
     if (!link) return;
+    const hrefAttr = link.getAttribute("href");
+    if (hrefAttr.startsWith("/tools/archive")) return;
     event.preventDefault();
     const href = benchHref(link.getAttribute("href"), location.origin);
     const width = screen.availWidth;

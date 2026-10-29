@@ -1,6 +1,6 @@
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000 }) {
+export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, role = "player" }) {
   const socket = new WebSocket(url);
   const listeners = new Set();
   const ready = new Promise((resolve, reject) => {
@@ -18,7 +18,7 @@ export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000 }) {
   });
   function announce() {
     if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "announce", pubkey: me, cell }));
+      socket.send(JSON.stringify({ type: "announce", pubkey: me, cell, role }));
     }
   }
   async function start() {
