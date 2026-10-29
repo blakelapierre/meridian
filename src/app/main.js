@@ -3,9 +3,11 @@ import { buildScene } from "../render/scene.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { stepHands } from "../sim/hands.js";
 import { bitAim } from "../sim/bit.js";
+import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { createIdentity } from "../net/identity.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom } from "../net/room.js";
+import { acceptShot, encodeShot } from "../net/shots.js";
 
 const canvas = document.querySelector("canvas");
 const context = canvas.getContext("2d", { alpha: false });
@@ -22,26 +24,38 @@ const player = createPlayer([spawn.x / 100, spawn.y / 100, spawn.z / 100]);
 const world = createPlayerWorld(player);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
+const identity = createIdentity();
 const terrain = createTerrain({
-  identity: createIdentity(),
+  identity,
   leader: params.get("offer") === "1" || !peer,
 });
+const dummy = createDummy();
+const seenShots = new Set();
+let slot = params.get("look") === "dummy" ? "line" : "bit";
 let yaw = params.get("autobit") === "1" ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : 0);
 let pitch = params.get("autobit") === "1" ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let tick = (72 * 60 * 30) / 4;
-let digging = false;
+let trigger = false;
+let shotQueued = false;
+let cooldown = 0;
+let report = "";
 let ops = null;
+const shotFrames = [];
 
 addEventListener("keydown", (event) => {
   keys.add(event.code);
+  if (event.code === "Digit1") slot = "line";
+  if (event.code === "Digit3") slot = "bit";
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
 canvas.addEventListener("mousedown", (event) => {
-  if (event.button === 0 && document.pointerLockElement === canvas) digging = true;
+  if (event.button !== 0) return;
+  trigger = true;
+  if (slot === "line") shotQueued = true;
 });
 addEventListener("mouseup", (event) => {
-  if (event.button === 0) digging = false;
+  if (event.button === 0) trigger = false;
 });
 canvas.addEventListener("click", () => canvas.requestPointerLock());
 addEventListener("mousemove", (event) => {
@@ -64,11 +78,14 @@ function input() {
 
 function publish() {
   const voxel = terrain.voxel();
-  const line = voxel === null ? "sand is intact" : `voxel ${voxel} hash ${terrain.hash()}`;
+  const ground = voxel === null ? "sand is intact" : `voxel ${voxel} hash ${terrain.hash()}`;
+  const body = dummy.health === 0 ? "dummy dead" : `dummy ${dummy.health}`;
   const bit = document.querySelector("#bit");
-  if (bit) bit.textContent = line;
+  if (bit) bit.textContent = `${slot} · ${report ? `${report} · ` : ""}${body} · ${ground}`;
   canvas.dataset.voxel = voxel === null ? "" : String(voxel);
   canvas.dataset.hash = terrain.hash();
+  canvas.dataset.dummy = String(dummy.health);
+  canvas.dataset.slot = slot;
 }
 
 function paint(sample) {
@@ -84,14 +101,85 @@ function paint(sample) {
     height,
   });
   const pixels = paintFrame(scene, width, height);
-  context.putImageData(new ImageData(pixels, width, height), 0, 0);
   const center = (Math.floor(height / 2) * width + Math.floor(width / 2)) * 4;
   canvas.dataset.center = `${pixels[center]},${pixels[center + 1]},${pixels[center + 2]}`;
+  if (slot === "line") {
+    pixels[center] = 255;
+    pixels[center + 1] = 255;
+    pixels[center + 2] = 255;
+  }
+  context.putImageData(new ImageData(pixels, width, height), 0, 0);
+  return scene;
+}
+
+function fire(sample) {
+  const scene = buildScene({
+    feet: player.position,
+    yaw: sample.yaw,
+    pitch: sample.pitch,
+    crouch: sample.crouch,
+    tick,
+    atoll,
+    crust: terrain.log.crust,
+    width,
+    height,
+  });
+  const speed = Math.hypot(player.velocity[0], player.velocity[1]);
+  const shot = resolveShot({
+    eye: scene.camera.origin,
+    forward: scene.camera.dir,
+    speed,
+    airborne: player.position[2] > 0.05,
+    seed: tick,
+    objects: scene.objects,
+  });
+  const nonce = tick;
+  seenShots.add(nonce);
+  if (!shot.hitbox) {
+    report = "miss";
+  } else {
+    const applied = applyDummyHit(dummy, shot.hitbox);
+    report = `${applied.hitbox} ${applied.damage}`;
+  }
+  const frame = encodeShot(identity, {
+    nonce,
+    origin: scene.camera.origin,
+    dir: shot.dir,
+    hitbox: shot.hitbox || "miss",
+  });
+  if (ops && ops.readyState === "open") ops.send(frame);
+  else if (peer) shotFrames.push(frame);
+}
+
+function onOps(bytes) {
+  if (bytes[0] !== 7) {
+    terrain.receive(bytes);
+    return;
+  }
+  const scene = buildScene({
+    feet: player.position,
+    yaw,
+    pitch,
+    tick,
+    atoll,
+    crust: terrain.log.crust,
+    width,
+    height,
+  });
+  const accepted = acceptShot(bytes, scene.objects);
+  if (!accepted.ok || accepted.hitbox === "miss" || seenShots.has(accepted.nonce)) {
+    if (accepted.reason === "split") report = "split";
+    return;
+  }
+  seenShots.add(accepted.nonce);
+  const applied = applyDummyHit(dummy, accepted.hitbox);
+  report = `${applied.hitbox} ${applied.damage}`;
 }
 
 function flush() {
   if (ops && ops.readyState === "open") {
     for (const frame of terrain.take()) ops.send(frame);
+    while (shotFrames.length) ops.send(shotFrames.shift());
   }
   publish();
 }
@@ -112,7 +200,7 @@ async function link() {
     channels[spec[0]] = channel;
   }
   ops = channels.ops;
-  ops.onmessage = (event) => terrain.receive(new Uint8Array(event.data));
+  ops.onmessage = (event) => onOps(new Uint8Array(event.data));
   const room = createRoom({
     url: params.get("signal") || "ws://127.0.0.1:8787",
     me: params.get("id"),
@@ -149,7 +237,13 @@ if (params.get("still") !== "1") {
     last = now;
     const sample = input();
     while (bank >= 1 / 30) {
-      if (digging || params.get("autobit") === "1") {
+      stepDummy(dummy);
+      if (cooldown > 0) cooldown -= 1;
+      if (slot === "line" && (trigger || shotQueued) && cooldown === 0) {
+        fire(sample);
+        shotQueued = false;
+        cooldown = 3;
+      } else if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
         const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
         terrain.dig(aim.eye, aim.aim, { peer });
       }
