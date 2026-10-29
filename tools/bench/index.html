@@ -5,26 +5,47 @@
     <title>Meridian check</title>
     <style>
       html, body { margin: 0; height: 100%; background: #000; color: #eee; }
-      body { display: flex; }
-      main { height: 100vh; width: min(72vw, calc(100vh * 16 / 9)); background: #111; }
-      aside { flex: 1; min-width: 240px; display: flex; flex-direction: column; }
-      iframe { width: 100%; border: 0; background: #000; }
-      main iframe { height: 100%; }
-      aside iframe { flex: 1; min-height: 0; }
+      body { display: flex; gap: 8px; padding: 8px; box-sizing: border-box; }
+      main, section { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 2px solid #9cf; background: #111; }
+      main { height: calc(100vh - 16px); width: min(72vw, calc((100vh - 16px) * 16 / 9)); border-color: #9f9; }
+      aside { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 8px; }
+      section { flex: 1; }
+      section.second { border-color: #fc8; }
+      section.follow { border-color: #c9f; }
+      header { flex: 0 0 auto; padding: 4px 8px; font: 12px/1.2 sans-serif; letter-spacing: 0.04em; background: #0c0c0c; }
+      main header { color: #9f9; }
+      section.second header { color: #fc8; }
+      section.follow header { color: #c9f; }
+      iframe { flex: 1; width: 100%; min-height: 0; border: 0; background: #000; }
     </style>
   </head>
   <body>
-    <main><iframe id="primary" title="primary"></iframe></main>
+    <main>
+      <header>Primary</header>
+      <iframe id="primary" title="Primary"></iframe>
+    </main>
     <aside>
-      <iframe id="second" title="second client"></iframe>
-      <iframe id="follow" title="follow"></iframe>
+      <section class="second">
+        <header>Second</header>
+        <iframe id="second" title="Second"></iframe>
+      </section>
+      <section class="follow">
+        <header>Follow</header>
+        <iframe id="follow" title="Follow"></iframe>
+      </section>
     </aside>
     <script>
       const params = new URLSearchParams(location.search);
+      const quiet = (src) => {
+        const url = new URL(src, location.origin);
+        url.searchParams.set("quiet", "1");
+        return url.pathname + url.search;
+      };
       for (const id of ["primary", "second", "follow"]) {
         const frame = document.querySelector("#" + id);
         const src = params.get(id);
-        if (src) frame.src = src;
+        if (!src) continue;
+        frame.src = id === "primary" ? src : quiet(src);
       }
     </script>
   </body>
