@@ -13,7 +13,7 @@ import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPla
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
-import { chaseOrigin, createCameraSpring, frameCamera, stepCamera, CHASE, BODY_COLORS } from "../sim/body.js";
+import { chaseOrigin, createCameraSpring, frameCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
@@ -135,7 +135,6 @@ const links = [];
 let followed = null;
 const poses = new Map();
 let cameraSpring = null;
-let frameLook = null;
 let cameraPos = null;
 let cameraLook = null;
 
@@ -420,22 +419,17 @@ function aimCamera(sample, dt) {
   );
   const blend = aim.third ? zoom.blend : 1;
   let ideal = blendOrigin(behind, eyes, blend);
-  cameraLook = blendDir(lookDirection(aim.yaw, aim.pitch), lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch), blend);
+  let idealLook = blendDir(lookDirection(aim.yaw, aim.pitch), lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch), blend);
   const framing = selection?.point && aim.third && zoom.blend < 0.45 && !rightDown
     ? frameCamera(feet, selection.point, aim.distance || CHASE)
     : null;
   if (framing) {
     ideal = blendOrigin(framing.origin, eyes, blend);
-    if (!frameLook) frameLook = framing.dir.slice();
-    const ease = 1 - Math.exp(-Math.max(dt, 0.001) * 5);
-    for (let i = 0; i < 3; i += 1) frameLook[i] += (framing.dir[i] - frameLook[i]) * ease;
-    const len = Math.hypot(frameLook[0], frameLook[1], frameLook[2]) || 1;
-    cameraLook = [frameLook[0] / len, frameLook[1] / len, frameLook[2] / len];
-  } else {
-    frameLook = null;
+    idealLook = blendDir(framing.dir, lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch), blend);
   }
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
+  cameraLook = stepLook(cameraSpring, idealLook, dt);
 }
 
 function sceneFor(sample, width, height) {

@@ -60,6 +60,48 @@ export function stepCamera(spring, ideal, dt) {
   return spring.pos;
 }
 
+function wrapAngle(delta) {
+  let turn = delta;
+  while (turn > Math.PI) turn -= Math.PI * 2;
+  while (turn < -Math.PI) turn += Math.PI * 2;
+  return turn;
+}
+
+function seekAngle(current, target, vel, dt) {
+  const stiffness = 14;
+  const damping = 8;
+  const step = Math.max(0, Math.min(dt, 0.05));
+  const pull = wrapAngle(target - current) * stiffness - vel * damping;
+  const nextVel = vel + pull * step;
+  return { value: current + nextVel * step, vel: nextVel };
+}
+
+export function stepLook(spring, ideal, dt) {
+  const flat = Math.hypot(ideal[0], ideal[1]);
+  const targetYaw = Math.atan2(ideal[0], ideal[1]);
+  const targetPitch = Math.atan2(ideal[2], flat || 1);
+  if (spring.lookYaw === undefined) {
+    spring.lookYaw = targetYaw;
+    spring.lookPitch = targetPitch;
+    spring.yawVel = 0;
+    spring.pitchVel = 0;
+  } else {
+    const yaw = seekAngle(spring.lookYaw, targetYaw, spring.yawVel, dt);
+    const pitch = seekAngle(spring.lookPitch, targetPitch, spring.pitchVel, dt);
+    spring.lookYaw = yaw.value;
+    spring.yawVel = yaw.vel;
+    spring.lookPitch = pitch.value;
+    spring.pitchVel = pitch.vel;
+  }
+  const level = Math.cos(spring.lookPitch);
+  spring.look = [
+    Math.sin(spring.lookYaw) * level,
+    Math.cos(spring.lookYaw) * level,
+    Math.sin(spring.lookPitch),
+  ];
+  return spring.look.slice();
+}
+
 export function frameCamera(feet, target, distanceHint = CHASE) {
   if (!target) return null;
   const eye = 1.65;
