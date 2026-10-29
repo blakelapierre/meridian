@@ -1,7 +1,5 @@
 import { cross, dot, length } from "./math.js";
 
-const qScratch = [0, 0, 0];
-
 export function sphereRayIntersection(origin, direction, center, radius) {
   const ocx = center[0] - origin[0];
   const ocy = center[1] - origin[1];
@@ -26,47 +24,38 @@ export function sphereRayIntersection(origin, direction, center, radius) {
   };
 }
 
-function qFromUnitVectors(u, v) {
-  const real = 1 + dot(u, v);
-  if (real < 1e-6) {
-    if (Math.abs(u[0]) > Math.abs(u[2])) return unit4([0, -u[1], u[0], 0]);
-    return unit4([0, 0, -u[2], u[1]]);
-  }
-  cross(qScratch, u, v);
-  return unit4([real, qScratch[0], qScratch[1], qScratch[2]]);
-}
-
-function unit4(q) {
-  const n = Math.hypot(q[0], q[1], q[2], q[3]);
-  return [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
-}
-
-function rotateByQ(vector, q) {
-  const [a, b, c, d] = q;
-  const qv = [b, c, d];
-  const dota = 2 * dot(qv, vector);
-  const qvDot = dot(qv, qv);
-  const cx = qv[1] * vector[2] - qv[2] * vector[1];
-  const cy = qv[2] * vector[0] - qv[0] * vector[2];
-  const cz = qv[0] * vector[1] - qv[1] * vector[0];
-  const s = a * a - qvDot;
-  return [
-    qv[0] * dota + vector[0] * s + cx * 2 * a,
-    qv[1] * dota + vector[1] * s + cy * 2 * a,
-    qv[2] * dota + vector[2] * s + cz * 2 * a,
-  ];
+function normalize(vector) {
+  const n = length(vector) || 1;
+  return [vector[0] / n, vector[1] / n, vector[2] / n];
 }
 
 export function project(x, y, camera) {
   const half = Math.tan((camera.fov * Math.PI / 180) / 2) * camera.planeDistance;
   const px = (x * 2 - 1) * camera.aspect * half;
   const py = (1 - y * 2) * half;
-  const dir = camera.dir;
-  const len = length(dir) || 1;
-  return rotateByQ(
-    [px, py, camera.planeDistance],
-    qFromUnitVectors([0, 0, 1], [dir[0] / len, dir[1] / len, dir[2] / len]),
-  );
+  const forward = normalize(camera.dir);
+  let up = camera.up ? camera.up.slice() : [0, 0, 1];
+  const along = dot(up, forward);
+  const lifted = [up[0] - forward[0] * along, up[1] - forward[1] * along, up[2] - forward[2] * along];
+  if (length(lifted) < 1e-6) {
+    const fallback = Math.abs(forward[2]) > 0.9 ? [0, 1, 0] : [0, 0, 1];
+    const lean = dot(fallback, forward);
+    up = normalize([
+      fallback[0] - forward[0] * lean,
+      fallback[1] - forward[1] * lean,
+      fallback[2] - forward[2] * lean,
+    ]);
+  } else {
+    up = normalize(lifted);
+  }
+  const right = [0, 0, 0];
+  cross(right, forward, up);
+  const depth = camera.planeDistance;
+  return [
+    right[0] * px + up[0] * py + forward[0] * depth,
+    right[1] * px + up[1] * py + forward[1] * depth,
+    right[2] * px + up[2] * py + forward[2] * depth,
+  ];
 }
 
 export function intersect(origin, direction, object) {
