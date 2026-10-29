@@ -5,7 +5,7 @@ import { createGpuPainter, fitCanvas } from "../render/gpu.js";
 import { createFps } from "../render/fps.js";
 import { createPacer, easePixels, nativePixels, playPixels, viewStill } from "../render/pace.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
-import { DAY_TICKS } from "../sim/sun.js";
+import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
@@ -15,10 +15,12 @@ import {
   bindHearth,
   bruise,
   clubHit,
+  coolPain,
   craftNeed,
   createVitals,
   finNeed,
   finOutput,
+  limpFactor,
   recallPoint,
   stepDown,
   tryFinishFin,
@@ -31,7 +33,7 @@ import { chaseOrigin, createCameraSpring, frameCamera, stepCamera, stepLook, CHA
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
-import { learnLore, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
+import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { paintChart } from "../render/chart.js";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
@@ -138,6 +140,7 @@ const friends = new Map();
 const seenPeople = new Map();
 const vitals = createVitals();
 let loreNote = "";
+let brush = "dig";
 let stillPose = null;
 let stillFor = 0;
 let easedPixels = null;
@@ -264,6 +267,7 @@ addEventListener("keydown", (event) => {
   if (event.code === "KeyR") {
     optics = OPTICS[(OPTICS.indexOf(optics) + 1) % OPTICS.length];
   }
+  if (event.code === "KeyC" && !event.repeat) brush = brush === "dig" ? "fill" : "dig";
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
@@ -636,7 +640,10 @@ function drawChart() {
     target: selection,
     objects,
     trail,
-    known: sensedPeople(),
+    known: sensedPeople().map((person) => ({
+      ...person,
+      label: friends.has(person.id) ? `${person.id} ${friendTier(friends.get(person.id))}` : person.id,
+    })),
     ground: [...survey.ground.values()],
     places: [...survey.places.values()],
   });
@@ -788,7 +795,14 @@ function publish() {
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const flux = yard.pieces.some((piece) => piece.id === "fin") ? ` · flux ${finOutput(tick)}` : "";
   const boundNote = yard.bound ? " · bound" : "";
-  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}`;
+  const legNote = vitals.legs < 100 ? ` · legs ${Math.ceil(vitals.legs)}` : "";
+  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${legNote}`;
+  const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}` : "";
+  const brushNote = slot === "bit" && brush === "fill" ? " · fill" : "";
+  const lightNote = ` · ${dayWord(tick)}`;
+  const friendNote = selection?.kind === "player" && friends.has(selection.id)
+    ? ` · ${friendTier(friends.get(selection.id))} ${friends.get(selection.id)}`
+    : "";
   const pace = canvas.dataset.pace || "vsync";
   const rate = canvas.dataset.fps || "0";
   const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
@@ -808,7 +822,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known} · ${slot}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0} · walls ${walls}${boundNote}${flux}${hurt}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -1320,12 +1334,14 @@ if (params.get("still") !== "1") {
         raising = null;
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
-          terrain.dig(aim.eye, aim.aim, { peer: witnessed() });
+          terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush });
           grantUse(skills, "mining", { tick, gap: 30 });
         } else if (!raising) {
           work = null;
         }
       }
+      if (vitals.down > 0) sample.forward = 0;
+      sample.limp = limpFactor(vitals) < 1;
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, sample, jump, skills.jump.value);
@@ -1351,6 +1367,7 @@ if (params.get("still") !== "1") {
           if (hit.dead) report = "down";
         }
       }
+      coolPain(vitals, 1 / 30);
       if (moved.jump) grantUse(skills, "jump", { tick });
       if (moved.running) grantUse(skills, "run", { tick, gap: 30 });
       if (mapOpen) grantUse(skills, "mapping", { tick, gap: 15 });
@@ -1431,7 +1448,9 @@ if (params.get("still") !== "1") {
     const decision = quiet && !document.hidden ? pacer.considerExtra(now, primaryHolding) : pacer.consider(now, active);
     if (!quiet && paceBus) paceBus.postMessage({ role: "primary", holding: decision.holding });
     viewScale = decision.scale;
-    canvas.dataset.pace = still ? `${decision.mode} still` : decision.mode;
+    const native = nativePixels(boxW, boxH, window.devicePixelRatio || 1);
+    const arrived = still && easedPixels && easedPixels.width >= native.width * 0.95 && easedPixels.height >= native.height * 0.95;
+    canvas.dataset.pace = still ? `${decision.mode}${arrived ? " native" : " still"}` : decision.mode;
     if (params.get("nopaint") !== "1" && decision.paint) {
       if (painter) fitCanvas(canvas, viewScale, easedPixels);
       const started = performance.now();

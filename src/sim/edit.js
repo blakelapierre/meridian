@@ -32,6 +32,7 @@ export function acceptEdit(crust, proposal, { certified = false, localEdits = fa
     if (dist2(at, proposal.aim) > 10000) return { ok: false, reason: "brush" };
     const previous = crust.sampleIndex(write.i, write.j, write.k);
     if (proposal.mode === "dig" && (previous > 0 || write.sdf_mm !== 500)) return { ok: false, reason: "dig" };
+    if (proposal.mode === "fill" && (previous <= 0 || write.sdf_mm !== -500)) return { ok: false, reason: "fill" };
   }
   for (const write of proposal.writes) crust.write(write.i, write.j, write.k, write.sdf_mm);
   return { ok: true };

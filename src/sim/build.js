@@ -86,6 +86,7 @@ function collapse(yard) {
     yard.pieces.splice(i, 1);
     fallen += 1;
   }
+  if (fallen) yard.spoil = (yard.spoil || 0) + fallen * 3;
   return fallen;
 }
 

@@ -6,6 +6,14 @@ export function sunDirection(tick, multiplier = SUN_MULTIPLIER) {
   return [Math.cos(phase), 0, Math.sin(phase)];
 }
 
+export function dayWord(tick, multiplier = SUN_MULTIPLIER) {
+  const height = sunDirection(tick, multiplier)[2];
+  if (height >= 0.5) return "noon";
+  if (height > 0) return "day";
+  if (height > -0.5) return "low";
+  return "night";
+}
+
 export function finFluxPerMin(normal, sun) {
   let dot = 0;
   for (let i = 0; i < 3; i++) dot += normal[i] * sun[i];
