@@ -1,4 +1,5 @@
 import { Crust } from "../sim/crust.js";
+import { pieceBoxes } from "../sim/build.js";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 
@@ -9,13 +10,14 @@ export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, width, height }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
   if (crust !== false) {
     objects.push({ type: "crust", field: crust || new Crust(atoll.worldSeed, atoll.cellId) });
   }
+  for (const box of pieceBoxes(pieces)) objects.push(box);
   for (const prop of atoll.props) {
     const box = prop.box;
     objects.push({
