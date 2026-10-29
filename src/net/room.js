@@ -66,7 +66,7 @@ export async function connectPeer({ pc, room, me, to, offer, isOpen, status }) {
   };
   pc.oniceconnectionstatechange = () => note(`ice ${pc.iceConnectionState}`);
   room.onMessage(async (message) => {
-    if (message.type !== "signal" || message.from === me) return;
+    if (message.type !== "signal" || message.from !== to) return;
     let payload;
     try {
       payload = JSON.parse(message.blob);

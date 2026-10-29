@@ -62,7 +62,7 @@ export function createGpuPainter(canvas) {
       alpha: false,
       antialias: false,
       depth: false,
-      stencil: true,
+      stencil: false,
       preserveDrawingBuffer: false,
     });
   } catch {
@@ -210,7 +210,6 @@ void main() {
   vec3 ro = uOrigin;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
-  float firstT = 80.0;
   for (int bounce = 0; bounce < 2; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
@@ -301,7 +300,6 @@ void main() {
         found = true;
       }
     }
-    if (bounce == 0) firstT = found ? min(bestT, 80.0) : 80.0;
     if (!found) {
       accum += thru * skyColor(rd);
       break;
@@ -347,7 +345,7 @@ void main() {
     rd = normalize(reflect(rd, bestN));
     ro = bestP + bestN * 0.05;
   }
-  fragColor = vec4(accum, clamp(firstT / 80.0, 0.0, 1.0));
+  fragColor = vec4(accum, 1.0);
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
   const fs = compile(gl, gl.FRAGMENT_SHADER, frag);
@@ -409,69 +407,8 @@ void main() {
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, 1, gl.RGBA, gl.FLOAT, data);
   };
-  const linkExtra = (source) => {
-    const extra = compile(gl, gl.FRAGMENT_SHADER, source);
-    if (!extra) return null;
-    const prog = gl.createProgram();
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, extra);
-    gl.bindAttribLocation(prog, 0, "aPos");
-    gl.linkProgram(prog);
-    return gl.getProgramParameter(prog, gl.LINK_STATUS) ? prog : null;
-  };
-  const copyProgram = linkExtra(`#version 300 es
-precision highp float;
-uniform sampler2D uCoarse;
-uniform vec2 uRes;
-out vec4 fragColor;
-void main() {
-  fragColor = vec4(texture(uCoarse, gl_FragCoord.xy / uRes).rgb, 1.0);
-}`);
-  const markProgram = linkExtra(`#version 300 es
-precision highp float;
-uniform sampler2D uCoarse;
-uniform vec2 uRes;
-uniform float uRadius;
-uniform float uNear;
-out vec4 fragColor;
-void main() {
-  vec2 uv = gl_FragCoord.xy / uRes;
-  float edge = length(uv - 0.5);
-  float dist = texture(uCoarse, uv).a * 80.0;
-  if (edge > uRadius && dist > uNear) discard;
-  fragColor = vec4(1.0);
-}`);
   const boundTex = new Array(MAX_SPHERES);
   let atlasDirty = false;
-  const coarseTex = gl.createTexture();
-  const coarseFbo = gl.createFramebuffer();
-  gl.bindTexture(gl.TEXTURE_2D, coarseTex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  let coarseW = 0;
-  let coarseH = 0;
-  let foveaOk = false;
-  const stencilOk = gl.getParameter(gl.STENCIL_BITS) > 0 && markProgram && copyProgram;
-  const ensureCoarse = (width, height) => {
-    if (coarseW === width && coarseH === height) return foveaOk;
-    coarseW = width;
-    coarseH = height;
-    gl.bindTexture(gl.TEXTURE_2D, coarseTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, coarseFbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, coarseTex, 0);
-    foveaOk = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    return foveaOk;
-  };
-  const drawRays = (width, height) => {
-    gl.useProgram(program);
-    gl.viewport(0, 0, width, height);
-    gl.uniform2f(loc("uRes"), width, height);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-  };
   return {
     paint(scene) {
       sphereData.fill(0);
@@ -571,57 +508,7 @@ void main() {
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-      const detail = scene.detail || { coarse: 1, radius: 1, near: 0, level: 1 };
-      const fullW = canvas.width;
-      const fullH = canvas.height;
-      const coarse = Math.max(0.28, Math.min(1, detail.coarse));
-      const cw = Math.max(160, Math.floor(fullW * coarse));
-      const ch = Math.max(90, Math.floor(fullH * coarse));
-      const split = copyProgram && coarse < 0.98 && ensureCoarse(cw, ch);
-      gl.disable(gl.SCISSOR_TEST);
-      gl.disable(gl.STENCIL_TEST);
-      gl.colorMask(true, true, true, true);
-      if (!split) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        drawRays(fullW, fullH);
-        return true;
-      }
-      gl.bindFramebuffer(gl.FRAMEBUFFER, coarseFbo);
-      drawRays(cw, ch);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.activeTexture(gl.TEXTURE8);
-      gl.bindTexture(gl.TEXTURE_2D, coarseTex);
-      gl.useProgram(copyProgram);
-      gl.viewport(0, 0, fullW, fullH);
-      gl.uniform2f(gl.getUniformLocation(copyProgram, "uRes"), fullW, fullH);
-      gl.uniform1i(gl.getUniformLocation(copyProgram, "uCoarse"), 8);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      if (stencilOk) {
-        gl.enable(gl.STENCIL_TEST);
-        gl.clearStencil(0);
-        gl.clear(gl.STENCIL_BUFFER_BIT);
-        gl.colorMask(false, false, false, false);
-        gl.stencilFunc(gl.ALWAYS, 1, 0xff);
-        gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
-        gl.useProgram(markProgram);
-        gl.uniform2f(gl.getUniformLocation(markProgram, "uRes"), fullW, fullH);
-        gl.uniform1i(gl.getUniformLocation(markProgram, "uCoarse"), 8);
-        gl.uniform1f(gl.getUniformLocation(markProgram, "uRadius"), detail.radius);
-        gl.uniform1f(gl.getUniformLocation(markProgram, "uNear"), detail.near);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-        gl.colorMask(true, true, true, true);
-        gl.stencilFunc(gl.EQUAL, 1, 0xff);
-        gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
-        drawRays(fullW, fullH);
-        gl.disable(gl.STENCIL_TEST);
-      } else {
-        const halfW = Math.max(8, Math.floor(fullW * detail.radius));
-        const halfH = Math.max(8, Math.floor(fullH * detail.radius));
-        gl.enable(gl.SCISSOR_TEST);
-        gl.scissor(Math.floor(fullW / 2) - halfW, Math.floor(fullH / 2) - halfH, halfW * 2, halfH * 2);
-        drawRays(fullW, fullH);
-        gl.disable(gl.SCISSOR_TEST);
-      }
       return true;
     },
   };

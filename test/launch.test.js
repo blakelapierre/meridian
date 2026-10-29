@@ -7,16 +7,17 @@ test("a check opens a primary, the other client, and a follow view", () => {
   assert.match(primary, /id=a/);
   assert.match(primary, /offer=1/);
   assert.match(primary, /look=dummy/);
+  assert.match(primary, /to=b%2Cc|to=b,c/);
   assert.match(second, /id=b/);
-  assert.match(second, /to=a/);
-  assert.doesNotMatch(second, /offer=1/);
-  assert.match(follow, /^\/tools\/view\/index.html\?/);
+  assert.match(second, /offer=c/);
+  assert.match(follow, /id=c/);
   assert.match(follow, /follow=a/);
   assert.match(follow, /look=dummy/);
   const [tabB, tabA, behind] = trio("/tools/dig/index.html?id=b&to=a");
   assert.match(tabB, /id=b/);
   assert.match(tabA, /id=a/);
   assert.match(tabA, /offer=1/);
+  assert.match(behind, /id=c/);
   assert.match(behind, /follow=b/);
 });
 

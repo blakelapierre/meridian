@@ -4,7 +4,6 @@ import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
 import { createFps } from "../render/fps.js";
 import { createPacer } from "../render/pace.js";
-import { createDetail } from "../render/detail.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
@@ -18,14 +17,12 @@ import { createIdentity } from "../net/identity.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom } from "../net/room.js";
 import { acceptShot, encodeShot } from "../net/shots.js";
+import { acceptPosition, encodePosition } from "../net/position.js";
 
 const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
-const focus = createDetail();
-let lastCost = 16;
-let frameGap = 16;
 if (painter) {
   fitCanvas(canvas, viewScale);
   canvas.style.imageRendering = "auto";
@@ -40,15 +37,6 @@ const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
 const followId = params.get("follow");
-const poseChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("meridian-pose") : null;
-let followed = null;
-if (poseChannel && followId) {
-  poseChannel.onmessage = (event) => {
-    const data = event.data;
-    if (!data || data.id !== followId) return;
-    followed = data;
-  };
-}
 const keys = new Set();
 const peer = Boolean(params.get("id"));
 
@@ -79,6 +67,21 @@ let shotQueued = false;
 let cooldown = 0;
 let report = "";
 let ops = null;
+const links = [];
+let followed = null;
+
+function openLinks() {
+  return links.filter((link) => link.ops.readyState === "open");
+}
+
+function sendOps(frame) {
+  const open = openLinks();
+  if (!open.length) {
+    if (peer) shotFrames.push(frame);
+    return;
+  }
+  for (const link of open) link.ops.send(frame);
+}
 const shotFrames = [];
 
 addEventListener("keydown", (event) => {
@@ -101,8 +104,7 @@ canvas.addEventListener("mousedown", (event) => {
     if (!saved.ok) return;
     const nonce = tick;
     const frame = encodeSalvage(identity, { nonce, cell: mark.cell });
-    if (ops && ops.readyState === "open") ops.send(frame);
-    else if (peer) shotFrames.push(frame);
+    sendOps(frame);
     return;
   }
   if (event.button !== 0) return;
@@ -179,8 +181,7 @@ function publish() {
   const pace = canvas.dataset.pace || "vsync";
   const rate = canvas.dataset.fps || "0";
   const aim = canvas.dataset.aim ? ` · ${canvas.dataset.aim}` : "";
-  const detail = canvas.dataset.detail || "0";
-  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height} · detail ${detail}`;
+  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -189,19 +190,6 @@ function publish() {
   canvas.dataset.hash = terrain.hash();
   canvas.dataset.dummy = String(dummy.health);
   canvas.dataset.slot = slot;
-}
-
-function viewSignature(sample) {
-  return [
-    player.position[0].toFixed(2),
-    player.position[1].toFixed(2),
-    player.position[2].toFixed(2),
-    yaw.toFixed(3),
-    pitch.toFixed(3),
-    sample.crouch ? 1 : 0,
-    terrain.voxel() ?? "0",
-    yard.pieces.length,
-  ].join(":");
 }
 
 function paint(sample) {
@@ -219,8 +207,6 @@ function paint(sample) {
   });
   scene.work = work;
   scene.time = tick / 30;
-  scene.detail = focus.sample(viewSignature(sample), Math.max(lastCost, frameGap));
-  canvas.dataset.detail = String(Math.round(scene.detail.level * 100));
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
   const color = hit.color || scene.miss;
@@ -285,8 +271,7 @@ function fire(sample) {
     dir: shot.dir,
     hitbox: shot.hitbox || "miss",
   });
-  if (ops && ops.readyState === "open") ops.send(frame);
-  else if (peer) shotFrames.push(frame);
+  sendOps(frame);
 }
 
 function onOps(bytes) {
@@ -332,9 +317,14 @@ function onOps(bytes) {
 }
 
 function flush() {
-  if (ops && ops.readyState === "open") {
-    for (const frame of terrain.take()) ops.send(frame);
-    while (shotFrames.length) ops.send(shotFrames.shift());
+  const open = openLinks();
+  if (open.length) {
+    const frames = terrain.take();
+    const shots = shotFrames.splice(0);
+    for (const link of open) {
+      for (const frame of frames) link.ops.send(frame);
+      for (const frame of shots) link.ops.send(frame);
+    }
   }
   publish();
 }
@@ -345,39 +335,47 @@ if (params.get("autobit") === "1") {
 }
 
 async function link() {
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-  const channels = {};
-  for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false]]) {
-    const options = { negotiated: true, id: spec[1], ordered: spec[2] };
-    if (!spec[2]) options.maxRetransmits = 0;
-    const channel = pc.createDataChannel(spec[0], options);
-    channel.binaryType = "arraybuffer";
-    channels[spec[0]] = channel;
-  }
-  ops = channels.ops;
-  ops.onmessage = (event) => onOps(new Uint8Array(event.data));
+  const targets = (params.get("to") || "").split(",").map((item) => item.trim()).filter(Boolean);
+  const offerParam = params.get("offer") || "";
   const room = createRoom({
     url: params.get("signal") || "ws://127.0.0.1:8787",
     me: params.get("id"),
   });
   const linkLine = document.querySelector("#link");
   await room.start();
-  await connectPeer({
-    pc,
-    room,
-    me: params.get("id"),
-    to: params.get("to"),
-    offer: params.get("offer") === "1",
-    isOpen: () => ops.readyState === "open",
-    status: (line) => {
-      if (linkLine) linkLine.textContent = line;
-    },
-  });
+  await Promise.all(targets.map(async (to) => {
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    const channels = {};
+    for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false]]) {
+      const options = { negotiated: true, id: spec[1], ordered: spec[2] };
+      if (!spec[2]) options.maxRetransmits = 0;
+      const channel = pc.createDataChannel(spec[0], options);
+      channel.binaryType = "arraybuffer";
+      channels[spec[0]] = channel;
+    }
+    links.push({ to, ops: channels.ops, snap: channels.snap });
+    if (!ops) ops = channels.ops;
+    channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data));
+    channels.snap.onmessage = (event) => {
+      if (to !== followId) return;
+      followed = acceptPosition(followed, new Uint8Array(event.data));
+    };
+    await connectPeer({
+      pc,
+      room,
+      me: params.get("id"),
+      to,
+      offer: offerParam === "1" || offerParam.split(",").includes(to),
+      isOpen: () => channels.ops.readyState === "open",
+      status: (line) => {
+        if (linkLine && !followed) linkLine.textContent = targets.length > 1 ? `${to} ${line}` : line;
+      },
+    });
+  }));
 }
 
 const first = input();
-if (painter) fitCanvas(canvas, 1);
-else fitCanvas(canvas, viewScale);
+if (painter) fitCanvas(canvas, viewScale);
 paint(first);
 publish();
 canvas.dataset.ready = "1";
@@ -386,34 +384,30 @@ canvas.dataset.pace = "vsync";
 const FOLLOW_M = 3.5;
 
 function publishPose() {
-  if (!poseChannel || followId) return;
-  poseChannel.postMessage({
-    id: params.get("id") || "a",
-    pose: {
-      x: player.position[0],
-      y: player.position[1],
-      z: player.position[2],
-      yaw,
-      pitch,
-    },
-    digs: [...terrain.log.crust.overrides],
-    pieces: yard.pieces.map((piece) => ({ ...piece, at: [...piece.at] })),
+  if (followId) return;
+  const packet = encodePosition({
+    tick,
+    x: player.position[0],
+    y: player.position[1],
+    z: player.position[2],
+    yaw,
+    pitch,
   });
+  for (const link of links) {
+    if (link.snap.readyState === "open") link.snap.send(packet);
+  }
 }
 
 function applyFollow() {
-  if (!followed?.pose) return;
-  const pose = followed.pose;
-  yaw = pose.yaw;
-  pitch = pose.pitch;
-  player.position[0] = pose.x - Math.sin(yaw) * FOLLOW_M;
-  player.position[1] = pose.y - Math.cos(yaw) * FOLLOW_M;
-  player.position[2] = pose.z;
+  if (!followed || followed.yaw === undefined) return;
+  yaw = followed.yaw;
+  pitch = followed.pitch;
+  player.position[0] = followed.x - Math.sin(yaw) * FOLLOW_M;
+  player.position[1] = followed.y - Math.cos(yaw) * FOLLOW_M;
+  player.position[2] = followed.z;
   player.velocity[0] = 0;
   player.velocity[1] = 0;
   player.velocity[2] = 0;
-  if (followed.digs) terrain.log.crust.overrides = new Map(followed.digs);
-  if (followed.pieces) yard.pieces = followed.pieces.map((piece) => ({ ...piece, at: [...piece.at] }));
   work = null;
   const linkLine = document.querySelector("#link");
   if (linkLine) linkLine.textContent = `following ${followId} from ${FOLLOW_M} m behind`;
@@ -435,7 +429,6 @@ if (params.get("still") !== "1") {
   const frame = (now) => {
     try {
     bank += Math.min(0.1, (now - last) / 1000);
-    frameGap = now - last;
     last = now;
     const sample = input();
     const aimed = refreshAim(sample);
@@ -472,8 +465,7 @@ if (params.get("still") !== "1") {
               const nonce = tick;
               seenWalls.add(nonce);
               const frame = encodeWall(identity, { nonce, cell: raising.cell });
-              if (ops && ops.readyState === "open") ops.send(frame);
-              else if (peer) shotFrames.push(frame);
+              sendOps(frame);
             }
             raising = null;
             work = null;
@@ -519,11 +511,9 @@ if (params.get("still") !== "1") {
     viewScale = pacer.scale;
     canvas.dataset.pace = decision.mode;
     if (params.get("nopaint") !== "1" && decision.paint) {
-      if (painter) fitCanvas(canvas, 1);
-      else fitCanvas(canvas, viewScale);
+      if (painter) fitCanvas(canvas, viewScale);
       const started = performance.now();
       paint(sample);
-      lastCost = performance.now() - started;
       pacer.note(performance.now() - started, active);
       canvas.dataset.fps = String(fps.paint(now));
     }
