@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { cast } from "../src/engine/cast.js";
 import { acceptWall, encodeWall } from "../src/net/walls.js";
 import { createIdentity } from "../src/net/identity.js";
-import { adoptWall, cellOnGround, createYard, pieceBoxes, tryPlaceWall } from "../src/sim/build.js";
+import { adoptSalvage, adoptWall, cellOnGround, createYard, pieceBoxes, tryPlaceWall, trySalvage } from "../src/sim/build.js";
 import { lookDirection } from "../src/sim/hands.js";
 
 const atoll = JSON.parse(readFileSync(new URL("../content/atoll.json", import.meta.url)));
@@ -37,6 +37,28 @@ test("the other browser adopts the wall without paying", () => {
   assert.equal(adoptWall(witness, accepted.cell).ok, true);
   assert.equal(witness.metal, 30);
   assert.equal(witness.pieces.length, 2);
+});
+
+test("salvage returns the metal and a wall that lost its footing falls", () => {
+  const lone = createYard(atoll.placements.footing);
+  const beside = [lone.pieces[0].at[0] + 1, lone.pieces[0].at[1]];
+  tryPlaceWall(lone, beside);
+  assert.equal(trySalvage(lone, beside).ok, true);
+  assert.equal(lone.metal, 30);
+  const yard = createYard(atoll.placements.footing);
+  const footing = yard.pieces[0].at;
+  const next = [footing[0] + 1, footing[1]];
+  const further = [footing[0] + 2, footing[1]];
+  tryPlaceWall(yard, next);
+  tryPlaceWall(yard, further);
+  assert.equal(trySalvage(yard, next).ok, true);
+  assert.equal(yard.metal, 24);
+  assert.equal(yard.pieces.some((piece) => piece.id === "wall"), false);
+  const witness = createYard(atoll.placements.footing);
+  tryPlaceWall(witness, next);
+  adoptSalvage(witness, next);
+  assert.equal(witness.metal, 24);
+  assert.equal(witness.pieces.length, 1);
 });
 
 test("looking at the ground next to your feet picks a cell", () => {

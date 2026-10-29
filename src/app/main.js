@@ -2,13 +2,14 @@ import { paintFrame } from "../engine/frame.js";
 import { cast, project } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js";
+import { createFps } from "../render/fps.js";
 import { createPacer } from "../render/pace.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { stepHands } from "../sim/hands.js";
 import { bitAim } from "../sim/bit.js";
-import { adoptWall, cellOnGround, createYard, tryPlaceWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, cellOnGround, createYard, tryPlaceWall, trySalvage } from "../sim/build.js";
 import { lookDirection } from "../sim/hands.js";
-import { acceptWall, encodeWall } from "../net/walls.js";
+import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { createIdentity } from "../net/identity.js";
 import { createTerrain } from "../net/terrain.js";
@@ -51,6 +52,8 @@ const seenShots = new Set();
 const seenWalls = new Set();
 let slot = params.get("look") === "dummy" ? "line" : "bit";
 let raising = null;
+let work = null;
+const fps = createFps();
 let yaw = params.get("autobit") === "1" ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : 0);
 let pitch = params.get("autobit") === "1" ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let tick = (72 * 60 * 30) / 4;
@@ -69,6 +72,19 @@ addEventListener("keydown", (event) => {
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
 canvas.addEventListener("mousedown", (event) => {
+  if (event.button === 2) {
+    if (slot !== "hammer") return;
+    const eye = [player.position[0], player.position[1], player.position[2] + 1.65];
+    const cell = cellOnGround(eye, lookDirection(yaw, pitch));
+    const saved = trySalvage(yard, cell);
+    report = saved.ok ? "salvage" : saved.reason;
+    if (!saved.ok) return;
+    const nonce = tick;
+    const frame = encodeSalvage(identity, { nonce, cell });
+    if (ops && ops.readyState === "open") ops.send(frame);
+    else if (peer) shotFrames.push(frame);
+    return;
+  }
   if (event.button !== 0) return;
   trigger = true;
   if (slot === "line") shotQueued = true;
@@ -76,6 +92,7 @@ canvas.addEventListener("mousedown", (event) => {
 addEventListener("mouseup", (event) => {
   if (event.button === 0) trigger = false;
 });
+canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("click", () => canvas.requestPointerLock());
 addEventListener("mousemove", (event) => {
   if (document.pointerLockElement !== canvas) return;
@@ -102,7 +119,10 @@ function publish() {
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const pace = canvas.dataset.pace || "vsync";
-  if (bit) bit.textContent = `${slot} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${pace} ${canvas.width}×${canvas.height}`;
+  const rate = canvas.dataset.fps || "0";
+  if (bit) bit.textContent = `${slot} · metal ${yard.metal} · walls ${walls}${report ? ` · ${report}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const counter = document.querySelector("#fps");
+  if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = voxel === null ? "" : String(voxel);
@@ -124,6 +144,8 @@ function paint(sample) {
     width: canvas.width,
     height: canvas.height,
   });
+  scene.work = work;
+  scene.time = tick / 30;
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
   const color = hit.color || scene.miss;
@@ -191,6 +213,13 @@ function fire(sample) {
 }
 
 function onOps(bytes) {
+  if (bytes[0] === 10) {
+    const accepted = acceptSalvage(bytes);
+    if (!accepted.ok) return;
+    adoptSalvage(yard, accepted.cell);
+    report = "salvage";
+    return;
+  }
   if (bytes[0] === 9) {
     const accepted = acceptWall(bytes);
     if (!accepted.ok || seenWalls.has(accepted.nonce)) return;
@@ -303,6 +332,12 @@ if (params.get("still") !== "1") {
         }
         if (raising) {
           raising.ticks += 1;
+          work = {
+            x: raising.cell[0] * 0.5,
+            y: raising.cell[1] * 0.5,
+            height: 0.15 + (raising.ticks / (12 * 30)) * 2.05,
+            mode: 1,
+          };
           report = `work ${Math.floor(raising.ticks / 30)}s`;
           if (raising.ticks >= 12 * 30) {
             const placed = tryPlaceWall(yard, raising.cell);
@@ -315,13 +350,21 @@ if (params.get("still") !== "1") {
               else if (peer) shotFrames.push(frame);
             }
             raising = null;
+            work = null;
           }
+        } else {
+          work = null;
         }
       } else {
         raising = null;
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
+          const eye = [player.position[0], player.position[1], player.position[2] + (sample.crouch ? 1.1 : 1.65)];
+          const cell = cellOnGround(eye, lookDirection(sample.yaw, sample.pitch));
+          work = cell ? { x: cell[0] * 0.5, y: cell[1] * 0.5, height: 0.12, mode: 2 } : null;
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
           terrain.dig(aim.eye, aim.aim, { peer });
+        } else {
+          work = null;
         }
       }
       stepHands(world, player, stamina, sample);
@@ -336,6 +379,7 @@ if (params.get("still") !== "1") {
       const started = performance.now();
       paint(sample);
       pacer.note(performance.now() - started, active);
+      canvas.dataset.fps = String(fps.paint(now));
     }
     flush();
     requestAnimationFrame(frame);

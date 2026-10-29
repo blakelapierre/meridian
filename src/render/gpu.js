@@ -83,6 +83,8 @@ uniform vec2 uRes;
 uniform int uSpheres;
 uniform int uBoxes;
 uniform int uDigs;
+uniform vec4 uWork;
+uniform float uTime;
 uniform sampler2D uSphereTex;
 uniform sampler2D uSphereColor;
 uniform sampler2D uBoxMin;
@@ -215,6 +217,27 @@ void main() {
     bestColor = texelFetch(uSphereColor, ivec2(i, 0), 0);
   }
   if (bestT < 1.0e20 && blocked(bestP + uSun * 0.08, uSun)) bestColor.rgb *= 0.45;
+  if (uWork.w > 0.5) {
+    vec2 cell = uWork.xy;
+    float rise = max(uWork.z, 0.08);
+    float gt;
+    vec3 bmin = vec3(cell.x - 0.24, cell.y - 0.08, 0.0);
+    vec3 bmax = vec3(cell.x + 0.24, cell.y + 0.08, rise);
+    bool column = uWork.w < 1.5 && boxHit(uOrigin, rd, bmin, bmax, gt) && gt < bestT;
+    if (column) {
+      vec3 gp = uOrigin + rd * gt;
+      float band = 0.55 + 0.45 * sin(gp.z * 16.0 - uTime * 8.0);
+      float lip = smoothstep(rise - 0.12, rise, gp.z);
+      bestColor = vec4(mix(vec3(0.15, 0.85, 1.0) * band, vec3(1.0, 0.78, 0.35), lip), 1.0);
+    } else if (bestT < 1.0e20) {
+      float dist = length(bestP.xy - cell);
+      float ring = 0.28 + 0.05 * sin(uTime * 3.0);
+      float mark = smoothstep(0.07, 0.0, abs(dist - ring));
+      float pad = smoothstep(0.34, 0.08, dist);
+      float scan = 0.55 + 0.45 * sin(uTime * 6.0 + dist * 20.0);
+      bestColor.rgb += vec3(0.2, 0.9, 1.0) * (mark * 0.95 + pad * 0.35 * scan);
+    }
+  }
   fragColor = bestColor;
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
@@ -323,6 +346,9 @@ void main() {
       gl.uniform1i(loc("uSpheres"), spheres);
       gl.uniform1i(loc("uBoxes"), boxes);
       gl.uniform1i(loc("uDigs"), digs);
+      const work = scene.work;
+      gl.uniform4f(loc("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
+      gl.uniform1f(loc("uTime"), scene.time || 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
