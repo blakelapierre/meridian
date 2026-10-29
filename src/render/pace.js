@@ -11,7 +11,7 @@ export function shouldPaint(active, elapsedMs) {
 }
 
 export function createPacer() {
-  let scale = 1;
+  let scale = 0.5;
   let lastNow = 0;
   let lastPaint = -1e9;
   let refresh = 1000 / 60;

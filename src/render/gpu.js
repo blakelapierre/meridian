@@ -41,9 +41,10 @@ function texture(gl, width) {
 }
 
 export function fitCanvas(canvas, scale = 1) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const fullW = Math.min(1920, Math.max(1, Math.floor((canvas.clientWidth || window.innerWidth) * dpr)));
-  const fullH = Math.min(1080, Math.max(1, Math.floor((canvas.clientHeight || window.innerHeight) * dpr)));
+  const boxW = canvas.clientWidth || window.innerWidth || 960;
+  const boxH = canvas.clientHeight || window.innerHeight || 540;
+  const fullW = Math.min(960, Math.max(1, Math.floor(boxW)));
+  const fullH = Math.min(540, Math.max(1, Math.floor(boxH)));
   const width = Math.max(160, Math.min(fullW, Math.floor(fullW * scale)));
   const height = Math.max(90, Math.min(fullH, Math.floor(fullH * scale)));
   if (canvas.width !== width) canvas.width = width;
@@ -179,8 +180,7 @@ vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);
   float day = smoothstep(0.0, 0.2, sun.z);
   float ndotl = max(dot(n, sun), 0.0) * day;
-  if (ndotl > 0.0 && blocked(p + sun * 0.15, sun)) ndotl = 0.0;
-  return albedo * (vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * ndotl);
+  return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * ndotl);
 }
 
 vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
