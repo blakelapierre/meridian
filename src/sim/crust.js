@@ -118,6 +118,20 @@ function dist2(a, b) {
   return dx * dx + dy * dy + dz * dz;
 }
 
+export function columnFloor(crust, x, y) {
+  const i = Math.floor(x * 2);
+  const j = Math.floor(y * 2);
+  let floor = 0;
+  for (const [key, sample] of crust.overrides) {
+    if (sample <= 0) continue;
+    const [di, dj, dk] = key.split(",").map(Number);
+    if (di !== i || dj !== j) continue;
+    const bottom = dk * 0.5;
+    if (bottom < floor) floor = bottom;
+  }
+  return floor;
+}
+
 export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 0 }) {
   const grant = 6667 + Math.floor((6667 * skill) / 140);
   crust.budgetCm3 += grant * ticks;
