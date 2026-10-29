@@ -72,6 +72,7 @@ let work = null;
 const fps = createFps();
 let yaw = params.get("autobit") === "1" ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : 0);
 let pitch = params.get("autobit") === "1" ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
+let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
 let tick = (0.87 / (Math.PI * 2)) * DAY_TICKS;
 let trigger = false;
 let shotQueued = false;
@@ -131,6 +132,7 @@ addEventListener("keydown", (event) => {
   if (event.repeat) return;
   if (event.code === "KeyE") useEdge = true;
   if (event.code === "KeyB") buyEdge = true;
+  if (event.code === "KeyV") view = view === "third" ? "first" : "third";
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
@@ -185,22 +187,33 @@ function eyeOf(sample) {
   ];
 }
 
-function refreshAim(sample = {}) {
-  if (slot !== "bit" && slot !== "hammer") return { inRange: false, kind: "" };
-  const yawNow = sample.yaw ?? yaw;
-  const pitchNow = sample.pitch ?? pitch;
-  const objects = buildScene({
+function remoteActor() {
+  if (!followed || followed.yaw === undefined) return null;
+  return { feet: [followed.x, followed.y, followed.z], yaw: followed.yaw };
+}
+
+function sceneFor(sample, width, height) {
+  return buildScene({
     feet: player.position,
-    yaw: yawNow,
-    pitch: pitchNow,
+    yaw: sample.yaw ?? yaw,
+    pitch: sample.pitch ?? pitch,
     crouch: !!sample.crouch,
     tick,
     atoll,
     crust: terrain.log.crust,
     pieces: yard.pieces,
-    width: 16,
-    height: 9,
-  }).objects;
+    width,
+    height,
+    view,
+    remote: remoteActor(),
+  });
+}
+
+function refreshAim(sample = {}) {
+  if (slot !== "bit" && slot !== "hammer") return { inRange: false, kind: "" };
+  const yawNow = sample.yaw ?? yaw;
+  const pitchNow = sample.pitch ?? pitch;
+  const objects = sceneFor(sample, 16, 9).objects.filter((object) => !object.self);
   return toolAim(slot, eyeOf(sample), lookDirection(yawNow, pitchNow), objects, yard.pieces);
 }
 
@@ -234,7 +247,7 @@ function publish() {
   const archives = links.filter((link) => link.role === "archive" && link.ops.readyState === "open").length;
   const official = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "";
   const chainNote = `block ${tip.height}${official ? ` ${official}` : ""}`;
-  if (bit) bit.textContent = `${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${view} · ${slot}${aim} · metal ${yard.metal} · walls ${walls}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${archives ? " · archive" : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const counter = document.querySelector("#fps");
   if (counter) counter.textContent = `${rate} fps`;
   canvas.dataset.walls = String(walls);
@@ -243,6 +256,7 @@ function publish() {
   canvas.dataset.hash = hash;
   canvas.dataset.dummy = String(dummy.health);
   canvas.dataset.slot = slot;
+  canvas.dataset.view = view;
   canvas.dataset.block = String(tipOf(worldChain).block.height);
   canvas.dataset.prompt = entryState.prompt || "";
   canvas.dataset.scrip = entryState.scrip == null ? "" : String(entryState.scrip);
@@ -250,18 +264,7 @@ function publish() {
 }
 
 function paint(sample) {
-  const scene = buildScene({
-    feet: player.position,
-    yaw,
-    pitch,
-    crouch: sample.crouch,
-    tick,
-    atoll,
-    crust: terrain.log.crust,
-    pieces: yard.pieces,
-    width: canvas.width,
-    height: canvas.height,
-  });
+  const scene = sceneFor(sample, canvas.width, canvas.height);
   scene.work = work;
   scene.time = tick / 30;
   const dir = project(0.5, 0.5, scene.camera);
@@ -293,26 +296,17 @@ function paint(sample) {
 }
 
 function fire(sample) {
-  const scene = buildScene({
-    feet: player.position,
-    yaw: sample.yaw,
-    pitch: sample.pitch,
-    crouch: sample.crouch,
-    tick,
-    atoll,
-    crust: terrain.log.crust,
-    pieces: yard.pieces,
-    width,
-    height,
-  });
+  const scene = sceneFor(sample, canvas.width, canvas.height);
   const speed = Math.hypot(player.velocity[0], player.velocity[1]);
+  const eye = eyeOf(sample);
+  const forward = lookDirection(sample.yaw, sample.pitch);
   const shot = resolveShot({
-    eye: scene.camera.origin,
-    forward: scene.camera.dir,
+    eye,
+    forward,
     speed,
     airborne: player.position[2] > 0.05,
     seed: tick,
-    objects: scene.objects,
+    objects: scene.objects.filter((object) => !object.self),
   });
   const nonce = Math.floor(tick);
   seenShots.add(nonce);
@@ -324,7 +318,7 @@ function fire(sample) {
   }
   const frame = encodeShot(identity, {
     nonce,
-    origin: scene.camera.origin,
+    origin: eye,
     dir: shot.dir,
     hitbox: shot.hitbox || "miss",
   });

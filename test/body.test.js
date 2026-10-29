@@ -1,36 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bindHearth, canLoot, craftHearth, createPerson, stepBody, wildernessDeath } from "../src/sim/body.js";
+import { chaseOrigin, playerParts, rayMisses } from "../src/sim/body.js";
+import { lookDirection } from "../src/sim/hands.js";
+import { buildScene } from "../src/render/scene.js";
+import { readFileSync } from "node:fs";
 
-test("a wilderness death drops the bit and a stranger waits 60 s", () => {
-  const person = createPerson([1, 2, 0]);
-  const corpse = wildernessDeath(person, 1000);
-  assert.equal(person.carried.length, 0);
-  assert.equal(corpse.carried.find((item) => item.id === "bit").n, 1);
-  assert.equal(person.integrity, 40);
-  assert.equal(person.blood, 50);
-  assert.equal(person.limbs.legL, 70);
-  assert.equal(person.pain, 40);
-  assert.equal(canLoot(corpse, 1000 + 60 * 30 - 1, false), false);
-  assert.equal(canLoot(corpse, 1000 + 60 * 30, false), true);
-  assert.equal(canLoot(corpse, 1000, true), true);
+const atoll = JSON.parse(readFileSync(new URL("../content/atoll.json", import.meta.url)));
+
+test("the third-person camera sits behind a body and the crosshair misses it", () => {
+  const feet = [4, -8, 0];
+  for (const crouch of [false, true]) {
+    for (const pitch of [0, -0.8, 0.6]) {
+      const parts = playerParts(feet, 0.4, crouch);
+      const origin = chaseOrigin(feet, 0.4, pitch, crouch);
+      const dir = lookDirection(0.4, pitch);
+      const ahead = (feet[0] - origin[0]) * dir[0] + (feet[1] - origin[1]) * dir[1];
+      assert.ok(ahead > 1, "the body is in front of the camera");
+      assert.equal(rayMisses(origin, dir, parts), true, `pitch ${pitch} crouch ${crouch}`);
+      const top = Math.max(...parts.map((part) => part.origin[2] + part.radius));
+      assert.ok(top <= (crouch ? 1.25 : 1.85) + feet[2]);
+      assert.ok(top >= (crouch ? 1.05 : 1.6) + feet[2]);
+    }
+  }
 });
 
-test("the hearth craft binds and the recall returns the bruised body", () => {
-  const person = createPerson([3, -150, 0]);
-  assert.equal(craftHearth(person, { footingOwned: false, ticks: 20 * 30 }), false);
-  assert.equal(craftHearth(person, { footingOwned: true, ticks: 20 * 30 - 1 }), false);
-  assert.equal(craftHearth(person, { footingOwned: true, ticks: 20 * 30 }), true);
-  assert.equal(person.carried.find((item) => item.id === "metal").n, 10);
-  assert.equal(person.carried.find((item) => item.id === "stone").n, 0);
-  bindHearth(person, "yard", [0, -140, 0]);
-  person.position = [4, -20, 0];
-  wildernessDeath(person, 0);
-  assert.equal(person.recall, 12 * 30);
-  stepBody(person, 12 * 30);
-  assert.deepEqual(person.position, [0, -140, 0]);
-  person.position = [9, 9, 0];
-  wildernessDeath(person, 1);
-  stepBody(person, 12 * 30);
-  assert.deepEqual(person.position, [9, 9, 0]);
+test("the walk scene defaults to the eyes, and third person adds the body", () => {
+  const feet = [0, 0, 0];
+  const first = buildScene({ feet, yaw: 0, pitch: 0, atoll, width: 16, height: 9 });
+  assert.deepEqual(first.camera.origin, [0, 0, 1.65]);
+  assert.equal(first.objects.some((object) => object.self), false);
+  const third = buildScene({ feet, yaw: 0, pitch: 0, atoll, width: 16, height: 9, view: "third" });
+  assert.ok(third.camera.origin[1] < feet[1]);
+  assert.equal(third.objects.filter((object) => object.self).length, 3);
 });

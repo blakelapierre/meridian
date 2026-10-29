@@ -1,17 +1,19 @@
 import { Crust } from "../sim/crust.js";
 import { pieceBoxes } from "../sim/build.js";
+import { chaseOrigin, playerParts } from "../sim/body.js";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const DUMMY = [0.86, 0.22, 0.18, 1];
+const OTHER = [0.55, 0.42, 0.22, 1];
 
 export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", remote = null }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -39,14 +41,22 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     body: "dummy",
     texture: dummyTexture(),
   });
+  if (view === "third") {
+    for (const part of playerParts(feet, yaw, crouch, { self: true })) objects.push(part);
+  }
+  if (remote) {
+    for (const part of playerParts(remote.feet, remote.yaw, !!remote.crouch, { self: false, color: OTHER })) objects.push(part);
+  }
   const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
+  const dir = lookDirection(yaw, pitch);
+  const origin = view === "third" ? chaseOrigin(feet, yaw, pitch, crouch) : [feet[0], feet[1], feet[2] + eye];
   return {
     sun,
     miss: [0.42 * day, 0.58 * day, 0.82 * day, 1],
     objects,
     camera: {
-      origin: [feet[0], feet[1], feet[2] + eye],
-      dir: lookDirection(yaw, pitch),
+      origin,
+      dir,
       fov: 70,
       aspect: width / height,
       planeDistance: 1,
