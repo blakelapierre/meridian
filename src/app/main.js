@@ -13,7 +13,7 @@ import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, tryPla
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
 import { createSkills, grantUse, SKILL_NAMES } from "../sim/skills.js";
-import { chaseOrigin, createCameraSpring, stepCamera, CHASE, BODY_COLORS } from "../sim/body.js";
+import { chaseOrigin, createCameraSpring, frameCamera, stepCamera, CHASE, BODY_COLORS } from "../sim/body.js";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
@@ -109,7 +109,7 @@ let cycleEdge = 0;
 let objectEdge = 0;
 let rightEdge = false;
 let autoRun = false;
-let mapOpen = params.get("quiet") !== "1";
+let mapOpen = params.get("quiet") !== "1" || params.has("ai");
 const trail = [];
 const survey = createSurvey();
 const plate = createPlate();
@@ -135,6 +135,7 @@ const links = [];
 let followed = null;
 const poses = new Map();
 let cameraSpring = null;
+let frameLook = null;
 let cameraPos = null;
 let cameraLook = null;
 
@@ -418,8 +419,21 @@ function aimCamera(sample, dt) {
     aim.third ? aim.distance : CLOSE,
   );
   const blend = aim.third ? zoom.blend : 1;
-  const ideal = blendOrigin(behind, eyes, blend);
+  let ideal = blendOrigin(behind, eyes, blend);
   cameraLook = blendDir(lookDirection(aim.yaw, aim.pitch), lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch), blend);
+  const framing = selection?.point && aim.third && zoom.blend < 0.45 && !rightDown
+    ? frameCamera(feet, selection.point, aim.distance || CHASE)
+    : null;
+  if (framing) {
+    ideal = blendOrigin(framing.origin, eyes, blend);
+    if (!frameLook) frameLook = framing.dir.slice();
+    const ease = 1 - Math.exp(-Math.max(dt, 0.001) * 5);
+    for (let i = 0; i < 3; i += 1) frameLook[i] += (framing.dir[i] - frameLook[i]) * ease;
+    const len = Math.hypot(frameLook[0], frameLook[1], frameLook[2]) || 1;
+    cameraLook = [frameLook[0] / len, frameLook[1] / len, frameLook[2] / len];
+  } else {
+    frameLook = null;
+  }
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
 }
@@ -1272,13 +1286,13 @@ if (params.get("still") !== "1") {
       }
     }
     showSight(aimed);
-    aimCamera(sample, dt);
-    revealMap();
-    drawChart();
     if (selection?.kind === "player") {
       const live = otherActors().find((actor) => actor.id === selection.id);
       if (live) selection.point = [live.feet[0], live.feet[1], live.feet[2] + 1];
     }
+    aimCamera(sample, dt);
+    revealMap();
+    drawChart();
     if (cycleOnce) cycle(cycleOnce, "player");
     if (objectOnce) cycle(objectOnce, "object");
     if (selectOnce) identify(sample);
