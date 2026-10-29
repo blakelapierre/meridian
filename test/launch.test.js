@@ -1,18 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { benchHref, tiles, trio } from "../tools/launch.js";
+import { aiHrefs, benchHref, tiles, trio } from "../tools/launch.js";
 
 test("a check opens a primary, the other client, and a follow view", () => {
   const [primary, second, follow] = trio("/tools/view/index.html?look=dummy");
   assert.match(primary, /id=a/);
   assert.match(primary, /offer=1/);
   assert.match(primary, /look=dummy/);
-  assert.match(primary, /to=b%2Cc|to=b,c/);
-  assert.match(second, /id=b/);
-  assert.match(second, /offer=c/);
+  assert.match(primary, /surveyor/);
+  assert.match(primary, /marksman/);
+  assert.doesNotMatch(primary, /to=b/);
   assert.match(follow, /id=c/);
   assert.match(follow, /follow=a/);
   assert.match(follow, /look=dummy/);
+  assert.match(follow, /surveyor/);
   const [tabB, tabA, behind] = trio("/tools/dig/index.html?id=b&to=a");
   assert.match(tabB, /id=b/);
   assert.match(tabA, /id=a/);
@@ -27,8 +28,13 @@ test("a check is one window whose frames are the three clients", () => {
   assert.equal(bench.pathname, "/tools/bench/index.html");
   assert.match(bench.searchParams.get("primary"), /look=dummy/);
   assert.match(bench.searchParams.get("primary"), /id=a/);
-  assert.match(bench.searchParams.get("second"), /id=b/);
+  assert.equal(bench.searchParams.get("second"), null);
+  const clients = bench.searchParams.getAll("ai");
+  assert.equal(clients.length, 4);
+  assert.match(clients[0], /ai=surveyor/);
+  assert.match(clients[3], /ai=marksman/);
   assert.match(bench.searchParams.get("follow"), /follow=a/);
+  assert.equal(aiHrefs("a").length, 4);
 });
 test("the primary pane is widescreen and the three panes do not overlap", () => {
   const boxes = tiles(1920, 1080, 0, 0);

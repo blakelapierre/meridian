@@ -29,30 +29,50 @@ export function zoomFov(level, skill, optic = "none") {
   return BASE_FOV / mag;
 }
 
+export function smoothstep(t) {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
+}
+
+export function blendOrigin(third, eyes, blend) {
+  const t = smoothstep(blend);
+  return third.map((value, index) => value + (eyes[index] - value) * t);
+}
+
+export function blendDir(thirdDir, eyeDir, blend) {
+  const t = smoothstep(blend);
+  const mixed = thirdDir.map((value, index) => value + (eyeDir[index] - value) * t);
+  const length = Math.hypot(mixed[0], mixed[1], mixed[2]) || 1;
+  return mixed.map((value) => value / length);
+}
+
 export function stepZoom(state, direction, skill, optic = "none") {
-  const next = { ...state };
+  const next = { blend: 0, ...state };
   if (direction < 0) {
-    if (!next.first) {
+    if (next.distance > CLOSE) {
       next.distance = Math.max(CLOSE, next.distance - 0.45);
-      if (next.distance <= CLOSE) next.first = true;
+      return next;
+    }
+    if (next.blend < 1) {
+      next.blend = Math.min(1, next.blend + 0.25);
+      next.first = next.blend >= 1;
       return next;
     }
     if (maxZoom(skill, optic) <= 1.001) return next;
     next.level = Math.min(1, next.level + 0.15);
+    next.first = true;
     return next;
   }
-  if (next.first && !next.forced) {
-    next.level = Math.max(0, next.level - 0.15);
-    if (next.level <= 0) {
-      next.first = false;
-      next.distance = CLOSE + 0.45;
-    }
-    return next;
-  }
-  if (next.first) {
+  if (next.level > 0) {
     next.level = Math.max(0, next.level - 0.15);
     return next;
   }
+  if (next.blend > 0 && !next.forced) {
+    next.blend = Math.max(0, next.blend - 0.25);
+    next.first = next.blend >= 1;
+    return next;
+  }
+  if (next.forced && next.first) return next;
   next.distance = Math.min(FAR, next.distance + 0.45);
   return next;
 }

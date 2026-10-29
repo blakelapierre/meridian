@@ -1,3 +1,17 @@
+export const AI_ORDER = ["surveyor", "miner", "mason", "marksman"];
+
+export function aiHrefs(primaryId, origin = "http://127.0.0.1") {
+  return AI_ORDER.map((agenda) => {
+    const url = new URL("/tools/view/index.html", origin);
+    url.searchParams.set("id", agenda);
+    url.searchParams.set("to", `${primaryId},c`);
+    url.searchParams.set("offer", "c");
+    url.searchParams.set("ai", agenda);
+    url.searchParams.set("quiet", "1");
+    return url.pathname + url.search;
+  });
+}
+
 export function trio(href, origin = "http://127.0.0.1") {
   const primary = new URL(href, origin);
   if (!primary.searchParams.get("id")) {
@@ -18,6 +32,11 @@ export function trio(href, origin = "http://127.0.0.1") {
   const look = primary.searchParams.get("look");
   if (look) follow.searchParams.set("look", look);
   if (primary.pathname.includes("/tools/view/")) {
+    const agents = AI_ORDER.join(",");
+    primary.searchParams.set("to", `${agents},c`);
+    primary.searchParams.set("offer", "1");
+    follow.searchParams.set("to", `${id},${agents}`);
+  } else if (primary.pathname.includes("/tools/")) {
     const add = (url, extra) => {
       const current = (url.searchParams.get("to") || "").split(",").filter(Boolean);
       if (!current.includes(extra)) current.push(extra);
@@ -60,8 +79,13 @@ export function benchHref(href, origin = "http://127.0.0.1") {
   const [primary, second, follow] = trio(href, origin);
   const bench = new URL("/tools/bench/index.html", origin);
   bench.searchParams.set("primary", primary);
-  bench.searchParams.set("second", second);
   bench.searchParams.set("follow", follow);
+  const primaryUrl = new URL(primary, origin);
+  if (primaryUrl.pathname.includes("/tools/view/")) {
+    for (const client of aiHrefs(primaryUrl.searchParams.get("id"), origin)) bench.searchParams.append("ai", client);
+  } else {
+    bench.searchParams.set("second", second);
+  }
   return bench.pathname + bench.search;
 }
 
