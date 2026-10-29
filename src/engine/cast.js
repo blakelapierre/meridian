@@ -29,10 +29,7 @@ function normalize(vector) {
   return [vector[0] / n, vector[1] / n, vector[2] / n];
 }
 
-export function project(x, y, camera) {
-  const half = Math.tan((camera.fov * Math.PI / 180) / 2) * camera.planeDistance;
-  const px = (x * 2 - 1) * camera.aspect * half;
-  const py = (1 - y * 2) * half;
+export function cameraBasis(camera) {
   const forward = normalize(camera.dir);
   let up = camera.up ? camera.up.slice() : [0, 0, 1];
   const along = dot(up, forward);
@@ -50,6 +47,14 @@ export function project(x, y, camera) {
   }
   const right = [0, 0, 0];
   cross(right, forward, up);
+  return { forward, right, up };
+}
+
+export function project(x, y, camera) {
+  const half = Math.tan((camera.fov * Math.PI / 180) / 2) * camera.planeDistance;
+  const px = (x * 2 - 1) * camera.aspect * half;
+  const py = (1 - y * 2) * half;
+  const { forward, right, up } = cameraBasis(camera);
   const depth = camera.planeDistance;
   return [
     right[0] * px + up[0] * py + forward[0] * depth,

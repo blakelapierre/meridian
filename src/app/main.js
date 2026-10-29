@@ -1,5 +1,7 @@
 import { paintFrame } from "../engine/frame.js";
+import { cast, project } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { stepHands } from "../sim/hands.js";
 import { bitAim } from "../sim/bit.js";
@@ -10,8 +12,18 @@ import { connectPeer, createRoom } from "../net/room.js";
 import { acceptShot, encodeShot } from "../net/shots.js";
 
 const canvas = document.querySelector("canvas");
-const context = canvas.getContext("2d", { alpha: false });
-context.imageSmoothingEnabled = false;
+let painter = createGpuPainter(canvas);
+let context = null;
+if (painter) {
+  fitCanvas(canvas);
+  canvas.style.imageRendering = "auto";
+  canvas.dataset.renderer = "webgl2";
+  addEventListener("resize", () => fitCanvas(canvas));
+} else {
+  context = canvas.getContext("2d", { alpha: false });
+  if (context) context.imageSmoothingEnabled = false;
+  canvas.dataset.renderer = "cpu";
+}
 const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
@@ -89,6 +101,7 @@ function publish() {
 }
 
 function paint(sample) {
+  if (painter) fitCanvas(canvas);
   const scene = buildScene({
     feet: player.position,
     yaw,
@@ -97,18 +110,32 @@ function paint(sample) {
     tick,
     atoll,
     crust: terrain.log.crust,
-    width,
-    height,
+    width: canvas.width,
+    height: canvas.height,
   });
-  const pixels = paintFrame(scene, width, height);
-  const center = (Math.floor(height / 2) * width + Math.floor(width / 2)) * 4;
-  canvas.dataset.center = `${pixels[center]},${pixels[center + 1]},${pixels[center + 2]}`;
+  const dir = project(0.5, 0.5, scene.camera);
+  const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
+  const color = hit.color || scene.miss;
+  canvas.dataset.center = `${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)}`;
+  const sight = document.querySelector("#sight");
+  if (sight) sight.style.display = slot === "line" ? "block" : "none";
+  if (painter && painter.paint(scene)) return scene;
+  if (!context) {
+    painter = null;
+    canvas.width = 160;
+    canvas.height = 90;
+    context = canvas.getContext("2d", { alpha: false });
+    canvas.dataset.renderer = "cpu";
+    canvas.style.imageRendering = "pixelated";
+  }
+  const pixels = paintFrame(scene, canvas.width, canvas.height);
   if (slot === "line") {
+    const center = (Math.floor(canvas.height / 2) * canvas.width + Math.floor(canvas.width / 2)) * 4;
     pixels[center] = 255;
     pixels[center + 1] = 255;
     pixels[center + 2] = 255;
   }
-  context.putImageData(new ImageData(pixels, width, height), 0, 0);
+  context.putImageData(new ImageData(pixels, canvas.width, canvas.height), 0, 0);
   return scene;
 }
 
