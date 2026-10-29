@@ -17,4 +17,6 @@ On conflict: the concept wins on fantasy, the game spec wins on rules, the crust
 
 License: [MIT](LICENSE).
 
+`npm start` serves the files with Node on port 8080. Open [http://127.0.0.1:8080/tools/view/index.html](http://127.0.0.1:8080/tools/view/index.html). That process does not decide hits, digs, or deaths. The lighthouse, when you want two browsers, is `node tools/signal/server.js`.
+
 Public repository: https://github.com/blakelapierre/meridian

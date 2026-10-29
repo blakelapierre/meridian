@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { WebSocket } from "ws";
 import { createLighthouse } from "../tools/signal/server.js";
+import { createStaticServer } from "../tools/serve.js";
 import { acceptPosition, decodePosition, encodePosition } from "../src/net/position.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -61,7 +61,7 @@ test("an older position packet does not overwrite a newer one", () => {
 
 test("two browsers trade an unreliable position", { skip: !chrome, timeout: 20000 }, async () => {
   const lighthouse = await createLighthouse(0);
-  const site = await serve(root);
+  const site = await createStaticServer(root);
   const dirA = await mkdtemp(join(tmpdir(), "meridian-a-"));
   const dirB = await mkdtemp(join(tmpdir(), "meridian-b-"));
   const browserA = launch(dirA);
@@ -109,31 +109,6 @@ function debugPort(child) {
       if (!match) return;
       clearTimeout(timer);
       resolve(Number(match[1]));
-    });
-  });
-}
-
-const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json" };
-
-function serve(dir) {
-  const server = createServer(async (request, response) => {
-    const path = join(dir, decodeURIComponent(new URL(request.url, "http://127.0.0.1").pathname));
-    try {
-      const body = await readFile(path);
-      response.writeHead(200, { "content-type": types[extname(path)] || "application/octet-stream" });
-      response.end(body);
-    } catch {
-      response.writeHead(404);
-      response.end();
-    }
-  });
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address();
-      resolve({
-        toString() { return `http://127.0.0.1:${port}`; },
-        close: () => new Promise((done) => server.close(done)),
-      });
     });
   });
 }
