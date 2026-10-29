@@ -8,13 +8,14 @@ import {
   signVote,
   unpackFrame,
 } from "../../src/net/identity.js";
+import { connectPeer, createRoom } from "../../src/net/room.js";
 
 const params = new URLSearchParams(location.search);
 const me = params.get("id");
-const room = params.get("signal") || "ws://127.0.0.1:8787";
+const roomUrl = params.get("signal") || "ws://127.0.0.1:8787";
 const log = document.querySelector("pre");
 const identity = createIdentity();
-const pc = new RTCPeerConnection({ iceServers: [] });
+const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
 const channels = {};
 for (const spec of [
   ["ctrl", 0, true],
@@ -27,52 +28,9 @@ for (const spec of [
   channel.binaryType = "arraybuffer";
   channels[spec[0]] = channel;
 }
-let socket;
-let remoteReady = false;
-const pendingCandidates = [];
 
 function write(line) {
   log.textContent += `${line}\n`;
-}
-
-function sendSignal(blob) {
-  socket?.send(JSON.stringify({ type: "signal", to: params.get("to"), from: me, blob }));
-}
-
-pc.onicecandidate = (event) => {
-  if (event.candidate) sendSignal(JSON.stringify({ candidate: event.candidate }));
-};
-
-async function onSignal(message) {
-  if (message.type !== "signal" || message.from === me) return;
-  const payload = JSON.parse(message.blob);
-  if (payload.sdp) {
-    await pc.setRemoteDescription(payload.sdp);
-    remoteReady = true;
-    while (pendingCandidates.length) await pc.addIceCandidate(pendingCandidates.shift());
-    if (payload.sdp.type === "offer") {
-      await pc.setLocalDescription(await pc.createAnswer());
-      sendSignal(JSON.stringify({ sdp: pc.localDescription }));
-    }
-    return;
-  }
-  if (payload.candidate) {
-    if (!remoteReady) pendingCandidates.push(payload.candidate);
-    else await pc.addIceCandidate(payload.candidate);
-  }
-}
-
-function present(id) {
-  return new Promise((resolve) => {
-    const wait = (event) => {
-      const body = JSON.parse(event.data);
-      if (body.type !== "present") return;
-      socket.removeEventListener("message", wait);
-      resolve(body.peers.some((peer) => peer.pubkey === id));
-    };
-    socket.addEventListener("message", wait);
-    socket.send(JSON.stringify({ type: "list", cell: "atoll-0" }));
-  });
 }
 
 const atoll = await fetch("/content/atoll.json").then((response) => response.json());
@@ -135,21 +93,19 @@ ops.onopen = async () => {
   write("proposed");
 };
 
-socket = new WebSocket(room);
-socket.onmessage = (event) => {
-  onSignal(JSON.parse(event.data)).catch((error) => write(String(error)));
-};
-await new Promise((resolve) => {
-  socket.onopen = resolve;
-});
-socket.send(JSON.stringify({ type: "announce", pubkey: me, cell: "atoll-0" }));
-write(`announced ${me}`);
-if (params.get("offer") === "1") {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    if (await present(params.get("to"))) break;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  await pc.setLocalDescription(await pc.createOffer());
-  sendSignal(JSON.stringify({ sdp: pc.localDescription }));
-  write("offered");
+const room = createRoom({ url: roomUrl, me });
+try {
+  await room.start();
+  write(`announced ${me}`);
+  await connectPeer({
+    pc,
+    room,
+    me,
+    to: params.get("to"),
+    offer: params.get("offer") === "1",
+    isOpen: () => ops.readyState === "open",
+    status: write,
+  });
+} catch (error) {
+  write(String(error));
 }

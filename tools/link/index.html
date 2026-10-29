@@ -12,7 +12,7 @@
   </head>
   <body>
     <h1>Position check</h1>
-    <p>Two browsers trade an unreliable position. No island is drawn. The lighthouse only introduces them.</p>
+    <p>Open either tab first. The log should say <code>waiting for the other tab</code> or <code>waiting for the offer</code>, then <code>offered</code> or <code>answered</code>. <code>lighthouse failed</code> means <code>npm start</code> is not running.</p>
     <p>Pass: the log says <code>snap open</code>, then <code>remote x,y,z</code> lines that change. The other tab does the same.</p>
     <p><a href="/tools/link/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/link/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
     <pre></pre>

@@ -59,6 +59,32 @@ test("an older position packet does not overwrite a newer one", () => {
   assert.deepEqual(decodePosition(first), { tick: 2, x: 1.5, y: -12.5, z: 0 });
 });
 
+test("a late second tab still receives a position", { skip: !chrome, timeout: 30000 }, async () => {
+  const lighthouse = await createLighthouse(0);
+  const site = await createStaticServer(root);
+  const dirA = await mkdtemp(join(tmpdir(), "meridian-late-a-"));
+  const dirB = await mkdtemp(join(tmpdir(), "meridian-late-b-"));
+  const browserA = launch(dirA);
+  const browserB = launch(dirB);
+  try {
+    const portA = await debugPort(browserA);
+    const portB = await debugPort(browserB);
+    const query = `signal=${encodeURIComponent(lighthouse.url)}`;
+    await open(portA, `${site}/tools/link/index.html?id=a&to=b&offer=1&${query}`);
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+    await open(portB, `${site}/tools/link/index.html?id=b&to=a&${query}`);
+    const text = await pageText(portB, "remote ");
+    assert.match(text, /remote -?\d+\.\d+,-?\d+\.\d+,-?\d+\.\d+ @\d+/);
+  } finally {
+    browserA.kill("SIGKILL");
+    browserB.kill("SIGKILL");
+    await lighthouse.close();
+    await site.close();
+    await rm(dirA, { recursive: true, force: true });
+    await rm(dirB, { recursive: true, force: true });
+  }
+});
+
 test("two browsers trade an unreliable position", { skip: !chrome, timeout: 20000 }, async () => {
   const lighthouse = await createLighthouse(0);
   const site = await createStaticServer(root);
