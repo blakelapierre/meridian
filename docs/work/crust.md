@@ -6,7 +6,7 @@ The beach is a crust field. A dig writes air, sample `500`, inside the brush. Th
 
 ## This pass
 
-Fill is a real edit mode. The voxel must already be air, and the write restores solid, sample `-500`. A fill that touches solid is refused. The budget and the reach checks are the same ones dig uses.
+Smooth is a third edit mode. It moves a voxel toward zero, at most 500 mm, and refuses a change that would go farther or away from the surface. It does not spend spoil.
 
 ## Proves
 

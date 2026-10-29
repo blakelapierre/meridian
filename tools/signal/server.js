@@ -23,6 +23,7 @@ export function createLighthouse(port = 0) {
           socket,
           cell: String(message.cell || ""),
           role: message.role === "archive" ? "archive" : "player",
+          catalog: String(message.catalog || ""),
           at: Date.now(),
         });
         return;
@@ -36,7 +37,7 @@ export function createLighthouse(port = 0) {
             peers.delete(key);
             continue;
           }
-          if (peer.cell === cell) found.push({ pubkey: key, cell: peer.cell, role: peer.role, exp: peer.at + TTL_MS });
+          if (peer.cell === cell) found.push({ pubkey: key, cell: peer.cell, role: peer.role, catalog: peer.catalog || "", exp: peer.at + TTL_MS });
         }
         socket.send(JSON.stringify({ type: "present", peers: found }));
         return;

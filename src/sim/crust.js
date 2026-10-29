@@ -132,6 +132,12 @@ export function columnFloor(crust, x, y) {
   return floor;
 }
 
+function sampleStep(sample) {
+  if (sample > 0) return Math.max(0, sample - 500);
+  if (sample < 0) return Math.min(0, sample + 500);
+  return sample;
+}
+
 export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 0 }) {
   const grant = 6667 + Math.floor((6667 * skill) / 140);
   crust.budgetCm3 += grant * ticks;
@@ -155,6 +161,7 @@ export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 
           const sample = crust.sampleIndex(i, j, k);
           if (mode === "dig" && sample > 0) continue;
           if (mode === "fill" && sample <= 0) continue;
+          if (mode === "smooth" && (sample === 0 || Math.min(500, Math.abs(sample)) === 0)) continue;
           const d = dist2(center, aim);
           if (d < bestD || (d === bestD && best && (i < best.i || (i === best.i && (j < best.j || (j === best.j && k < best.k)))))) {
             bestD = d;
@@ -164,8 +171,13 @@ export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 
       }
     }
     if (!best) break;
+    const next = mode === "dig"
+      ? DIG_SAMPLE_MM
+      : mode === "fill"
+        ? -DIG_SAMPLE_MM
+        : sampleStep(best.sample);
+    if (next === best.sample) break;
     crust.budgetCm3 -= VOXEL_CM3;
-    const next = mode === "dig" ? DIG_SAMPLE_MM : -DIG_SAMPLE_MM;
     crust.write(best.i, best.j, best.k, next);
     writes.push({ i: best.i, j: best.j, k: best.k, sdf_mm: next });
   }

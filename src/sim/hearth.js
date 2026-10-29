@@ -57,22 +57,24 @@ export function recallPoint(yard, fallback) {
 }
 
 export function createVitals() {
-  return { integrity: 100, blood: 100, pain: 0, down: 0, legs: 100 };
+  return { integrity: 100, blood: 100, pain: 0, down: 0, left: 100, right: 100 };
 }
 
 export function bruise(vitals) {
   vitals.integrity = 40;
   vitals.blood = 50;
   vitals.pain = 40;
-  vitals.legs = 70;
+  vitals.left = 70;
+  vitals.right = 70;
   vitals.down = 0;
   return vitals;
 }
 
-export function clubHit(vitals, seconds = 1 / 30) {
+export function clubHit(vitals, seconds = 1 / 30, side = "left") {
   if (vitals.down > 0) return { downed: true, dead: false };
   vitals.integrity = Math.max(0, vitals.integrity - 20 * seconds);
-  vitals.legs = Math.max(0, (vitals.legs ?? 100) - 8 * seconds);
+  const leg = side === "right" ? "right" : "left";
+  vitals[leg] = Math.max(0, (vitals[leg] ?? 100) - 8 * seconds);
   if (vitals.integrity > 0) return { downed: false, dead: false };
   vitals.down = 8;
   return { downed: true, dead: true };
@@ -84,7 +86,10 @@ export function coolPain(vitals, seconds = 1 / 30) {
 }
 
 export function limpFactor(vitals) {
-  return (vitals?.legs ?? 100) < 50 ? 0.6 : 1;
+  const hurt = [vitals?.left ?? 100, vitals?.right ?? 100].filter((leg) => leg < 50).length;
+  if (hurt >= 2) return 0.35;
+  if (hurt === 1) return 0.6;
+  return 1;
 }
 
 export function stepDown(vitals, seconds = 1 / 30) {

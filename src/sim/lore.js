@@ -1,4 +1,5 @@
 import { notePlace } from "./map.js";
+import { toldTint } from "./plate.js";
 
 const KIND = { sand: 1, pit: 2, wood: 3, stone: 4 };
 const NAME = { 1: "sand", 2: "pit", 3: "wood", 4: "stone" };
@@ -18,6 +19,7 @@ export function nextFriend(score = 0, nearby = false) {
 }
 
 export function friendTier(score = 0) {
+  if (score < 0) return "hostile";
   if (score >= 40) return "friend";
   if (score >= 12) return "acquaintance";
   return "stranger";
@@ -25,6 +27,7 @@ export function friendTier(score = 0) {
 
 export function offerLore({ skills = {}, friend = 0, ground = [], places = [] } = {}) {
   const tier = friendTier(friend);
+  if (tier === "hostile") return { tier, ground: [], places: [] };
   const mapping = skillValue(skills, "mapping");
   const appraisal = skillValue(skills, "appraisal");
   const mining = skillValue(skills, "mining");
@@ -85,7 +88,7 @@ export function learnLore(survey, plate, offer, skills, stamp, colors) {
   const cap = skillValue(skills, "mapping") >= 40 ? offer.ground.length : Math.min(4, offer.ground.length);
   for (const cell of offer.ground.slice(0, cap)) {
     if (cell.kind === "pit" && skillValue(skills, "mining") < 8) continue;
-    if (plate && stamp) stamp(plate, cell.point[0], cell.point[1], colors[cell.kind] || colors.sand, 1.6);
+    if (plate && stamp) stamp(plate, cell.point[0], cell.point[1], toldTint(colors[cell.kind] || colors.sand), 1.6);
     survey.ground.set(`lore:${cell.point[0]}:${cell.point[1]}`, cell);
     learned.ground += 1;
   }

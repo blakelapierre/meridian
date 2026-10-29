@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints sand, pits, stone, and wood. The
 
 ## This pass
 
-A player you have stood near is labeled with the friend tier once mapping can show names. The tier is stranger, acquaintance, or friend. The picture they traded you is already on the chart. The label is only the word.
+Ground you were told is stamped in a cooler tint than ground you saw. Your own survey colors are unchanged.
 
 ## Proves
 

@@ -6,7 +6,7 @@ The focused view aims at vsync. A hidden tab paints about once a second. Extra f
 
 ## This pass
 
-Holding still, without walking or turning, lets the buffer ease up to the window's own pixels, including device pixels up to twice the CSS size. Moving eases it back to the play cap, 960×540. When the still buffer has arrived, the pace word is `native`. Otherwise a still view says `still`.
+A still view that is missing vsync says `recover` and does not claim `native`. Holding the frame, and arriving at the window's pixels, still says `native`.
 
 ## Proves
 

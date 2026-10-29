@@ -11,6 +11,7 @@ const WRITERS = {
   fin: { skill: "building", need: 8, line: "The fin is set where the sun can find it." },
   bind: { skill: "building", need: 4, line: "I bound myself to the hearth." },
   strike: { skill: "appraisal", need: 20, line: "The compound runs a strike. The beach does not." },
+  paper: { skill: "appraisal", need: 8, line: "A paper in the crate: the compound is north, the bit digs, a hearth binds, the fin drinks the sun." },
 };
 
 export function createNotes() {
@@ -33,7 +34,7 @@ export function writeNote(notes, skills, kind, fact = {}) {
 }
 
 export function offerNotes(notes, skills, tier) {
-  if (!notes.length || tier === "stranger") return [];
+  if (!notes.length || tier === "stranger" || tier === "hostile") return [];
   const appraisal = skillValue(skills, "appraisal");
   const mapping = skillValue(skills, "mapping");
   if (appraisal < 8 && mapping < 8) return [];

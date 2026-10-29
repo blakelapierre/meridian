@@ -29,7 +29,10 @@ export function createListener() {
       if (!muted && ctx && ctx.state === "suspended") ctx.resume();
       return muted;
     },
-    play(name) {
+    setLevel(level) {
+      if (master) master.gain.value = 0.35 * Math.max(0, Math.min(1, level));
+    },
+    play(name, amount = 1) {
       const cue = cueFor(name);
       if (!cue) return false;
       const audio = context();
@@ -39,7 +42,7 @@ export function createListener() {
       osc.type = cue.wave;
       osc.frequency.value = cue.freq;
       const now = audio.currentTime;
-      gain.gain.setValueAtTime(cue.gain, now);
+      gain.gain.setValueAtTime(cue.gain * Math.max(0, amount), now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + cue.dur);
       osc.connect(gain);
       gain.connect(master);

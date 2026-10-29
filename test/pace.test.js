@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPacer, easePixels, nativePixels, nextScale, playPixels, shouldPaint, viewStill } from "../src/render/pace.js";
+import { createPacer, easePixels, nativePixels, nextScale, paceWord, playPixels, shouldPaint, viewStill } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -57,4 +57,10 @@ test("the pacer learns a 60Hz refresh and only resizes after a run of slow frame
   now += 500;
   assert.equal(pacer.consider(now, false).mode, "1fps");
   assert.equal(pacer.consider(now, false).paint, true);
+});
+
+test("a still view that misses vsync says recover instead of native", () => {
+  assert.equal(paceWord("vsync", { still: true, arrived: true, holding: false }), "vsync recover");
+  assert.equal(paceWord("vsync", { still: true, arrived: true, holding: true }), "vsync native");
+  assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
 });

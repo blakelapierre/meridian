@@ -7,10 +7,12 @@ export function sunDirection(tick, multiplier = SUN_MULTIPLIER) {
 }
 
 export function dayWord(tick, multiplier = SUN_MULTIPLIER) {
-  const height = sunDirection(tick, multiplier)[2];
+  const phase = ((tick * multiplier) / DAY_TICKS) * Math.PI * 2;
+  const height = Math.sin(phase);
+  const rising = Math.cos(phase) > 0;
   if (height >= 0.5) return "noon";
   if (height > 0) return "day";
-  if (height > -0.5) return "low";
+  if (height > -0.5) return rising ? "dawn" : "dusk";
   return "night";
 }
 

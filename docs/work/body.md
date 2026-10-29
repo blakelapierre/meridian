@@ -10,7 +10,7 @@ Integrity starts at 100. Standing on the live dummy clubs it down. Eight seconds
 
 ## This pass
 
-Legs are one number. The club wears them down. Under 50, wish speed is × 0.6, including the sprint. Pain falls by 5 per second while no new hit is landing. The line shows `legs` when they are under 100.
+Legs are left and right. The club wears the leg on the side of the dummy you are standing. One leg under 50 is × 0.6. Both under 50 is × 0.35, and sprint will not engage. The line shows `L` and `R`.
 
 ## Proves
 
