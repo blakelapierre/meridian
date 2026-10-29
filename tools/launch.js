@@ -13,9 +13,24 @@ export function trio(href, origin = "http://127.0.0.1") {
   if (primary.searchParams.get("offer") === "1") second.searchParams.delete("offer");
   else second.searchParams.set("offer", "1");
   const follow = new URL("/tools/view/index.html", origin);
+  follow.searchParams.set("id", "c");
   follow.searchParams.set("follow", id);
   const look = primary.searchParams.get("look");
   if (look) follow.searchParams.set("look", look);
+  if (primary.pathname.includes("/tools/view/")) {
+    const add = (url, extra) => {
+      const current = (url.searchParams.get("to") || "").split(",").filter(Boolean);
+      if (!current.includes(extra)) current.push(extra);
+      url.searchParams.set("to", current.join(","));
+    };
+    add(primary, "c");
+    add(second, "c");
+    if (primary.searchParams.get("offer") === "1") second.searchParams.set("offer", "c");
+    else primary.searchParams.set("offer", "c");
+    follow.searchParams.set("to", `${id},${to}`);
+  } else {
+    follow.searchParams.set("to", id);
+  }
   return [
     primary.pathname + primary.search,
     second.pathname + second.search,
