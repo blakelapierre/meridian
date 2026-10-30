@@ -3,6 +3,6 @@ export function standWhere(table) {
   return table.at.slice();
 }
 
-export function maySit() {
-  return false;
+export function maySit(atTable = false, joined = false) {
+  return Boolean(atTable) && !joined;
 }
