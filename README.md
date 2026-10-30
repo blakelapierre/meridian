@@ -4,6 +4,8 @@ A peer-to-peer, browser-native, real-time raytraced open sim on a living globe. 
 
 Design-first, now early implementation. The specs below are the contract; the first slice (**Atoll**) is being built against them.
 
+**[Play the solo demo](https://blakelapierre.github.io/meridian/tools/view/index.html)** in your browser. It runs on desktop and touch devices, solo only; multiplayer needs `npm start`.
+
 ## Status
 
 Pre-alpha. Not a playable game yet.
