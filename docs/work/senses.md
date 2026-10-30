@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints sand, pits, stone, and wood. The
 
 ## This pass
 
-Outside the sense ring the chart is dimmed. Inside it, the ground you have seen stays as it was.
+The chart has two fogs. Inside half the sense radius is clear. Between that and the rim is a told tint. Outside the rim is the heavier dim. The world picture has one light.
 
 ## Proves
 
@@ -14,7 +14,7 @@ Outside the sense ring the chart is dimmed. Inside it, the ground you have seen 
 
 ## Next
 
-The chart does not draw two fogs. Not in this build.
+The two fogs are not drawn on the world picture. Not in this build.
 
 ## Later
 

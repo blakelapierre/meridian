@@ -8,7 +8,7 @@ Nothing on the beach answers when you dig. A pit stays a pit. Off the beach, a p
 
 ## This pass
 
-`resonance` still summons nothing. Twenty digs only change the word on the line.
+Off the beach, once the resonance word is showing, one swarm sphere stands near you. It does not bite. South of y = −190 is off the beach. The beach has none.
 
 ## Proves
 
@@ -16,7 +16,7 @@ Nothing on the beach answers when you dig. A pit stays a pit. Off the beach, a p
 
 ## Next
 
-No swarm sphere is drawn. Not in this build.
+The swarm does not flee and does not bite. Not in this build.
 
 ## Later
 

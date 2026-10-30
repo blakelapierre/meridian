@@ -6,7 +6,7 @@ Other clients are bodies. Tab cycles them. Backtick cycles objects. Standing ins
 
 ## This pass
 
-Dragging still does not slide the other body. Your pace stays cut while X is held and they are close.
+While you drag someone, they are drawn just ahead of you on your screen. Their own client is not moved.
 
 ## Proves
 
@@ -14,7 +14,7 @@ Dragging still does not slide the other body. Your pace stays cut while X is hel
 
 ## Next
 
-A dragged body is not drawn ahead of you. That would change the picture, and it is not in this build.
+The dragged body is not asked to walk. Not in this build.
 
 ## Later
 

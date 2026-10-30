@@ -13,7 +13,7 @@ export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, pools = [], bolts = [] }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [] }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -40,6 +40,16 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       color: [0.62, 0.64, 0.66, 1],
       reflectivity: 0.02,
       body: "smoke",
+    });
+  }
+  if (swarm) {
+    objects.push({
+      type: "sphere",
+      origin: swarm,
+      radius: 0.45,
+      color: [0.32, 0.48, 0.24, 1],
+      reflectivity: 0.04,
+      body: "swarm",
     });
   }
   const dummy = atoll.placements.dummy;
