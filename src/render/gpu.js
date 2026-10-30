@@ -603,6 +603,53 @@ void main() {
     gl.linkProgram(pointProgram);
     if (!gl.getProgramParameter(pointProgram, gl.LINK_STATUS)) pointProgram = null;
   }
+  let viewSize = null;
+  let traceW = 0;
+  let traceH = 0;
+  const traceTex = gl.createTexture();
+  const traceFbo = gl.createFramebuffer();
+  gl.bindTexture(gl.TEXTURE_2D, traceTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const blitVs = compile(gl, gl.VERTEX_SHADER, `#version 300 es
+in vec2 aPos;
+out vec2 vUV;
+void main() {
+  vUV = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`);
+  const blitFs = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
+precision highp float;
+uniform sampler2D uHold;
+in vec2 vUV;
+out vec4 fragColor;
+void main() { fragColor = texture(uHold, vUV); }`);
+  let blitProgram = null;
+  if (blitVs && blitFs) {
+    blitProgram = gl.createProgram();
+    gl.attachShader(blitProgram, blitVs);
+    gl.attachShader(blitProgram, blitFs);
+    gl.bindAttribLocation(blitProgram, 0, "aPos");
+    gl.linkProgram(blitProgram);
+    if (!gl.getProgramParameter(blitProgram, gl.LINK_STATUS)) blitProgram = null;
+  }
+  const blitSampler = blitProgram ? gl.getUniformLocation(blitProgram, "uHold") : null;
+  const ensureTrace = (tw, th) => {
+    if (!blitProgram) return false;
+    if (traceW === tw && traceH === th) return true;
+    gl.bindTexture(gl.TEXTURE_2D, traceTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tw, th, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, traceFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, traceTex, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) return false;
+    traceW = tw;
+    traceH = th;
+    return true;
+  };
   const draw = (scene, mode, count) => {
       sphereData.fill(0);
       sphereColor.fill(0);
@@ -681,7 +728,7 @@ void main() {
       const prog = mode === "points" && pointProgram ? pointProgram : program;
       const u = (name) => gl.getUniformLocation(prog, name);
       gl.useProgram(prog);
-      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.viewport(0, 0, viewSize ? viewSize.w : canvas.width, viewSize ? viewSize.h : canvas.height);
       upload(0, sphereTex, MAX_SPHERES, sphereData);
       upload(1, sphereColorTex, MAX_SPHERES, sphereColor);
       upload(2, boxMinTex, MAX_BOXES, boxMin);
@@ -745,7 +792,34 @@ void main() {
   };
   return {
     paint(scene) {
+      viewSize = null;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       return draw(scene, "full", 0);
+    },
+    present(scene, tw, th, detail) {
+      const width = Math.max(2, tw | 0);
+      const height = Math.max(2, th | 0);
+      if (!ensureTrace(width, height) || canvas.width < 2 || canvas.height < 2) {
+        viewSize = null;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return draw(scene, "full", 0);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, traceFbo);
+      viewSize = { w: width, h: height };
+      const traced = draw(scene, "full", 0);
+      viewSize = null;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(blitProgram);
+      gl.activeTexture(gl.TEXTURE9);
+      gl.bindTexture(gl.TEXTURE_2D, traceTex);
+      gl.uniform1i(blitSampler, 9);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (detail > 0 && pointProgram) draw(scene, "points", detail);
+      return traced;
     },
     paintRandom(scene, count) {
       if (!pointProgram) return draw(scene, "full", 0);
