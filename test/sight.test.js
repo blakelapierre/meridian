@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { blendOrigin, easeFollow, maxZoom, rangeRead, relaxOrbit, stepFollow, stepZoom, zoomFov } from "../src/sim/sight.js";
+import { blendOrigin, easeFollow, gazeAxis, gazeFor, gazeOnScreen, gazePlan, gazeUnaxis, maxZoom, rangeRead, relaxOrbit, stepFollow, stepZoom, zoomFov } from "../src/sim/sight.js";
+import { lookDirection } from "../src/sim/hands.js";
 
 test("the wheel sets follow distance and height instead of zooming", () => {
   const out = stepFollow({ distance: 3.4, height: 0 }, 1);
@@ -65,4 +66,46 @@ test("range finding gets finer with skill and with a range tool", () => {
   const coarse = rangeRead(18, 0, "none").meters;
   const fine = rangeRead(18, 120, "telescope").meters;
   assert.ok(Math.abs(fine - 18) <= Math.abs(coarse - 18));
+});
+
+test("rays gather on the gaze, and eyesight and focus scale that patch", () => {
+  const fresh = gazePlan(0, 0);
+  const eyed = gazePlan(140, 0);
+  const aimed = gazePlan(140, 140);
+  assert.equal(fresh.reach, 18);
+  assert.ok(eyed.reach > fresh.reach);
+  assert.ok(aimed.reach > eyed.reach);
+  assert.ok(eyed.spread > fresh.spread);
+  assert.ok(aimed.spread < eyed.spread);
+  assert.ok(aimed.gamma < fresh.gamma);
+  assert.ok(eyed.gamma >= fresh.gamma);
+  const center = 0.5;
+  for (const gamma of [fresh.gamma, aimed.gamma]) {
+    assert.equal(gazeAxis(0, center, gamma), 0);
+    assert.equal(gazeAxis(1, center, gamma), 1);
+    assert.equal(gazeAxis(center, center, gamma), center);
+    const packed = gazeAxis(0.6, center, gamma) - gazeAxis(0.4, center, gamma);
+    assert.ok(packed < 0.2, packed);
+    for (let s = 0; s <= 1; s += 0.05) {
+      const back = gazeUnaxis(gazeAxis(s, 0.37, gamma), 0.37, gamma);
+      assert.ok(Math.abs(back - s) < 1e-6, back);
+    }
+  }
+  assert.equal(gazeAxis(0.25, 0.5, 1), 0.25);
+  const eye = [0, 0, 1.65];
+  const look = lookDirection(0.2, 0);
+  const camera = { origin: eye.slice(), dir: look.slice(), fov: 70, aspect: 16 / 9, planeDistance: 1 };
+  const ahead = gazeOnScreen(camera, eye, look);
+  assert.ok(Math.abs(ahead[0] - 0.5) < 0.02, ahead[0]);
+  assert.ok(Math.abs(ahead[1] - 0.5) < 0.02, ahead[1]);
+  const down = gazeFor(
+    { origin: [0, -3.4, 2.4], dir: [0, 1, 0], fov: 70, aspect: 16 / 9, planeDistance: 1 },
+    eye,
+    lookDirection(0, -0.6),
+    40,
+    10,
+  );
+  assert.ok(Math.abs(down.x - 0.5) < 0.08, down.x);
+  assert.ok(down.y > 0.55, down.y);
+  assert.ok(down.reach > 18);
 });

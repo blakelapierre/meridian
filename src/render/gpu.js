@@ -119,6 +119,10 @@ uniform int uPrints;
 uniform vec4 uWork;
 uniform float uTime;
 uniform float uMaxDist;
+uniform vec2 uGaze;
+uniform float uGamma;
+uniform float uGazeReach;
+uniform float uSpread;
 in vec2 vRay;
 uniform sampler2D uSphereTex;
 uniform sampler2D uSphereColor;
@@ -236,7 +240,7 @@ float islandExit(vec3 ro, vec3 rd) {
   return (-b + sqrt(disc)) / a;
 }
 
-bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
+bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   if (dot(ro.xy, ro.xy) <= 65536.0 && ro.z < duneHeight(ro.xy) + 0.02) {
     t = 0.02;
     p = ro + rd * t;
@@ -251,14 +255,14 @@ bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
     tFar = min(tFar, tGround);
   }
   tFar = clamp(tFar, tNear, 8000.0);
-  if (uMaxDist > 0.0) tFar = min(tFar, uMaxDist);
+  if (limit > 0.0) tFar = min(tFar, limit);
   float prevT = tNear;
   vec3 prevQ = ro + rd * prevT;
   float prevDist = prevQ.z - duneHeight(prevQ.xy);
   bool hit = false;
   float lo = prevT;
   float hi = prevT;
-  float budget = uMaxDist > 0.0 ? 28.0 : 80.0;
+  float budget = limit > 0.0 ? clamp(limit * 1.6, 28.0, 56.0) : 80.0;
   float advance = max((tFar - prevT) / budget, 0.12);
   t = prevT;
   for (int i = 0; i < 80; i++) {
@@ -374,9 +378,19 @@ vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
   return vec3(0.0, 0.0, sign(q.z));
 }
 
+float gazeAxis(float b, float c, float g) {
+  if (g > 0.98) return b;
+  float d = b - c;
+  float side = d < 0.0 ? c : 1.0 - c;
+  if (side < 1.0e-4) return b;
+  return c + sign(d) * pow(abs(d / side), 1.0 / g) * side;
+}
+
 void main() {
-  float uu = vRay.x;
-  float vv = vRay.y;
+  float sharpen = uGamma < 0.2 ? 1.0 : uGamma;
+  vec2 sceneUV = vec2(gazeAxis(vRay.x, uGaze.x, sharpen), gazeAxis(vRay.y, uGaze.y, sharpen));
+  float uu = sceneUV.x;
+  float vv = sceneUV.y;
   float halfAngle = tan(uFov * 0.008726646259971648) * uPlane;
   float px = (uu * 2.0 - 1.0) * uAspect * halfAngle;
   float py = (1.0 - vv * 2.0) * halfAngle;
@@ -385,6 +399,12 @@ void main() {
   vec3 accum = vec3(0.0);
   float thru = 1.0;
   float cover = 1.0;
+  float limit = uMaxDist;
+  if (uMaxDist > 0.0) {
+    float gazeD = length(vec2((uu - uGaze.x) * uAspect, vv - uGaze.y));
+    float fade = smoothstep(uSpread, uSpread + 0.18, gazeD);
+    limit = mix(max(uGazeReach, uMaxDist), uMaxDist, fade);
+  }
   for (int bounce = 0; bounce < 5; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
@@ -397,7 +417,7 @@ void main() {
     float sandT = 1.0e30;
     vec3 sandP = ro;
     bool sand = false;
-    if (bounce == 0) sand = sandPlane(ro, rd, sandT, sandP);
+    if (bounce == 0) sand = sandPlane(ro, rd, limit, sandT, sandP);
     else if (rd.z < -1.0e-4) {
       sandT = -ro.z / rd.z;
       if (sandT > 0.02 && sandT < 800.0) {
@@ -494,7 +514,7 @@ void main() {
       if (mark && boxHit(ro, rd, vec3(uWork.x - wide, uWork.y - deep, 0.0), vec3(uWork.x + wide, uWork.y + deep, rise), gt) && gt < bestT) workT = gt;
     }
     bool ghost = workT < 1.0e20;
-    if (uMaxDist > 0.0 && bounce == 0 && !ghost && (!found || bestT > uMaxDist)) {
+    if (uMaxDist > 0.0 && bounce == 0 && workT > limit && (!found || bestT > limit)) {
       fragColor = vec4(0.0);
       return;
     }
@@ -502,7 +522,7 @@ void main() {
       accum += thru * skyColor(rd);
       break;
     }
-    if (uMaxDist > 0.0 && bounce == 0) cover = clamp((uMaxDist - min(bestT, workT)) / 6.0, 0.0, 1.0);
+    if (uMaxDist > 0.0 && bounce == 0) cover = clamp((limit - min(bestT, workT)) / 6.0, 0.0, 1.0);
     if (found) {
       if (dot(bestN, rd) > 0.0) bestN = -bestN;
       if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
@@ -706,11 +726,24 @@ void main() {
 precision highp float;
 uniform sampler2D uFar;
 uniform sampler2D uNear;
+uniform vec2 uGaze;
+uniform float uGamma;
 in vec2 vUV;
 out vec4 fragColor;
+float gazeUnaxis(float s, float c, float g) {
+  if (g > 0.98) return s;
+  float d = s - c;
+  float side = d < 0.0 ? c : 1.0 - c;
+  if (side < 1.0e-4) return s;
+  return c + sign(d) * pow(abs(d / side), g) * side;
+}
 void main() {
+  float g = uGamma < 0.2 ? 1.0 : uGamma;
+  vec2 ray = vec2(vUV.x, 1.0 - vUV.y);
+  vec2 packed = vec2(gazeUnaxis(ray.x, uGaze.x, g), gazeUnaxis(ray.y, uGaze.y, g));
+  vec2 nearUV = vec2(packed.x, 1.0 - packed.y);
   vec4 farColor = texture(uFar, vUV);
-  vec4 nearColor = texture(uNear, vUV);
+  vec4 nearColor = texture(uNear, clamp(nearUV, 0.0, 1.0));
   fragColor = vec4(mix(farColor.rgb, nearColor.rgb, nearColor.a), 1.0);
 }`);
   let stackProgram = null;
@@ -724,6 +757,8 @@ void main() {
   }
   const stackFar = stackProgram ? gl.getUniformLocation(stackProgram, "uFar") : null;
   const stackNear = stackProgram ? gl.getUniformLocation(stackProgram, "uNear") : null;
+  const stackGaze = stackProgram ? gl.getUniformLocation(stackProgram, "uGaze") : null;
+  const stackGamma = stackProgram ? gl.getUniformLocation(stackProgram, "uGamma") : null;
   const makeTarget = (filter) => {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -857,6 +892,12 @@ void main() {
       gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
       gl.uniform1f(u("uTime"), scene.time || 0);
       gl.uniform1f(u("uMaxDist"), maxDist || 0);
+      const gaze = scene.gaze;
+      const sharpen = maxDist > 0 && gaze ? gaze.gamma : 1;
+      gl.uniform2f(u("uGaze"), gaze ? gaze.x : 0.5, gaze ? gaze.y : 0.5);
+      gl.uniform1f(u("uGamma"), sharpen || 1);
+      gl.uniform1f(u("uGazeReach"), gaze ? gaze.reach : maxDist || 0);
+      gl.uniform1f(u("uSpread"), gaze ? gaze.spread : 0.22);
       if (prog === pointProgram) {
         const n = Math.max(0, Math.min(count | 0, rayUVs.length / 2));
         const w = Math.max(1, canvas.width);
@@ -918,6 +959,9 @@ void main() {
       gl.bindFramebuffer(gl.FRAMEBUFFER, slot.fbo);
       gl.viewport(0, 0, tw, th);
       gl.useProgram(stackProgram);
+      const gaze = scene.gaze || { x: 0.5, y: 0.5, gamma: 1 };
+      gl.uniform2f(stackGaze, gaze.x, gaze.y);
+      gl.uniform1f(stackGamma, gaze.gamma || 1);
       gl.activeTexture(gl.TEXTURE11);
       gl.bindTexture(gl.TEXTURE_2D, farSlot.tex);
       gl.uniform1i(stackFar, 11);

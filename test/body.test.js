@@ -84,4 +84,6 @@ test("distance is a quarter of the close picture on each axis", () => {
   const src = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(src, /uniform float uMaxDist/);
   assert.match(src, /farPixels\(tw, th\)/);
+  assert.match(src, /float gazeAxis/);
+  assert.match(src, /uGazeReach/);
 });

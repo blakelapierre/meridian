@@ -5,7 +5,7 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=69";
+import { createGpuPainter, fitCanvas, NEAR_METERS } from "../render/gpu.js?v=70";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=85";
 import {
@@ -67,7 +67,7 @@ import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
 import { paintChart } from "../render/chart.js?v=70";
-import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, OPTICS, rangeRead, relaxOrbit, stepFollow, zoomFov } from "../sim/sight.js?v=8";
+import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, stepFollow, zoomFov } from "../sim/sight.js?v=9";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
@@ -1461,6 +1461,14 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   scene.prints = prints;
   scene.work = work;
   scene.time = tick / 30;
+  scene.gaze = gazeFor(
+    scene.camera,
+    eyeOf(sample),
+    lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch),
+    skills.eyesight.value,
+    skills.focus.value,
+    NEAR_METERS,
+  );
   markTarget(scene);
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
