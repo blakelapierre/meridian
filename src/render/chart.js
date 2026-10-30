@@ -1,5 +1,5 @@
 import { abilityLine, formatFix } from "../sim/map.js";
-import { placeOnView, worldToPixel } from "../sim/plate.js";
+import { placeOnView, plateViewRect } from "../sim/plate.js";
 
 function strokeGrouped(ctx, marks, kind, here, across, size, color) {
   const groups = new Map();
@@ -63,10 +63,8 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plat
   ctx.fillRect(0, 0, size, size);
   if (plate) {
     const image = plateImage(plate);
-    const [cx, cy] = worldToPixel(plate, here[0], here[1]);
-    const mpp = plate.meters / plate.size;
-    const sw = across / mpp;
-    ctx.drawImage(image, cx - sw / 2, cy - sw / 2, sw, sw, 0, 0, size, size);
+    const rect = plateViewRect(plate, here, across, size);
+    ctx.drawImage(image, rect.x, rect.y, rect.size, rect.size);
   }
   if (contours?.length) {
     ctx.save();
