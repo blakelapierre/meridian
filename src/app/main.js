@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=68";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=84";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=85";
 import {
   authority,
   bandage,
@@ -101,7 +101,7 @@ import { afterShot, boltHit, boltInSmoke, firePull, penFactor, startBolt, stepBo
 import { noteHarm } from "../sim/identityharm.js";
 import { cellId, castVote, inInterest, sameCell, tally } from "../sim/cell.js";
 import { maySit, sitOrder, writeVoucher } from "../sim/command.js";
-import { graze, groundLook, standHeight } from "../sim/life.js?v=67";
+import { fauna, graze, groundLook, standHeight } from "../sim/life.js?v=67";
 import { raiseSpore, sporeMetal, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -321,6 +321,38 @@ let cameraSpring = null;
 let cameraPos = null;
 let cameraLook = null;
 let frameHold = false;
+const sceneMemory = new Map();
+
+function sceneLive() {
+  const origin = cameraPos || [player.position[0], player.position[1], player.position[2] + 1.65];
+  const dir = cameraLook || lookDirection(yaw, pitch);
+  const samples = [];
+  for (const animal of fauna(Date.now(), player.position)) {
+    if (!inFront(origin, dir, animal.at, 56)) continue;
+    samples.push({ id: animal.kind, key: animal.at.map((value) => value.toFixed(2)).join(","), live: true });
+  }
+  for (const other of otherActors()) {
+    if (!inFront(origin, dir, other.feet, 72)) continue;
+    samples.push({
+      id: `who:${other.id}`,
+      key: `${other.feet[0].toFixed(2)},${other.feet[1].toFixed(2)},${(other.yaw || 0).toFixed(2)}`,
+    });
+  }
+  bolts.forEach((bolt, index) => {
+    if (!inFront(origin, dir, bolt.position, 48)) return;
+    samples.push({ id: `bolt:${index}`, key: bolt.position.map((value) => value.toFixed(1)).join(","), live: true });
+  });
+  if (smokeTicks > 0 && smokeAt && inFront(origin, dir, smokeAt, 40)) samples.push({ id: "smoke", key: "on", live: true });
+  if (swarmAt && inFront(origin, dir, swarmAt, 40)) {
+    samples.push({ id: "swarm", key: `${swarmAt[0].toFixed(2)},${swarmAt[1].toFixed(2)}`, live: true });
+  }
+  for (const pool of pools) {
+    const at = [pool.x, pool.y, pool.floor || 0];
+    if (!inFront(origin, dir, at, 40)) continue;
+    samples.push({ id: `pool:${pool.key}`, key: at.map((value) => value.toFixed(2)).join(",") });
+  }
+  return watchScene(sceneMemory, samples);
+}
 
 function windowFocused() {
   if (document.hidden) return false;
@@ -2441,7 +2473,8 @@ if (params.get("still") !== "1") {
     const displayW = Math.max(2, Math.floor(boxW));
     const displayH = Math.max(2, Math.floor(boxH));
     const burst = accel >= 1;
-    const settled = still && speed < 0.08 && !burst;
+    const live = sceneLive();
+    const settled = still && speed < 0.08 && !burst && !live;
     const traceCost = Math.max(lastPaintMs || 0, decision.gap || 0, wasParked && burst ? 125 : 0);
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
