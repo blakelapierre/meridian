@@ -245,7 +245,7 @@ void main() {
         bestP = p;
         bestN = vec3(0.0, 0.0, 1.0);
         bestRgb = tiled(${SAND_TILE}, p.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55;
-        bestRef = 0.04;
+        bestRef = 0.02;
         found = true;
       }
     }
@@ -254,14 +254,14 @@ void main() {
       bestP = vec3(sandP.xy, mouthFloor);
       bestN = vec3(0.0, 0.0, 1.0);
       bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55;
-      bestRef = 0.04;
+      bestRef = 0.02;
       found = true;
     } else if (sand && !openMouth && sandT < bestT) {
       bestT = sandT;
       bestP = sandP;
       bestN = vec3(0.0, 0.0, 1.0);
       bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.55, 0.48, 0.32));
-      bestRef = 0.2;
+      bestRef = 0.02;
       found = true;
     }
     for (int i = 0; i < ${MAX_BOXES}; i++) {
