@@ -6,7 +6,7 @@ The focused view aims at vsync. A hidden tab paints about once a second. Extra f
 
 ## This pass
 
-The mirror follows the material. It is not a circle drawn on the screen. The sand still reflects a little of the sky.
+The mirror follows the material. Desert sand keeps only a faint sheen, about a fiftieth of a mirror. The sea is still the reflective surface.
 
 ## Proves
 
