@@ -15,10 +15,27 @@ export function memoryStore(seed = {}) {
 }
 
 export function browserStore() {
-  if (typeof localStorage === "undefined") return memoryStore();
+  try {
+    if (typeof localStorage === "undefined") return memoryStore();
+    localStorage.getItem("meridian-probe");
+  } catch {
+    return memoryStore();
+  }
   return {
-    get: (key) => localStorage.getItem(key),
-    set: (key, value) => localStorage.setItem(key, value),
+    get: (key) => {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    set: (key, value) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // A full disk must not stop the keeper from linking.
+      }
+    },
   };
 }
 

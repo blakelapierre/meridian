@@ -118,7 +118,7 @@ let hashRate = 0;
 let hashTotal = 0;
 let lastMineMs = 0;
 const booted = Date.now();
-const traffic = { inn: 0, out: 0, blocks: 0, refused: 0, sheets: 0, listed: 0 };
+const traffic = { inn: 0, out: 0, blocks: 0, refused: 0, sheets: 0, listed: 0, peers: "none" };
 
 function editsAfterTip() {
   const sealed = terrain.log.ops.map((op) => {
@@ -192,13 +192,16 @@ function hunt() {
 function paint() {
   const open = links.filter((link) => link.ops.readyState === "open");
   const names = open.map((link) => link.to);
-  const connecting = opening.size + links.filter((link) => link.ops.readyState !== "open").length;
+  const pending = links.filter((link) => link.ops.readyState !== "open");
+  const connecting = pending.length;
   const ice = {};
   let buffered = 0;
+  const notes = [];
   for (const link of links) {
     const state = link.pc?.iceConnectionState || "new";
     ice[state] = (ice[state] || 0) + 1;
     buffered += link.ops?.bufferedAmount || 0;
+    notes.push(`${link.to} ${link.note || link.ops.readyState}`);
   }
   const iceLine = Object.entries(ice).map(([name, count]) => `${name} ${count}`).join(" ") || "none";
   const crate = crateFor(ledger);
@@ -207,11 +210,16 @@ function paint() {
   const seconds = Math.floor((Date.now() - booted) / 1000) % 60;
   const tip = tipOf(chain).block;
   const behind = Math.max(0, terrain.log.seq - tip.seq);
-  $("status").textContent = names.length
-    ? `clients ${names.length} · ${names.join(" ")}`
-    : "waiting for a player";
+  const status = $("status");
+  status.dataset.live = "1";
+  status.textContent = names.length
+    ? `linked ${names.join(" ")}`
+    : pending.length
+      ? `connecting ${pending.length}`
+      : "waiting for a player";
   const perf = $("perf");
   if (perf) {
+    perf.dataset.live = "1";
     perf.textContent = [
       `hash ${hashRate.toLocaleString("en-US")} / s`,
       `tried ${hashTotal.toLocaleString("en-US")}`,
@@ -219,6 +227,8 @@ function paint() {
       `uptime ${minutes}m ${seconds}s`,
       `clients ${names.length} open    ${connecting} connecting`,
       `ice ${iceLine}`,
+      notes.length ? `links ${notes.join(" | ")}` : "links none",
+      `seen ${traffic.peers}`,
       `block ${tip.height}    behind ${behind}    ops ${terrain.log.ops.length}`,
       `ops in ${traffic.inn} out ${traffic.out}    blocks ${traffic.blocks}    refused ${traffic.refused}`,
       `sheets ${Object.keys(world.sheets).length}    frames ${world.frames.length}    listed ${traffic.listed}`,
@@ -254,15 +264,18 @@ async function openPlayer(to) {
   opening.add(to);
   const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
   const channels = {};
-  for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false]]) {
+  for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false], ["lore", 3, true]]) {
     const options = { negotiated: true, id: spec[1], ordered: spec[2] };
     if (!spec[2]) options.maxRetransmits = 0;
     const channel = pc.createDataChannel(spec[0], options);
     channel.binaryType = "arraybuffer";
     channels[spec[0]] = channel;
   }
-  channels.ops.onopen = () => replay(channels.ops);
-  links.push({ to, ops: channels.ops, pc });
+  links.push({ to, ops: channels.ops, lore: channels.lore, pc, note: "starting" });
+  channels.ops.onopen = () => {
+    opening.delete(to);
+    replay(channels.ops);
+  };
   channels.ops.onmessage = (event) => {
     const bytes = new Uint8Array(event.data);
     traffic.inn += 1;
@@ -302,17 +315,35 @@ async function openPlayer(to) {
       to,
       offer: true,
       isOpen: () => channels.ops.readyState === "open",
-      status: () => paint(),
+      status: (line) => {
+        const link = links.find((item) => item.to === to);
+        if (link) link.note = line;
+        paint();
+      },
     });
+    opening.delete(to);
   } catch (error) {
     opening.delete(to);
-    $("status").textContent = String(error);
+    const index = links.findIndex((item) => item.to === to);
+    if (index >= 0) links.splice(index, 1);
+    showFail(error);
   }
 }
 
 async function seek() {
   const peers = await room.list();
   traffic.listed = peers.length;
+  traffic.peers = peers.length
+    ? peers.map((found) => `${found.role || "player"} ${found.pubkey}`).join(" | ")
+    : "none";
+  for (const link of links) {
+    if (link.ops.readyState === "open") continue;
+    if (link.pc?.iceConnectionState === "failed" || link.pc?.connectionState === "failed") {
+      const index = links.indexOf(link);
+      if (index >= 0) links.splice(index, 1);
+      opening.delete(link.to);
+    }
+  }
   for (const found of peers) {
     if (found.role === "archive" || found.pubkey === roomId) continue;
     openPlayer(found.pubkey);

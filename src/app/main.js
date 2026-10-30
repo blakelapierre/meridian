@@ -276,6 +276,7 @@ if (kept && keepSlot) {
   }
 }
 if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
+let linkNote = "";
 const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0 };
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const jump = createJump();
@@ -1199,7 +1200,8 @@ function paintNet() {
     `lore in ${net.loreIn} out ${net.loreOut}    heard ${net.heard}`,
     `block ${tip.height} ${chainWord}    behind ${behind}    dupes ${net.dupes}`,
     `sheet ${sheetSeq}    poses ${poses.size}    buffered ${buffered}`,
-  ].join("\n");
+    linkNote,
+  ].filter(Boolean).join("\n");
 }
 
 function publish() {
@@ -1608,6 +1610,7 @@ async function openLink(to, offer, role) {
   links.push(link);
   if (!ops) ops = channels.ops;
   channels.ops.onopen = () => {
+    opening.delete(to);
     shareWalls(link);
     if (role === "archive") pushSheet();
   };
@@ -1636,7 +1639,8 @@ async function openLink(to, offer, role) {
       offer,
       isOpen: () => channels.ops.readyState === "open",
       status: (line) => {
-        if (linkLine && !followed) linkLine.textContent = role === "archive" ? `archive ${line}` : line;
+        linkNote = role === "archive" ? `archive ${line}` : line;
+        if (linkLine && !followed) linkLine.textContent = linkNote;
       },
     });
     if (channels.ops.readyState === "open") shareWalls(link);
