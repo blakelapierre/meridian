@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abilityLine, createSurvey, formatFix, headingDegrees, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey, placeMark } from "../src/sim/map.js";
+import { abilityLine, createSurvey, formatFix, headingDegrees, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathKeep, pathStamp, placeMark } from "../src/sim/map.js";
+
+test("tracking slowly lengthens the path and later keeps it", () => {
+  assert.equal(pathKeep(0), 0);
+  assert.ok(pathKeep(4) > 0 && pathKeep(4) < pathKeep(40));
+  assert.equal(pathStamp(4), false);
+  assert.equal(pathStamp(8), true);
+  const path = [];
+  notePath(path, [0, 0], 0);
+  assert.equal(path.length, 0);
+  notePath(path, [0, 0], 6);
+  notePath(path, [2, 0], 6);
+  notePath(path, [4, 0], 6);
+  assert.equal(path.length, 3);
+  const kept = pathKeep(2);
+  const short = [];
+  for (let i = 0; i < 20; i += 1) notePath(short, [i * 2, 0], 2);
+  assert.equal(short.length, kept);
+});
 
 test("the map keeps world coordinates and a live heading", () => {
   assert.equal(headingDegrees(0), 0);

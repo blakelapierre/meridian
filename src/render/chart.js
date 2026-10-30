@@ -1,6 +1,28 @@
 import { abilityLine, formatFix } from "../sim/map.js";
 import { placeOnView, worldToPixel } from "../sim/plate.js";
 
+function strokeGrouped(ctx, marks, kind, here, across, size, color) {
+  const groups = new Map();
+  for (const mark of marks) {
+    if (mark.kind !== kind || !mark.point) continue;
+    const key = mark.id || kind;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(mark.point);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = kind === "path" ? 2 : 1;
+  for (const line of groups.values()) {
+    if (line.length < 2) continue;
+    ctx.beginPath();
+    line.forEach((point, index) => {
+      const at = placeOnView(here, point, across, size);
+      if (index === 0) ctx.moveTo(at.x, at.y);
+      else ctx.lineTo(at.x, at.y);
+    });
+    ctx.stroke();
+  }
+}
+
 function cssColor(color, fallback) {
   if (!color) return fallback;
   const red = Math.round(color[0] * 255);
@@ -63,8 +85,10 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plat
   ctx.font = "12px sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("N", half, 16);
+  strokeGrouped(ctx, marks, "path", here, across, size, "rgba(196, 154, 92, 0.9)");
+  strokeGrouped(ctx, marks, "track", here, across, size, "rgba(190, 120, 90, 0.75)");
   for (const mark of marks) {
-    if (mark.kind === "sand" || mark.kind === "pit" || mark.kind === "trail") continue;
+    if (mark.kind === "sand" || mark.kind === "pit" || mark.kind === "trail" || mark.kind === "path" || mark.kind === "track") continue;
     const at = placeOnView(here, mark.point, across, size);
     if (!mark.point) continue;
     if (mark.kind === "place") {

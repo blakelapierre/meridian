@@ -6,7 +6,7 @@ The beach makes short tones with the Web Audio oscillator. No samples are shippe
 
 | Cue | When |
 |---|---|
-| step | The body has traveled far enough. A sprint asks for a longer stride |
+| step | The body has traveled far enough. A sprint asks for a longer stride. Each step also trains tracking |
 | dig | The bit opens sand |
 | fill | The bit closes a hole |
 | shot | The line fires |
