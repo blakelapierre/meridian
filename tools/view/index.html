@@ -2,6 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Meridian</title>
     <style>
       html, body { margin: 0; background: #111; height: 100%; color: #eee; }
@@ -54,6 +55,19 @@
       a { color: #9cf; }
       h1 { font-size: 1rem; margin: 0 0 8px; }
       p { margin: 0 0 8px; }
+      html.touch, html.touch body { overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+      html.touch body > canvas { touch-action: none; }
+      #touch { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+      #touch #stick, #touch #lookpad, #touch button { pointer-events: auto; touch-action: none; }
+      #stick { position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: 22px; width: 132px; height: 132px; border-radius: 50%; background: rgba(255,255,255,.10); border: 2px solid rgba(255,255,255,.3); }
+      #nub { position: absolute; left: 41px; top: 41px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.45); }
+      #lookpad { position: absolute; left: 45%; right: 0; top: 18%; bottom: 0; }
+      html.touch:not(.touch-info) #help, html.touch:not(.touch-info) #skills, html.touch:not(.touch-info) #net { display: none; }
+      #touch #tfire { position: absolute; right: max(20px, env(safe-area-inset-right)); bottom: 30px; width: 84px; height: 84px; border-radius: 50%; background: rgba(200,40,40,.55); border-radius: 50%; padding: 0; }
+      #tbuttons { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: 128px; width: 220px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; pointer-events: none; }
+      #touch button { font: 13px/1 sans-serif; color: #fff; background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.35); border-radius: 8px; padding: 10px 8px; min-width: 48px; }
+      @media (orientation: landscape) and (max-height: 500px) { #tbuttons { width: 330px; bottom: 20px; right: 120px; } #stick { width: 112px; height: 112px; } #nub { left: 31px; top: 31px; } #lookpad { top: 10%; } }
+      @media (orientation: portrait) { #tbuttons { bottom: 132px; width: 210px; } }
     </style>
     <script type="importmap">
       {
