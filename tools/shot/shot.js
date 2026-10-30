@@ -33,7 +33,7 @@ function write(line) {
   log.textContent += `${line}\n`;
 }
 
-const atoll = await fetch("/content/atoll.json").then((response) => response.json());
+const atoll = await fetch(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.json());
 const dummy = atoll.placements.dummy;
 const pad = atoll.placements.accuracyPad;
 const origin = [pad.x, pad.y, 165];
