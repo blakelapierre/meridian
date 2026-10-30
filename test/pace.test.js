@@ -88,6 +88,20 @@ test("throughput multiplies by camera speed, and a brisk move holds vsync", () =
   assert.ok(seen.scale <= grown);
 });
 
+test("a moving camera is pulled to at least 12fps in one step", () => {
+  const box = { displayW: 1280, displayH: 720 };
+  const pace = createPicturePace();
+  let seen = pace.step({ gap: 16, ...box, still: false, speed: 0.2 });
+  for (let i = 0; i < 6; i += 1) seen = pace.step({ gap: 16, ...box, still: false, speed: 0.2 });
+  const before = seen.scale;
+  for (let i = 0; i < 6; i += 1) seen = pace.step({ gap: 200, ...box, still: false, speed: 0.2 });
+  assert.ok(seen.scale < before * 0.7);
+  const parked = createPicturePace();
+  let held = parked.step({ gap: 200, ...box, still: true });
+  for (let i = 0; i < 6; i += 1) held = parked.step({ gap: 200, ...box, still: true });
+  assert.ok(held.scale >= 0.4);
+});
+
 test("movement snaps toward vsync and will not stay under 12fps", () => {
   const box = { displayW: 1280, displayH: 720 };
   const pace = createPicturePace();

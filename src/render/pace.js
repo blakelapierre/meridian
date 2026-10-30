@@ -97,8 +97,8 @@ export function createPicturePace() {
       const ease = Math.min(1, Math.max(0, speed / 4.4)) ** 2;
       const growBy = 1.04 + (1 - ease) * 0.14;
       if (!still && ms > limit) {
-        scale = Math.max(0.08, scale * Math.max(0.86, Math.sqrt(limit / ms)));
-        direction = 1;
+        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(limit / ms)));
+        direction = 0;
         lastScore = 0;
       } else {
         if (!still && ms > limit * 0.85) direction = 0;
@@ -161,6 +161,8 @@ export function viewStill(previous, next) {
   if (next.busy) return false;
   if (Math.abs(next.yaw - previous.yaw) > 0.004) return false;
   if (Math.abs(next.pitch - previous.pitch) > 0.004) return false;
+  if (Math.abs((next.distance || 0) - (previous.distance || 0)) > 0.02) return false;
+  if (Math.abs((next.orbit || 0) - (previous.orbit || 0)) > 0.004) return false;
   return Math.hypot(next.x - previous.x, next.y - previous.y) <= 0.03;
 }
 
