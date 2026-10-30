@@ -27,28 +27,56 @@ export function coverLevel(targetW, targetH, rays) {
   return 8;
 }
 
-export function frameBudget(longEdge, displayEdge, refreshMs) {
-  const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
-  const playable = Math.max(refresh, 1000 / 12);
-  const fill = displayEdge > 0 ? longEdge / displayEdge : 1;
-  const comfortable = 0.28;
-  if (fill >= comfortable) return refresh;
-  const room = (comfortable - Math.max(0, fill)) / comfortable;
-  return refresh + (playable - refresh) * room;
-}
-
 export function visualThroughput(pixels, frameMs, refreshMs) {
   if (!(pixels > 0) || !(frameMs > 0)) return 0;
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
   const fps = Math.min(1000 / frameMs, 1000 / refresh);
-  const refreshHz = 1000 / refresh;
-  const playable = 12;
-  const credit = fps >= refreshHz
-    ? 1
-    : fps >= playable
-      ? 0.55 + 0.45 * ((fps - playable) / Math.max(1, refreshHz - playable))
-      : 0.55 * (fps / playable) ** 3;
-  return pixels * credit * credit;
+  return pixels * fps;
+}
+
+export function createPicturePace() {
+  let scale = 0.4;
+  let period = 1000 / 60;
+  let periodSamples = 0;
+  let bucket = [];
+  let skip = true;
+  let direction = 1;
+  let lastScore = 0;
+  return {
+    get scale() {
+      return scale;
+    },
+    step({ gap = 0, displayW = 960, displayH = 540 } = {}) {
+      if (gap >= 8 && gap <= 50) {
+        period = periodSamples ? period * 0.85 + gap * 0.15 : gap;
+        periodSamples += 1;
+      }
+      const refresh = periodSamples < 4 ? Math.max(period, 1000 / 30) : period;
+      const sized = () => pictureSize(scale, displayW, displayH);
+      const pack = (info) => {
+        const size = sized();
+        return { scale, refresh, info, width: size.width, height: size.height };
+      };
+      if (!(gap > 0)) return pack(0);
+      if (skip) {
+        skip = false;
+        return pack(0);
+      }
+      bucket.push(gap);
+      if (bucket.length < 4) return pack(visualThroughput(sized().width * sized().height, gap, refresh));
+      const ordered = [...bucket].sort((a, b) => a - b);
+      const ms = ordered[ordered.length >> 1];
+      bucket = [];
+      const size = sized();
+      const score = visualThroughput(size.width * size.height, ms, refresh);
+      if (lastScore > 0 && score < lastScore * 0.98) direction = -direction;
+      lastScore = score;
+      scale = Math.max(0.08, Math.min(1, scale * (direction > 0 ? 1.04 : 0.96)));
+      skip = true;
+      const next = pictureSize(scale, displayW, displayH);
+      return { scale, refresh, info: score, width: next.width, height: next.height };
+    },
+  };
 }
 
 export function pictureSize(scale, displayW, displayH) {
@@ -65,63 +93,6 @@ export function pictureSize(scale, displayW, displayH) {
   width = Math.max(2, Math.min(displayW, Math.round(width / 4) * 4));
   height = Math.max(2, Math.min(displayH, Math.round(height / 4) * 4));
   return { width, height };
-}
-
-export function createPicturePace() {
-  let scale = 0.5;
-  let period = 1000 / 60;
-  let periodSamples = 0;
-  let bucket = [];
-  let dwell = 0;
-  let slow = 0;
-  return {
-    get scale() {
-      return scale;
-    },
-    step({ gap = 0, displayW = 960, displayH = 540 } = {}) {
-      if (gap >= 8 && gap <= 50) {
-        period = periodSamples ? period * 0.85 + gap * 0.15 : gap;
-        periodSamples += 1;
-      }
-      const refresh = periodSamples < 4 ? Math.max(period, 1000 / 30) : period;
-      const sized = () => pictureSize(scale, displayW, displayH);
-      const budgetOf = (size) => frameBudget(Math.max(size.width, size.height), Math.max(displayW, displayH), refresh);
-      const infoOf = (ms) => visualThroughput(sized().width * sized().height, ms, refresh);
-      if (!(gap > 0)) {
-        const size = sized();
-        return { scale, refresh, info: 0, width: size.width, height: size.height };
-      }
-      const budget = budgetOf(sized());
-      if (gap > budget * 1.15) {
-        slow += 1;
-        if (slow < 2) {
-          const size = sized();
-          return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
-        }
-        const correction = Math.sqrt(budget / gap);
-        scale = Math.max(0.05, Math.min(1, scale * Math.max(0.94, Math.min(1, correction))));
-        dwell = 0;
-        bucket = [];
-        const size = sized();
-        return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
-      }
-      slow = 0;
-      bucket.push(gap);
-      dwell += 1;
-      if (dwell < 6) {
-        const size = sized();
-        return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
-      }
-      const ordered = [...bucket].sort((a, b) => a - b);
-      const ms = ordered[ordered.length >> 1];
-      bucket = [];
-      dwell = 0;
-      const correction = Math.sqrt(budget / Math.max(ms, 1));
-      scale = Math.max(0.05, Math.min(1, scale * Math.max(0.94, Math.min(1.06, correction))));
-      const size = pictureSize(scale, displayW, displayH);
-      return { scale, refresh, info: infoOf(ms), width: size.width, height: size.height };
-    },
-  };
 }
 
 export function stepOctave(level, covered) {
