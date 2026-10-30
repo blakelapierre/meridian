@@ -16,7 +16,7 @@ Using a wall pins your latest told sentence onto it. Salvaging the wall does not
 
 ## Next
 
-Salvaging a wall does not drop its pinned sentence as a slip.
+Salvaging a wall does not drop the pinned sentence. Not in this build.
 
 ## Later
 

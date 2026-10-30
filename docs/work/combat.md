@@ -16,7 +16,7 @@ T plants a mission marker. A bolt in the air is pulled toward it. Nobody else fi
 
 ## Next
 
-A mission pulls your own bolt. Another person in the cell cannot add fire to it.
+Another person in the cell cannot add fire to the marker. Not in this build.
 
 ## Later
 

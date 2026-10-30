@@ -14,7 +14,7 @@ F places a floor for 2 stone. The floor does not yet support a post.
 
 ## Next
 
-A floor does not count as support for a post.
+A floor does not count as support for a post. Not in this build.
 
 ## Later
 

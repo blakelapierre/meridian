@@ -14,7 +14,7 @@ G throws smoke when you are out of stone and you still have a smoke. The smoke s
 
 ## Next
 
-A bolt that enters a smoke from outside is not stopped. Only a shot that starts inside it is.
+A bolt that enters the thrown smoke from outside is not stopped. Not in this build.
 
 ## Later
 

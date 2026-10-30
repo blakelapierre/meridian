@@ -16,7 +16,7 @@ A charter names its first person as voucher, on the line. That name is not writt
 
 ## Next
 
-The voucher is on the status line. Identifying the table does not read that name.
+Identifying the table does not read the voucher. Not in this build.
 
 ## Later
 

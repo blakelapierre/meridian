@@ -18,7 +18,7 @@ B uses a stick, if you have one and a leg is hurt, and does not spend fiber. You
 
 ## Next
 
-A splint does not lower pain. The next cycle can take 5 pain with the stick.
+A splint does not lower pain. Not in this build.
 
 ## Later
 

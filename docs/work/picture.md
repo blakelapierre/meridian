@@ -6,7 +6,7 @@ The focused view aims at vsync. A hidden tab paints about once a second. Extra f
 
 ## This pass
 
-The center of the picture keeps the second reflection bounce. The edge drops it. The buffer is still one resolution.
+Moving still targets the play resolution. The dim ring on the chart is not a sharper center in the world picture.
 
 ## Proves
 
@@ -14,7 +14,7 @@ The center of the picture keeps the second reflection bounce. The edge drops it.
 
 ## Next
 
-The edge always drops the second bounce, even when the picture is still.
+The center does not keep a second reflection bounce. The renderer was left alone. Not in this build.
 
 ## Later
 

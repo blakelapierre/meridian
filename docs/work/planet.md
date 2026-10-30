@@ -8,7 +8,7 @@ The playable ground is still the Atoll tangent. Gravity is radial, toward a core
 
 ## This pass
 
-Far from the origin the camera look tilts down by a little of the shell drop. The ground mesh does not curve.
+The chart can dim what is outside your sense, and the world picture is still the flat tangent. `drop` is unchanged.
 
 ## Proves
 
@@ -16,7 +16,7 @@ Far from the origin the camera look tilts down by a little of the shell drop. Th
 
 ## Next
 
-The look tilts with the shell. The mesh stays flat.
+The camera does not tilt with the shell. Not in this build.
 
 ## Later
 

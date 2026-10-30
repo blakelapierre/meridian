@@ -16,7 +16,7 @@ Sitting at the table names the clock `dominion`. Standing returns it to `hands`.
 
 ## Next
 
-Dominion while you sit is a word. The map under it is the same map.
+Dominion while you sit is a word. It is not a second map. Not in this build.
 
 ## Later
 
