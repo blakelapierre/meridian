@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints sand, pits, stone, and wood. The
 
 ## This pass
 
-Walking leaves footsteps. Tracking rises slowly from those steps. The map shows a longer path as the skill rises. From tracking 8 the steps stay on the chart picture. From tracking 18 other bodies leave a shorter path.
+A footstep is a mark on the ground. Every client draws it. Tracking does not hide it. Tracking only lengthens the path on your own map. From tracking 8 those steps also stay on the chart picture. From tracking 18 other bodies leave a shorter path there.
 
 ## Proves
 
