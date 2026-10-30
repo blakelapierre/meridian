@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=65";
 import { createFps } from "../render/fps.js";
-import { createPacer, coverLevel, fitPixels, nativePixels, noteRayRate, paceWord, sizeAt, stepOctave, viewStill } from "../render/pace.js?v=61";
+import { createPacer, coverLevel, nativePixels, paceOctave, paceWord, sizeAt, stepOctave, viewStill } from "../render/pace.js?v=62";
 import {
   authority,
   bandage,
@@ -113,8 +113,8 @@ let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
 let octave = 4;
+let climbWait = 0;
 let rayBudget = 4000;
-let rayRate = 0;
 let paintKind = "full";
 let lastPaintMs = 0;
 if (painter) {
@@ -2235,9 +2235,17 @@ if (params.get("still") !== "1") {
     viewScale = decision.scale;
     const native = nativePixels(boxW, boxH, window.devicePixelRatio || 1);
     let covered = coverLevel(native.width, native.height, rayBudget);
-    if (extra) covered = Math.max(covered, 3);
-    octave = stepOctave(octave, covered);
-    if (!still) octave = Math.max(octave, covered);
+    if (extra) {
+      covered = Math.max(covered, 3);
+      octave = Math.max(3, stepOctave(octave, covered));
+    } else {
+      const vsync = decision.refresh > 8 ? decision.refresh : 1000 / 60;
+      if (decision.gap > vsync * 1.15) climbWait = 0;
+      else climbWait += 1;
+      const climb = climbWait >= 10;
+      if (climb) climbWait = 0;
+      octave = paceOctave(octave, { gap: decision.gap, refresh: decision.refresh, still, climb });
+    }
     const size = sizeAt(octave, native.width, native.height);
     const pixels = size.width * size.height;
     const same = canvas.width === size.width && canvas.height === size.height;
@@ -2260,8 +2268,6 @@ if (params.get("still") !== "1") {
       const paintMs = performance.now() - started;
       if (!extra) {
         lastPaintMs = paintMs;
-        rayRate = noteRayRate(rayRate, pixels, paintMs);
-        rayBudget = fitPixels(rayRate, decision.refresh, native.width * native.height);
       }
       pacer.note(paintMs, active, still);
       canvas.dataset.fps = String(fps.paint(now));

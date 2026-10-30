@@ -27,6 +27,19 @@ export function coverLevel(targetW, targetH, rays) {
   return 8;
 }
 
+export function paceOctave(level, { gap = 0, refresh = 1000 / 60, still = false, climb = false } = {}) {
+  const vsync = refresh > 8 ? Math.min(refresh, 1000 / 30) : 1000 / 60;
+  if (still) return Math.max(0, level - 1);
+  if (!(gap > 0)) return level;
+  if (gap > vsync * 1.15) {
+    const over = gap / vsync;
+    const steps = over >= 8 ? 3 : over >= 3 ? 2 : 1;
+    return Math.min(8, level + steps);
+  }
+  if (climb && gap <= vsync * 1.15) return Math.max(0, level - 1);
+  return level;
+}
+
 export function stepOctave(level, covered) {
   if (covered < level) return Math.max(0, level - 1);
   if (covered > level) return Math.min(8, level + 1);
