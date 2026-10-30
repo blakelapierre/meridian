@@ -66,6 +66,22 @@ import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/wal
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
 import { createIdentity, exportKey, importKey, keyPhrase, signBytes } from "../net/identity.js";
+import {
+  acceptSheet,
+  applyCharacter,
+  browserStore,
+  bytesHex,
+  characterBody,
+  encodeSheet,
+  hexBytes,
+  keepFrame,
+  loadIdentity,
+  loadSheet,
+  loadWorld,
+  saveIdentity,
+  saveSheet,
+  saveWorld,
+} from "../sim/persist.js";
 import { firstCrate } from "../sim/culture.js";
 import { createPools, drainPool, flowOnce, notePool } from "../sim/pool.js";
 import { deedVolume, grantKey, mayEdit } from "../sim/deed.js";
@@ -140,7 +156,10 @@ const player = createPlayer([spawn.x / 100, spawn.y / 100, spawn.z / 100]);
 const world = createPlayerWorld(player);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
-const identity = importKey(params.get("key") || "") || createIdentity();
+const keepSlot = followId || params.get("look") || params.get("gate") || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
+const keptStore = browserStore();
+const identity = importKey(params.get("key") || "") || (keepSlot && loadIdentity(keptStore, keepSlot)) || createIdentity();
+if (keepSlot && !params.get("key")) saveIdentity(keptStore, identity, keepSlot);
 const culture = firstCrate(params.get("culture") || "holds");
 const pools = createPools();
 const bonds = new Map();
@@ -243,6 +262,17 @@ let zoom = { distance: CHASE, first: false, level: 0, forced: false, blend: 0 };
 let rangeText = "";
 let selection = null;
 const skills = createSkills();
+const kept = keepSlot ? loadSheet(keptStore, keepSlot) : null;
+let sheetSeq = kept?.seq || 0;
+if (kept && keepSlot) {
+  const pose = applyCharacter(kept, { player, skills, yard, survey, notes });
+  yaw = pose.yaw;
+  pitch = pose.pitch;
+  for (const cell of survey.ground.values()) {
+    stamp(plate, cell.point[0], cell.point[1], GEO_COLOR[cell.kind] || GEO_COLOR.sand, 1.6);
+  }
+}
+const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const jump = createJump();
 let ops = null;
 const links = [];
@@ -334,7 +364,44 @@ function sendLore(frame) {
   }
 }
 
+function rememberKept(frame) {
+  if (!keepSlot || !keptWorld || !frame) return;
+  const kind = frame[0];
+  if (kind !== 9 && kind !== 10 && kind !== 11 && kind !== 13) return;
+  if (keepFrame(keptWorld, frame)) saveWorld(keptStore, keptWorld, `meridian-world-${keepSlot}`);
+}
+
+function pushSheet() {
+  if (!keepSlot) return;
+  sheetSeq += 1;
+  const body = characterBody({
+    at: player.position,
+    yaw,
+    pitch,
+    skills,
+    metal: yard.metal,
+    stone: yard.stone ?? 0,
+    fiber: yard.fiber ?? 0,
+    sticks: yard.sticks ?? 0,
+    smokes: yard.smokes ?? 0,
+    notes,
+    ground: [...survey.ground.values()],
+    seq: sheetSeq,
+  });
+  saveSheet(keptStore, body, keepSlot);
+  const frame = encodeSheet(identity, body);
+  for (const link of links) {
+    if (link.role !== "archive" || link.ops.readyState !== "open") continue;
+    try {
+      link.ops.send(frame);
+    } catch {
+      // The archive asks again by keeping the last sheet it already has.
+    }
+  }
+}
+
 function sendOps(frame) {
+  rememberKept(frame);
   const open = openLinks();
   if (!open.length) {
     if (peer) shotFrames.push(frame);
@@ -1328,6 +1395,23 @@ function exchangeLore() {
 }
 
 function onOps(bytes, from) {
+  if (bytes[0] === 15) {
+    const accepted = acceptSheet(bytes);
+    if (!accepted.ok || !keepSlot) return;
+    if (bytesHex(accepted.pubkey) !== bytesHex(identity.pubkey)) return;
+    if ((accepted.seq || 0) <= sheetSeq) return;
+    const pose = applyCharacter(accepted.body, { player, skills, yard, survey, notes });
+    yaw = pose.yaw;
+    pitch = pose.pitch;
+    sheetSeq = accepted.seq;
+    saveSheet(keptStore, accepted.body, keepSlot);
+    for (const cell of survey.ground.values()) {
+      stamp(plate, cell.point[0], cell.point[1], GEO_COLOR[cell.kind] || GEO_COLOR.sand, 1.6);
+    }
+    report = "kept";
+    return;
+  }
+  rememberKept(bytes);
   if (bytes[0] === 11) {
     const decoded = decodeBlock(bytes);
     if (!decoded.ok) return;
@@ -1474,7 +1558,10 @@ async function openLink(to, offer, role) {
   const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore };
   links.push(link);
   if (!ops) ops = channels.ops;
-  channels.ops.onopen = () => shareWalls(link);
+  channels.ops.onopen = () => {
+    shareWalls(link);
+    if (role === "archive") pushSheet();
+  };
   channels.lore.onmessage = (event) => onOps(new Uint8Array(event.data), to);
   channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data), to);
   channels.snap.onmessage = (event) => {
@@ -1970,6 +2057,13 @@ if (params.get("still") !== "1") {
           notePath(line, [other.feet[0], other.feet[1]], skills.trailing.value);
         }
       }
+      if (tick % 150 === 0) {
+        pushSheet();
+        if (keptWorld) {
+          keptWorld.crust = [...terrain.log.crust.overrides.entries()];
+          saveWorld(keptStore, keptWorld, `meridian-world-${keepSlot}`);
+        }
+      }
       if (mapMode !== "none") grantUse(skills, "mapping", { tick, gap: 15 });
       const step = player.position;
       const lastFix = trail[trail.length - 1];
@@ -2124,5 +2218,18 @@ if (params.get("still") !== "1") {
     }
     requestAnimationFrame(frame);
   };
+  if (keepSlot && keptWorld) {
+    for (const [key, sample] of keptWorld.crust || []) terrain.log.crust.overrides.set(key, sample);
+    for (const text of keptWorld.frames) {
+      try {
+        onOps(hexBytes(text));
+      } catch {
+        // A stored frame that no longer decodes is skipped.
+      }
+    }
+  }
+  addEventListener("pagehide", () => {
+    if (keepSlot) pushSheet();
+  });
   requestAnimationFrame(frame);
 }

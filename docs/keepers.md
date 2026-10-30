@@ -37,3 +37,11 @@ Suggested rate, which a treasurer may change by publishing a new one:
 | Paid to | An address the operator publishes out of band. It is not a field in the game. |
 
 A receipt whose blocks are not on the heaviest chain is refused. One payout address per pubkey per quarter. No treasury in this repository means the receipt is the claim, not a payment.
+
+## Between restarts
+
+The archive keeps its own key. The same tab comes back as the same keeper, with the same keep.
+
+It also keeps the world it has been given: official blocks, walls, and the other pieces it has seen. On the next start it puts that chain back together and, when a player links, sends it again. A hole that reached a block is still a hole after both sides restart.
+
+A player keeps their own key in the browser. Skills, place, pack, notes, and the ground they have mapped come back with that key. The sheet is signed and handed to the archive. If the browser still has the key, the archive can hand the newer sheet back. The archive does not keep the secret. A lost key is a new person. The world they dug, once it was in a block, is still there.
