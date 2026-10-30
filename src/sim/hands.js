@@ -1,5 +1,5 @@
 import { stepPlayer, stepStamina, STOP_ACCEL, wishSpeed } from "./player.js";
-import { stepLift } from "./jump.js";
+import { stepLift } from "./jump.js?v=57";
 
 const AIR_ACCEL = 12;
 
@@ -36,7 +36,8 @@ export function moveIntent({ forward = 0, back = 0, sprint = false, auto = false
 }
 
 export function stepHands(world, player, stamina, input, jump = null, jumpSkill = 0) {
-  const airborne = player.position[2] > 0.02;
+  const ground = world.ground || 0;
+  const airborne = player.position[2] > ground + 0.12;
   const speed = airborne ? 4.4 : wishSpeed(stamina, {
     sprint: input.sprint,
     crouch: input.crouch,

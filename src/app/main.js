@@ -4,7 +4,7 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=56";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=57";
 import { createFps } from "../render/fps.js";
 import { createPacer, easePixels, nativePixels, paceWord, playPixels, soldierTarget, viewStill } from "../render/pace.js?v=52";
 import {
@@ -47,7 +47,7 @@ import {
   fallHurt,
   bleed,
 } from "../sim/hearth.js";
-import { lookDirection, moveIntent, stepHands } from "../sim/hands.js";
+import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=57";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
@@ -1823,6 +1823,7 @@ if (params.get("still") !== "1") {
       const down = radialDown(player.position[0], player.position[1], player.position[2]);
       world.gravity = [down[0] * 9.81, down[1] * 9.81, down[2] * 9.81];
       const ground = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
+      world.ground = ground;
       world.drop = shellDrop(player.position[0], player.position[1]) - ground;
       if (pools.some((pool) => Math.hypot(pool.x - player.position[0], pool.y - player.position[1]) < 0.7)) {
         world.gravity[2] += 14;
@@ -1881,7 +1882,7 @@ if (params.get("still") !== "1") {
         player.position[2] = floor;
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
-      if (falling < -9 && player.position[2] <= 0.05) vitals.integrity = fallHurt(vitals.integrity, falling);
+      if (falling < -9 && player.position[2] <= (world.ground || 0) + 0.2) vitals.integrity = fallHurt(vitals.integrity, falling);
       claimSpecialty(skills);
       const bag = skillBag();
       noteSurvey(survey, {

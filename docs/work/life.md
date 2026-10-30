@@ -8,7 +8,7 @@ Hills rise to about three body heights, 5.4 m. Lows stay near the old beach. The
 
 ## This pass
 
-The animals use the wall clock, so a slow extra view does not make them crawl. Coming close pushes the crab and the skink away. The gull does not land.
+The animals use the wall clock, so a slow extra view does not make them crawl. Coming close pushes the crab and the skink away. The gull does not land. A jump is measured from the hill under you, not from the old flat beach. The hill hit is refined so the slope does not band.
 
 ## Proves
 

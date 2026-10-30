@@ -33,6 +33,25 @@ test("holding space rises toward the jump skill and a tap stays short", () => {
   assert.ok(trained > held);
 });
 
+test("a jump still leaves a hill", () => {
+  const player = createPlayer([0, 0, 3]);
+  const world = createPlayerWorld(player);
+  world.tangentGravity = TANGENT_GRAVITY;
+  world.ground = 3;
+  world.drop = -3;
+  const stamina = createStamina();
+  const jump = createJump();
+  let launched = false;
+  let max = 3;
+  for (let step = 0; step < 20; step++) {
+    const result = stepHands(world, player, stamina, { yaw: 0, jump: true }, jump, 0);
+    if (result.jump) launched = true;
+    max = Math.max(max, player.position[2]);
+  }
+  assert.ok(launched);
+  assert.ok(max > 3.3, max);
+});
+
 test("using a skill adds experience and raises it", () => {
   const skills = createSkills();
   assert.equal(grantUse(skills, "jump"), 1);
