@@ -67,7 +67,7 @@ import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
 import { paintChart } from "../render/chart.js?v=70";
-import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, stepFollow, zoomFov } from "../sim/sight.js?v=9";
+import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, sightPractice, stepFollow, zoomFov } from "../sim/sight.js?v=10";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
@@ -911,6 +911,7 @@ function adoptTarget(subject) {
   const result = appraise(skills.appraisal.value, subject);
   if (result.known) {
     grantUse(skills, "appraisal", { tick });
+    grantUse(skills, "eyesight", { tick, gap: 20 });
     writeNote(notes, skills, subject.kind === "paper" ? "paper" : "seen", { line: result.line });
     if (subject.kind === "slip" && subject.detail) takeTold(notes, skills, subject.detail);
   }
@@ -1420,7 +1421,8 @@ function publish() {
   const info = Number(canvas.dataset.info) > 0 ? ` · info ${Number(canvas.dataset.info) >= 1e6 ? `${(Number(canvas.dataset.info) / 1e6).toFixed(1)}M` : Number(canvas.dataset.info) >= 1e3 ? `${Math.round(Number(canvas.dataset.info) / 1e3)}k` : Math.round(Number(canvas.dataset.info))}` : "";
   const glide = canvas.dataset.speed ? ` · ${canvas.dataset.speed}m/s${canvas.dataset.accel ? ` · a ${canvas.dataset.accel}` : ""}` : "";
   const buf = canvas.dataset.traceW ? ` · buf ${canvas.dataset.traceW}×${canvas.dataset.traceH}` : "";
-  if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}${buf}${info}${glide}`;
+  const gazeNote = canvas.dataset.gaze ? ` · gaze ${canvas.dataset.gaze}m` : "";
+  if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}${buf}${gazeNote}${info}${glide}`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = shown === null ? "" : String(shown);
@@ -1469,6 +1471,7 @@ function paint(sample, width = canvas.width, height = canvas.height) {
     skills.focus.value,
     NEAR_METERS,
   );
+  if (scene.gaze) canvas.dataset.gaze = String(Math.round(scene.gaze.reach));
   markTarget(scene);
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
@@ -1547,6 +1550,7 @@ function fire(sample) {
       const applied = applyDummyHit(dummy, shot.hitbox);
       const scaled = Math.round(applied.damage * penFactor(0, 1));
       grantUse(skills, "marksmanship", { tick });
+      grantUse(skills, "focus", { tick, gap: 30 });
       if (dayWord(tick) === "night") grantUse(skills, "marksmanship", { tick });
       report = `${applied.hitbox} ${scaled} quorum`;
     } else report = "provisional";
@@ -2327,6 +2331,15 @@ if (params.get("still") !== "1") {
         grantUse(skills, "run", { tick, gap: 30 });
         grantUse(skills, "wind", { tick, gap: 45 });
       }
+      const practice = sightPractice({
+        down: vitals.down > 0,
+        eyes: view === "first" || (zoom.blend || 0) >= 0.85,
+        zoom: zoom.level || 0,
+        aimed: Boolean(selection),
+        still: stillFor >= 0.45,
+      });
+      if (practice.eyesight) grantUse(skills, "eyesight", { tick, gap: 60 });
+      if (practice.focus) grantUse(skills, "focus", { tick, gap: 90 });
       const stride = hearStep(stepAt, player.position, !!sample.sprint);
       stepAt = stride.at;
       hear(stride.cue);

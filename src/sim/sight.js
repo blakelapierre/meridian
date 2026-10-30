@@ -169,3 +169,11 @@ export function gazeFor(camera, eye, look, eyesight, focus, closeMeters = 18) {
   return { ...plan, x: at[0], y: at[1] };
 }
 
+export function sightPractice({ down = false, eyes = false, zoom = 0, aimed = false, still = false } = {}) {
+  if (down) return { eyesight: false, focus: false };
+  return {
+    eyesight: true,
+    focus: zoom > 0.05 || aimed || (eyes && still),
+  };
+}
+
