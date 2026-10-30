@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints sand, pits, stone, and wood. The
 
 ## This pass
 
-A footstep is a mark on the ground. Every client draws it. Tracking does not hide it. Tracking only lengthens the path on your own map. From tracking 8 those steps also stay on the chart picture. From tracking 18 other bodies leave a shorter path there.
+The chart samples the ground the way the view paints it. A low point stays sand. A slope is grass. A crest is rock. M cycles a small map, a full-screen map, and no map. The small map is the one that opens.
 
 ## Proves
 

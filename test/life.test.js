@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { duneHeight, fauna, floraBoxes, HILL, standHeight } from "../src/sim/life.js";
+import { duneHeight, fauna, floraBoxes, groundLook, HILL, standHeight } from "../src/sim/life.js";
 
 test("hills reach about three body heights and a pit is still the floor", () => {
   let low = 99;
@@ -18,6 +18,18 @@ test("hills reach about three body heights and a pit is still the floor", () => 
   assert.equal(HILL, 5.4);
   assert.equal(standHeight(0, -150, -1.2), -1.2);
   assert.equal(standHeight(0, -150, 0), duneHeight(0, -150));
+});
+
+test("the map color follows the slope, not a flat sand swatch", () => {
+  const seen = new Set();
+  for (let x = -40; x <= 40; x += 2) {
+    for (let y = -180; y <= -100; y += 2) seen.add(groundLook(x, y).kind);
+  }
+  assert.equal(seen.has("sand"), true);
+  assert.equal(seen.has("grass"), true);
+  assert.equal(seen.has("rock"), true);
+  const low = groundLook(0, -150);
+  assert.ok(low.color[0] > low.color[2]);
 });
 
 test("the crab steps away and the plants sit on the roll", () => {
