@@ -2,6 +2,8 @@ import { lookDirection } from "./hands.js";
 
 export const GEO_COLOR = {
   sand: [194, 165, 106, 255],
+  grass: [72, 132, 54, 255],
+  rock: [142, 136, 124, 255],
   pit: [61, 92, 114, 255],
   wood: [122, 78, 42, 255],
   stone: [150, 148, 138, 255],

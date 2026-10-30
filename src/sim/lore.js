@@ -1,8 +1,8 @@
 import { notePlace } from "./map.js";
 import { toldTint } from "./plate.js";
 
-const KIND = { sand: 1, pit: 2, wood: 3, stone: 4 };
-const NAME = { 1: "sand", 2: "pit", 3: "wood", 4: "stone" };
+const KIND = { sand: 1, pit: 2, wood: 3, stone: 4, grass: 5, rock: 6 };
+const NAME = { 1: "sand", 2: "pit", 3: "wood", 4: "stone", 5: "grass", 6: "rock" };
 
 function skillValue(skills, name) {
   const value = skills?.[name];
@@ -32,9 +32,9 @@ export function offerLore({ skills = {}, friend = 0, ground = [], places = [] } 
   const appraisal = skillValue(skills, "appraisal");
   const mining = skillValue(skills, "mining");
   const building = skillValue(skills, "building");
-  const groundCap = tier === "stranger" ? 0 : tier === "acquaintance" ? 4 : 12;
+  const groundCap = tier === "hostile" ? 0 : tier === "stranger" ? 4 : tier === "acquaintance" ? 8 : 16;
   const placeCap = tier === "stranger" ? (appraisal >= 20 ? 1 : 0) : tier === "acquaintance" ? 2 : 6;
-  const sharedGround = groundCap === 0 || mapping < 8
+  const sharedGround = groundCap === 0 || mapping < 4
     ? []
     : ground.filter((cell) => cell.kind !== "pit" || mining >= 8).slice(-groundCap);
   const sharedPlaces = places.filter((place) => {
@@ -84,11 +84,11 @@ export function unpackLore(body) {
 
 export function learnLore(survey, plate, offer, skills, stamp, colors) {
   const learned = { ground: 0, places: 0 };
-  if (skillValue(skills, "mapping") < 4) return learned;
-  const cap = skillValue(skills, "mapping") >= 40 ? offer.ground.length : Math.min(4, offer.ground.length);
+  const mapping = skillValue(skills, "mapping");
+  const cap = mapping < 4 ? 2 : mapping >= 40 ? offer.ground.length : Math.min(8, offer.ground.length);
   for (const cell of offer.ground.slice(0, cap)) {
     if (cell.kind === "pit" && (skills?.prospect != null ? skillValue(skills, "prospect") : skillValue(skills, "mining")) < 8) continue;
-    if (plate && stamp) stamp(plate, cell.point[0], cell.point[1], toldTint(colors[cell.kind] || colors.sand), 1.6);
+    if (plate && stamp) stamp(plate, cell.point[0], cell.point[1], toldTint(colors[cell.kind] || colors.sand), 2.4);
     survey.ground.set(`lore:${cell.point[0]}:${cell.point[1]}`, cell);
     learned.ground += 1;
   }

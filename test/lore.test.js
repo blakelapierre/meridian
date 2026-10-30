@@ -19,7 +19,8 @@ test("nearby players trade map findings by skill and friendliness", () => {
   assert.equal(hostile.ground.length, 0);
   assert.equal(hostile.tier, "hostile");
   const stranger = offerLore({ skills: { mapping: 80, appraisal: 10 }, friend: 0, ...known });
-  assert.equal(stranger.ground.length, 0);
+  assert.equal(stranger.ground.some((cell) => cell.kind === "sand"), true);
+  assert.equal(stranger.ground.some((cell) => cell.kind === "pit"), false);
   assert.equal(stranger.places.length, 0);
   const friend = offerLore({ skills: { mapping: 80, mining: 20, appraisal: 30 }, friend: 40, ...known });
   assert.equal(friend.ground.some((cell) => cell.kind === "pit"), true);
@@ -29,7 +30,8 @@ test("nearby players trade map findings by skill and friendliness", () => {
   const accepted = acceptLore(frame);
   const heard = unpackLore(accepted);
   const blind = createSurvey();
-  assert.equal(learnLore(blind, null, heard, { mapping: 0 }, () => {}, GEO_COLOR).ground, 0);
+  const first = learnLore(blind, null, heard, { mapping: 0 }, () => {}, GEO_COLOR);
+  assert.ok(first.ground > 0 && first.ground <= 2, first.ground);
   const plate = createPlate();
   const student = createSurvey();
   const learned = learnLore(student, plate, heard, { mapping: 20, mining: 10, appraisal: 20 }, stamp, GEO_COLOR);

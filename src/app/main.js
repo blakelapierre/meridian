@@ -52,7 +52,7 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
-import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp } from "../sim/map.js";
+import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, samplePlate, stamp } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
@@ -788,6 +788,7 @@ function revealMap() {
   for (const point of points) {
     const geo = geographyAt(point.x, point.y);
     stamp(plate, point.x, point.y, geo.color || GEO_COLOR[geo.kind] || GEO_COLOR.sand, brush);
+    rememberGround(survey, point.x, point.y, geo.kind, skillBag());
   }
   if (mapMode !== "none") grantUse(skills, "topography", { tick, gap: 40 });
 }

@@ -105,7 +105,7 @@ test("the chart keeps ground, pits, and places as skills rise", () => {
   noteSurvey(fresh, { x: 1, y: 2, yaw: 0, depthAt: () => -0.5, skills: { mapping: 0, mining: 40 } });
   assert.equal(fresh.ground.size, 0);
   noteSurvey(fresh, { x: 1, y: 2, yaw: 0, depthAt: () => -0.5, skills: { mapping: 10, mining: 0 } });
-  assert.equal([...fresh.ground.values()][0].kind, "sand");
+  assert.notEqual([...fresh.ground.values()][0].kind, "pit");
   noteSurvey(fresh, { x: 1, y: 2, yaw: 0, depthAt: () => -0.5, skills: { mapping: 10, mining: 12 } });
   assert.equal([...fresh.ground.values()].some((cell) => cell.kind === "pit"), true);
   const blind = createSurvey();
