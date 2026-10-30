@@ -84,6 +84,7 @@ function replay(channel) {
   for (const text of world.frames) {
     try {
       channel.send(hexBytes(text));
+      traffic.out += 1;
     } catch {
       return;
     }
@@ -91,6 +92,7 @@ function replay(channel) {
   for (const sheet of Object.values(world.sheets)) {
     try {
       channel.send(hexBytes(sheet.frame));
+      traffic.out += 1;
     } catch {
       return;
     }
@@ -103,6 +105,7 @@ let hashRate = 0;
 let hashTotal = 0;
 let lastMineMs = 0;
 const booted = Date.now();
+const traffic = { inn: 0, out: 0, blocks: 0, refused: 0, sheets: 0, listed: 0 };
 
 function editsAfterTip() {
   const sealed = terrain.log.ops.map((op) => {
@@ -163,6 +166,7 @@ function hunt() {
       if (link.ops.readyState !== "open") continue;
       try {
         link.ops.send(frame);
+        traffic.out += 1;
       } catch {
         // The next slice sends the same block again if it is still the tip.
       }
@@ -175,20 +179,24 @@ function hunt() {
 function paint() {
   const open = links.filter((link) => link.ops.readyState === "open");
   const names = open.map((link) => link.to);
+  const connecting = opening.size + links.filter((link) => link.ops.readyState !== "open").length;
+  const ice = {};
+  let buffered = 0;
+  for (const link of links) {
+    const state = link.pc?.iceConnectionState || "new";
+    ice[state] = (ice[state] || 0) + 1;
+    buffered += link.ops?.bufferedAmount || 0;
+  }
+  const iceLine = Object.entries(ice).map(([name, count]) => `${name} ${count}`).join(" ") || "none";
   const crate = crateFor(ledger);
   const cents = bountyCents(ledger);
   const minutes = Math.floor((Date.now() - booted) / 60000);
   const seconds = Math.floor((Date.now() - booted) / 1000) % 60;
-  $("status").textContent = [
-    roomId,
-    names.length ? `linked ${names.join(" ")}` : "waiting for a player",
-    `block ${tipOf(chain).block.height}`,
-    candidate ? `mining ${candidate.nonce}` : "idle",
-    `ops ${terrain.log.ops.length}`,
-    `keep ${keepOf(ledger)}`,
-    crate ? `crate ready ${crate.metal} metal ${crate.fiber} fiber` : "crate not ready",
-    `bounty $${(cents / 100).toFixed(2)}`,
-  ].join(" · ");
+  const tip = tipOf(chain).block;
+  const behind = Math.max(0, terrain.log.seq - tip.seq);
+  $("status").textContent = names.length
+    ? `clients ${names.length} · ${names.join(" ")}`
+    : "waiting for a player";
   const perf = $("perf");
   if (perf) {
     perf.textContent = [
@@ -196,9 +204,15 @@ function paint() {
       `tried ${hashTotal.toLocaleString("en-US")}`,
       lastMineMs ? `last block ${lastMineMs} ms` : "no block yet",
       `uptime ${minutes}m ${seconds}s`,
-      `clients ${names.length}`,
-      `sheets ${Object.keys(world.sheets).length}`,
-      `frames ${world.frames.length}`,
+      `clients ${names.length} open    ${connecting} connecting`,
+      `ice ${iceLine}`,
+      `block ${tip.height}    behind ${behind}    ops ${terrain.log.ops.length}`,
+      `ops in ${traffic.inn} out ${traffic.out}    blocks ${traffic.blocks}    refused ${traffic.refused}`,
+      `sheets ${Object.keys(world.sheets).length}    frames ${world.frames.length}    listed ${traffic.listed}`,
+      `buffered ${buffered}    keep ${keepOf(ledger)}`,
+      crate ? `crate ${crate.metal} metal ${crate.fiber} fiber` : "crate not ready",
+      `bounty $${(cents / 100).toFixed(2)}`,
+      roomId,
     ].join("\n");
   }
 }
@@ -212,6 +226,7 @@ function outgoing() {
     for (const frame of frames) {
       try {
         link.ops.send(frame);
+        traffic.out += 1;
       } catch {
         // The player will ask again. A full channel must not drop the vote on every peer.
       }
@@ -233,12 +248,17 @@ async function openPlayer(to) {
     channels[spec[0]] = channel;
   }
   channels.ops.onopen = () => replay(channels.ops);
-  links.push({ to, ops: channels.ops });
+  links.push({ to, ops: channels.ops, pc });
   channels.ops.onmessage = (event) => {
     const bytes = new Uint8Array(event.data);
+    traffic.inn += 1;
     if (bytes[0] === 11) {
       const decoded = decodeBlock(bytes);
-      if (decoded.ok) consider(decoded.block);
+      if (decoded.ok) {
+        const accepted = consider(decoded.block);
+        if (accepted?.ok) traffic.blocks += 1;
+        else traffic.refused += 1;
+      } else traffic.refused += 1;
     } else {
       terrain.receive(bytes);
     }
@@ -246,10 +266,12 @@ async function openPlayer(to) {
     if (bytes[0] === 15) {
       const accepted = acceptSheet(bytes);
       if (accepted.ok) {
+        traffic.sheets += 1;
         const stored = world.sheets[bytesHex(accepted.pubkey)];
         if (stored) {
           try {
             channels.ops.send(hexBytes(stored.frame));
+            traffic.out += 1;
           } catch {
             // The player sends the sheet again.
           }
@@ -276,6 +298,7 @@ async function openPlayer(to) {
 
 async function seek() {
   const peers = await room.list();
+  traffic.listed = peers.length;
   for (const found of peers) {
     if (found.role === "archive" || found.pubkey === roomId) continue;
     openPlayer(found.pubkey);
@@ -303,6 +326,7 @@ $("receipt").addEventListener("click", async () => {
   }
 });
 
+paint();
 room.start().then(() => {
   for (const text of world.frames) {
     const bytes = hexBytes(text);

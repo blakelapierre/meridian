@@ -6,7 +6,9 @@
     <style>
       html, body { margin: 0; background: #111; height: 100%; color: #eee; }
       body > canvas { width: 100vw; height: 100vh; display: block; background: #123; cursor: crosshair; }
-      #fps { position: fixed; top: 12px; right: 14px; z-index: 3; font: 16px/1 sans-serif; color: #9f9; text-shadow: 0 1px 2px #000; }
+      #fps { position: fixed; top: 12px; right: 14px; z-index: 6; font: 16px/1 sans-serif; color: #9f9; text-shadow: 0 1px 2px #000; }
+      #net { position: fixed; top: 12px; left: 12px; z-index: 6; margin: 0; padding: 8px 10px; max-width: 22rem; background: rgba(0,0,0,.78); color: #9cf; font: 12px/1.45 ui-monospace, monospace; white-space: pre; pointer-events: none; }
+      html.quiet #net { font-size: 10px; padding: 4px 6px; max-width: 16rem; }
       #notes { position: fixed; top: 36px; right: 14px; z-index: 3; margin: 0; padding: 0; list-style: none; max-width: 16rem; font: 12px/1.35 sans-serif; color: #ddc; text-align: right; text-shadow: 0 1px 2px #000; }
       html.quiet #notes { max-width: 11rem; font-size: 10px; }
       #chart { position: fixed; left: 12px; bottom: 12px; z-index: 5; display: none; width: 220px; }
@@ -103,7 +105,8 @@
       <p id="fix"></p>
     </div>
     <div id="fps">0 fps</div>
+    <pre id="net">alone</pre>
     <ul id="notes"></ul>
-    <script type="module" src="/src/app/main.js?v=71"></script>
+    <script type="module" src="/src/app/main.js?v=72"></script>
   </body>
 </html>
