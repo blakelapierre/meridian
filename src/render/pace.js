@@ -63,7 +63,7 @@ export function createPacer() {
   let checks = 0;
   let gap = 0;
   let seen = 0;
-  let misses = 0;
+  let extraGap = 1000;
   return {
     get scale() {
       return scale;
@@ -87,17 +87,18 @@ export function createPacer() {
       seen += 1;
       if (lastNow) gap = now - lastNow;
       lastNow = now;
-      if (holding) misses = 0;
-      else misses = Math.min(24, misses + 1);
-      const stride = misses === 0 ? 1 : misses < 8 ? 2 : 4;
-      if (!holding) scale = Math.max(0.25, scale * 0.98);
+      if (holding) extraGap = Math.max(refresh, extraGap * 0.92);
+      else extraGap = Math.min(1000, Math.max(refresh, extraGap * 1.25));
+      const paint = now - lastPaint >= extraGap;
+      const mode = extraGap >= 900 ? "1fps" : holding ? "ease" : "yield";
       return {
-        paint: seen % stride === 0,
-        scale: Math.min(scale, 0.6),
+        paint,
+        scale: Math.min(scale, 0.45),
         refresh,
-        mode: holding ? "free" : "yield",
+        mode,
         gap,
         holding,
+        interval: extraGap,
       };
     },
     note(ms, active, still = false) {

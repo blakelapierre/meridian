@@ -2,7 +2,7 @@
 
 ## In the build
 
-The focused view aims at vsync. A hidden tab paints about once a second. Extra frames run ahead of the primary until the primary misses, then they yield. Resolution steps down to hold 30 fps and steps back up when the frame is cheap.
+The focused view aims at vsync. A hidden tab paints about once a second. Extra frames slow down while the primary misses vsync and speed up again while it holds. They do not paint slower than once a second, even if the primary is still missing. Resolution steps down to hold 30 fps and steps back up when the frame is cheap.
 
 ## This pass
 
