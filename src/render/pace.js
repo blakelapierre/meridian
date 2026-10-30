@@ -27,14 +27,28 @@ export function coverLevel(targetW, targetH, rays) {
   return 8;
 }
 
+export function frameBudget(longEdge, displayEdge, refreshMs) {
+  const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
+  const playable = Math.max(refresh, 1000 / 12);
+  const fill = displayEdge > 0 ? longEdge / displayEdge : 1;
+  const comfortable = 0.28;
+  if (fill >= comfortable) return refresh;
+  const room = (comfortable - Math.max(0, fill)) / comfortable;
+  return refresh + (playable - refresh) * room;
+}
+
 export function visualThroughput(pixels, frameMs, refreshMs) {
   if (!(pixels > 0) || !(frameMs > 0)) return 0;
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
-  const shown = Math.min(1000 / frameMs, 1000 / refresh);
+  const fps = Math.min(1000 / frameMs, 1000 / refresh);
   const refreshHz = 1000 / refresh;
-  const ratio = Math.min(1, shown / refreshHz);
-  const motion = refreshHz * ratio * ratio;
-  return pixels * motion * motion;
+  const playable = 12;
+  const credit = fps >= refreshHz
+    ? 1
+    : fps >= playable
+      ? 0.55 + 0.45 * ((fps - playable) / Math.max(1, refreshHz - playable))
+      : 0.55 * (fps / playable) ** 3;
+  return pixels * credit * credit;
 }
 
 export function pictureSize(scale, displayW, displayH) {
@@ -43,8 +57,8 @@ export function pictureSize(scale, displayW, displayH) {
   let height = Math.max(2, Math.round(displayH * span));
   const long = Math.max(displayW, displayH);
   const edge = Math.max(width, height);
-  if (long >= 96 && edge < 96) {
-    const lift = 96 / edge;
+  if (long >= 160 && edge < 64) {
+    const lift = 64 / edge;
     width = Math.round(width * lift);
     height = Math.round(height * lift);
   }
@@ -70,39 +84,39 @@ export function createPicturePace() {
         periodSamples += 1;
       }
       const refresh = periodSamples < 4 ? Math.max(period, 1000 / 30) : period;
-      const infoOf = (ms) => {
-        const size = pictureSize(scale, displayW, displayH);
-        return visualThroughput(size.width * size.height, ms, refresh);
-      };
+      const sized = () => pictureSize(scale, displayW, displayH);
+      const budgetOf = (size) => frameBudget(Math.max(size.width, size.height), Math.max(displayW, displayH), refresh);
+      const infoOf = (ms) => visualThroughput(sized().width * sized().height, ms, refresh);
       if (!(gap > 0)) {
-        const size = pictureSize(scale, displayW, displayH);
+        const size = sized();
         return { scale, refresh, info: 0, width: size.width, height: size.height };
       }
-      if (gap > refresh * 1.15) {
+      const budget = budgetOf(sized());
+      if (gap > budget * 1.15) {
         slow += 1;
         if (slow < 2) {
-          const size = pictureSize(scale, displayW, displayH);
+          const size = sized();
           return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
         }
-        const correction = Math.sqrt(refresh / gap);
-        scale = Math.max(0.05, Math.min(1, scale * Math.max(0.94, correction)));
+        const correction = Math.sqrt(budget / gap);
+        scale = Math.max(0.05, Math.min(1, scale * Math.max(0.94, Math.min(1, correction))));
         dwell = 0;
         bucket = [];
-        const size = pictureSize(scale, displayW, displayH);
+        const size = sized();
         return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
       }
       slow = 0;
       bucket.push(gap);
       dwell += 1;
       if (dwell < 6) {
-        const size = pictureSize(scale, displayW, displayH);
+        const size = sized();
         return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
       }
       const ordered = [...bucket].sort((a, b) => a - b);
       const ms = ordered[ordered.length >> 1];
       bucket = [];
       dwell = 0;
-      const correction = Math.sqrt(refresh / Math.max(ms, 1));
+      const correction = Math.sqrt(budget / Math.max(ms, 1));
       scale = Math.max(0.05, Math.min(1, scale * Math.max(0.94, Math.min(1.06, correction))));
       const size = pictureSize(scale, displayW, displayH);
       return { scale, refresh, info: infoOf(ms), width: size.width, height: size.height };
