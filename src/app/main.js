@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=66";
 import { createFps } from "../render/fps.js";
-import { createPacer, createPicturePace, paceWord, pictureSize, viewStill } from "../render/pace.js?v=72";
+import { cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, viewStill } from "../render/pace.js?v=73";
 import {
   authority,
   bandage,
@@ -1278,7 +1278,8 @@ function publish() {
   const counter = document.querySelector("#fps");
   const cadence = Number(canvas.dataset.cadence) > 0 ? ` · ${Math.round(1000 / Number(canvas.dataset.cadence))}Hz` : "";
   const info = Number(canvas.dataset.info) > 0 ? ` · info ${Number(canvas.dataset.info) >= 1e6 ? `${(Number(canvas.dataset.info) / 1e6).toFixed(1)}M` : Number(canvas.dataset.info) >= 1e3 ? `${Math.round(Number(canvas.dataset.info) / 1e3)}k` : Math.round(Number(canvas.dataset.info))}` : "";
-  if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}${info}`;
+  const glide = canvas.dataset.speed ? ` · ${canvas.dataset.speed}m/s` : "";
+  if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}${info}${glide}`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = shown === null ? "" : String(shown);
@@ -2223,6 +2224,7 @@ if (params.get("still") !== "1") {
       pitch,
       busy: rightDown || keys.has("KeyW") || keys.has("KeyA") || keys.has("KeyS") || keys.has("KeyD") || keys.has("KeyZ") || keys.has("KeyC"),
     };
+    const speed = cameraSpeed(stillPose, stillSample, dt);
     if (viewStill(stillPose, stillSample)) stillFor += dt;
     else stillFor = 0;
     stillPose = stillSample;
@@ -2237,7 +2239,7 @@ if (params.get("still") !== "1") {
     const displayH = Math.max(2, Math.floor(boxH));
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
-      : picture.step({ gap: decision.gap, displayW, displayH, still });
+      : picture.step({ gap: decision.gap, displayW, displayH, still, speed });
     const trace = { width: paced.width, height: paced.height };
     canvas.dataset.traceW = String(trace.width);
     canvas.dataset.traceH = String(trace.height);
@@ -2254,6 +2256,7 @@ if (params.get("still") !== "1") {
     const arrived = still && paced.scale > 0.98;
     canvas.dataset.cadence = String(Math.round(paced.refresh || decision.refresh));
     canvas.dataset.info = String(Math.round(paced.info || 0));
+    canvas.dataset.speed = speed.toFixed(1);
     const late = !extra && active && decision.gap > (paced.refresh || decision.refresh) * 1.35;
     const paceLabel = late ? "behind" : paceWord(decision.mode, { still, arrived, holding: decision.holding });
     canvas.dataset.pace = paceLabel;
