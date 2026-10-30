@@ -33,6 +33,18 @@ export function stepOctave(level, covered) {
   return Math.max(0, Math.min(8, level));
 }
 
+export function noteRayRate(previous, rays, ms) {
+  if (!(rays > 0) || !(ms > 0.05)) return previous || 0;
+  const rate = rays / (ms / 1000);
+  return previous ? previous * 0.4 + rate * 0.6 : rate;
+}
+
+export function fitPixels(raysPerSec, refreshMs, nativePx) {
+  const vsync = Math.min(refreshMs > 8 ? refreshMs : 1000 / 60, 1000 / 60);
+  const affordable = raysPerSec > 0 ? raysPerSec * (vsync / 1000) : Math.min(nativePx, 140000);
+  return Math.round(Math.max(16000, Math.min(nativePx, affordable)));
+}
+
 export function tuneRays(rays, { missed = false, paintMs = 0, refresh = 1000 / 60, cap = 2000000 } = {}) {
   const budget = Math.max(8, refresh * 0.9);
   if (missed || paintMs > budget) return Math.max(800, rays * 0.65);
