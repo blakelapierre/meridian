@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=68";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=77";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=78";
 import {
   authority,
   bandage,
@@ -2247,9 +2247,17 @@ if (params.get("still") !== "1") {
     viewScale = decision.scale;
     const displayW = Math.max(2, Math.floor(boxW));
     const displayH = Math.max(2, Math.floor(boxH));
+    const parked = still || (speed < 0.3 && accel < 2);
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
-      : picture.step({ gap: issued ? decision.gap : 0, displayW, displayH, still, speed, accel });
+      : picture.step({
+        gap: parked || issued ? Math.max(decision.gap, parked ? 1 : 0) : 0,
+        displayW,
+        displayH,
+        still: parked,
+        speed,
+        accel,
+      });
     issued = false;
     const trace = { width: paced.width, height: paced.height };
     canvas.dataset.traceW = String(trace.width);
@@ -2272,7 +2280,7 @@ if (params.get("still") !== "1") {
     const late = !extra && active && decision.gap > (paced.refresh || decision.refresh) * 1.35;
     const paceLabel = late ? "behind" : paceWord(decision.mode, { still, arrived, holding: decision.holding });
     canvas.dataset.pace = paceLabel;
-    const interval = extra ? Math.max(decision.interval || 1000, 250) : traceInterval(still, accel, paced.refresh || decision.refresh);
+    const interval = extra ? Math.max(decision.interval || 1000, 250) : traceInterval(parked, accel, paced.refresh || decision.refresh);
     canvas.dataset.traceMs = String(Math.round(interval));
     const due = extra ? decision.paint : active ? now - lastTrace >= interval * 0.85 : decision.paint;
     if (params.get("nopaint") !== "1" && due) {

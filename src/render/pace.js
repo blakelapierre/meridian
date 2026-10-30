@@ -36,9 +36,8 @@ export function cameraSpeed(previous, next, dt) {
 
 export function traceInterval(still, accel, refreshMs) {
   const refresh = Math.min(Math.max(refreshMs || 16, 1000 / 120), 1000 / 20);
-  const surge = Math.min(1, Math.max(0, accel) / 8);
-  if (surge >= 0.5) return refresh;
   if (still) return Math.max(refresh, 125);
+  if (accel >= 2) return refresh;
   return Math.max(refresh, 1000 / 12);
 }
 
@@ -49,7 +48,7 @@ export function cameraAccel(previous, next, dt) {
 
 export function motionLimit(speed, refreshMs, accel = 0) {
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
-  const surge = Math.min(1, Math.max(0, accel) / 8) ** 2;
+  const surge = Math.min(1, Math.max(0, accel) / 3);
   return (1000 / 12) * (1 - surge) + refresh * surge;
 }
 
@@ -57,8 +56,7 @@ export function visualThroughput(pixels, frameMs, refreshMs, speed = 1, accel = 
   if (!(pixels > 0) || !(frameMs > 0)) return 0;
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
   const fps = Math.min(1000 / frameMs, 1000 / refresh);
-  const surge = 1 + Math.min(1, Math.max(accel, 0) / 8);
-  return pixels * fps * Math.max(speed, 0) ** 2 * surge;
+  return pixels * fps * Math.max(speed, 0) * Math.max(accel, 0);
 }
 
 export function createPicturePace() {
@@ -87,8 +85,8 @@ export function createPicturePace() {
         return { scale, refresh, info, width: size.width, height: size.height };
       };
       if (!(gap > 0)) return pack(0);
-      const surge = Math.min(1, Math.max(0, accel) / 8);
-      if (!still && surge >= 1 && !surged && gap > refresh) {
+      const surge = Math.min(1, Math.max(0, accel) / 3);
+      if (!still && accel >= 2 && !surged && gap > refresh) {
         scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(refresh / gap)));
         bucket = [];
         skip = true;
@@ -108,7 +106,17 @@ export function createPicturePace() {
         wasStill = false;
         return pack(0);
       }
-      wasStill = still;
+      if (still) {
+        scale = Math.min(1, scale * 1.12);
+        wasStill = true;
+        bucket = [];
+        skip = true;
+        direction = 1;
+        const size = pictureSize(scale, displayW, displayH);
+        const info = visualThroughput(size.width * size.height, gap, refresh, speed, accel);
+        return { scale, refresh, info, width: size.width, height: size.height };
+      }
+      wasStill = false;
       if (skip) {
         skip = false;
         return pack(0);
