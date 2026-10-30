@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints the color of that ground: sand, 
 
 ## This pass
 
-Subskills sit under the skill they come from. They rise only from that practice, and they cannot pass the parent. Prospect records a pit. Bracing strengthens a new wall. Focus extends the zoom. Measure refines the range. Trailing draws other bodies on the map. Landing softens a fall. Wind spends less stamina on a sprint.
+The ground on your chart is what nearby players trade. Grass, rock, sand, and pits go across, not a flat sand note. A stranger can take a little of it. A friend takes more. The receiver paints it even before their own mapping has risen, tinted so told ground is distinct.
 
 ## Proves
 

@@ -1,3 +1,5 @@
+import { groundLook } from "./life.js";
+
 export function mapRadius(skill = 0) {
   const trained = Math.max(0, Math.min(140, skill));
   return 16 + (trained / 140) * 64;
@@ -55,10 +57,11 @@ function writeGround(survey, x, y, depth, skills) {
   const j = Math.round(y / size);
   const prospect = practiced(skills, "prospect", "mining");
   const pit = prospect >= 4 && depth < -0.05;
+  const kind = pit ? "pit" : groundLook(x, y).kind;
   survey.ground.set(`${size}:${i}:${j}`, {
     point: [i * size, j * size],
     depth: pit ? depth : 0,
-    kind: pit ? "pit" : "sand",
+    kind,
   });
   while (survey.ground.size > budget) survey.ground.delete(survey.ground.keys().next().value);
   if (pit && prospect >= 8) {
@@ -85,6 +88,23 @@ export function noteSurvey(survey, { x, y, yaw = 0, depthAt = () => 0, skills = 
     const depth = skillValue(skills, "mining") >= 8 ? depthAt(px, py) : 0;
     writeGround(survey, px, py, depth, skills);
   }
+  return survey;
+}
+
+export function rememberGround(survey, x, y, kind, skills = {}) {
+  const mapping = skillValue(skills, "mapping");
+  const budget = groundBudget(mapping);
+  if (!budget || !Number.isFinite(x) || !Number.isFinite(y)) return survey;
+  const size = cellSize(mapping);
+  const i = Math.round(x / size);
+  const j = Math.round(y / size);
+  const material = kind === "pit" || kind === "wood" || kind === "stone" ? kind : groundLook(x, y).kind;
+  survey.ground.set(`${size}:${i}:${j}`, {
+    point: [i * size, j * size],
+    depth: kind === "pit" ? -0.5 : 0,
+    kind: material,
+  });
+  while (survey.ground.size > budget) survey.ground.delete(survey.ground.keys().next().value);
   return survey;
 }
 
