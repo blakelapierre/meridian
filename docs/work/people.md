@@ -4,18 +4,20 @@
 
 Other clients are bodies. Tab cycles them. Backtick cycles objects. Standing inside sense range raises friendliness by 1 a second, up to 100. What you trade depends on that score and on mapping, mining, building, and appraisal on both sides. The AI clients are the same view, driven only through player keys.
 
+While you drag someone, they are drawn just ahead of you on your screen. Their own client is not moved.
+
 ## This pass
 
-While you drag someone, they are drawn just ahead of you on your screen. Their own client is not moved.
+A dragged body is asked to walk, and the feet drawn on your screen take a step. Their own client is not moved.
 
 ## Proves
 
-`test/lore.test.js` for the tier cutoffs at 12 and 40.
+`test/slice.test.js` covers the step.
 
 ## Next
 
-The dragged body is not asked to walk. Not in this build.
+The asked walk is not sent to their client. Not in this build.
 
 ## Later
 
-A fellowship list. Dragging a downed friend. Hostility that stops the trade.
+A drag the other person can refuse. Friendliness that is not only a number.

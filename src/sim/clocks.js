@@ -4,6 +4,16 @@ export function roundMaterials({ abandoned = false, phase, previous }) {
   return 0;
 }
 
+export function defusePay({ defused = false, abandoned = false } = {}) {
+  if (abandoned || !defused) return 0;
+  return 8;
+}
+
+export function dominionFrame(seated, x, y) {
+  if (!seated) return null;
+  return overheadPoint(x, y);
+}
+
 export function overheadPoint(x, y) {
   return { x, y };
 }

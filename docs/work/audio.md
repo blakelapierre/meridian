@@ -18,18 +18,20 @@ The beach makes short tones with the Web Audio oscillator. No samples are shippe
 
 K toggles the listener. The line says `muted` while it is off. The first cue also resumes the audio context, which browsers block until a key or a click.
 
+A shot behind you is half as loud. It is not silent. Distance falloff is unchanged.
+
 ## This pass
 
-A shot behind you is half as loud. Distance falloff is unchanged.
+The sea cue is half as loud at noon. It is not silent.
 
 ## Proves
 
-`test/audio.test.js` for the cue table and the stride gate. The context itself is not required in Node.
+`test/slice.test.js` covers the noon gain.
 
 ## Next
 
-A shot behind you is half as loud, not silent. Not in this build.
+The sea does not go quiet at night. Not in this build.
 
 ## Later
 
-Distance and side. The sea. A shot that cracks only inside its range. The night side quieter than noon. No music bed.
+Distance and side. A shot that cracks only inside its range. No music bed.

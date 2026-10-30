@@ -6,18 +6,20 @@ From the concept. Tiered on purpose. The character is a body, not a ragdoll, and
 
 The beach body is a capsule with weight, a stop window, jump, and crouch. Gravity is the radial vector from the shell note. Two bodies cannot occupy the same ground. They stop. They do not merge and they do not ragdoll.
 
+Wind comes from where you are standing, not from one constant. Night still multiplies it. The wind sample for the cell you stand in is stored.
+
 ## This pass
 
-Wind comes from where you are standing, not from one constant. Night still multiplies it.
+Stored wind pushes a body that is already moving. A still body is left alone, so a settled camera can stay settled.
 
 ## Proves
 
-`test/concept.test.js`.
+`test/slice.test.js` covers the push vector.
 
 ## Next
 
-The wind is not stored on the cells. Not in this build.
+The push is not written on the status line. Not in this build.
 
 ## Later
 
-Debris, blast impulse, buoyancy, a climate grid that is not the picture's sun.
+Wind that fills a sail. A body that leans.

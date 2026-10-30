@@ -11,6 +11,16 @@ export function keyPhrase(identity) {
   return exportKey(identity).replace(/(.{4})/g, "$1 ").trim();
 }
 
+const RECOVERY = ["ash", "bay", "cairn", "dune", "eel", "fir", "gull", "helm", "iris", "jade", "kelp", "lime", "moss", "nail", "oak", "pine", "quartz", "reed", "salt", "tide", "urn", "vine", "well", "yew"];
+
+export function recoveryPhrase(identity, count = 6) {
+  const bytes = identity?.pubkey;
+  if (!bytes?.length) return "";
+  const words = [];
+  for (let i = 0; i < count; i++) words.push(RECOVERY[bytes[i % bytes.length] % RECOVERY.length]);
+  return words.join(" ");
+}
+
 export function exportKey(identity) {
   const bytes = new Uint8Array(identity.secret.length + identity.pubkey.length);
   bytes.set(identity.secret, 0);

@@ -85,6 +85,18 @@ export function subjectFromHit(hit, pieces = []) {
         point: hit.point,
       };
     }
+    if (piece?.id === "table") {
+      return {
+        name: "Table",
+        material: "timber",
+        action: "sit",
+        detail: piece.voucher || "unsigned",
+        difficulty: 12,
+        kind: "table",
+        cell,
+        point: hit.point,
+      };
+    }
     if (piece?.id === "footing") return { ...SUBJECTS.footing, kind: "footing", cell, point: hit.point };
     if (piece?.id === "slip") {
       return { ...SUBJECTS.paper, name: "Slip", detail: piece.text || "blank", kind: "slip", cell, point: hit.point };

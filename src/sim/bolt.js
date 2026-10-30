@@ -27,6 +27,25 @@ export function penFactor(armor = 0, pen = 1) {
   return Math.max(0.2, 1 - armor / (armor + pen * 10));
 }
 
+export function boltInSmoke(bolt, smoke) {
+  if (!bolt || !smoke) return false;
+  return Math.hypot(bolt.position[0] - smoke[0], bolt.position[1] - smoke[1]) < 1.4 && bolt.position[2] < 2.4;
+}
+
 export function boltHit(bolt, point, radius = 0.8) {
   return Math.hypot(bolt.position[0] - point[0], bolt.position[1] - point[1], bolt.position[2] - point[2]) <= radius;
+}
+
+export function afterShot(lock = 12, reload = 8) {
+  return { lock, reload };
+}
+
+export function stepShotWait(lock = 0, reload = 0) {
+  if (lock > 0) return { lock: lock - 1, reload };
+  if (reload > 0) return { lock: 0, reload: reload - 1 };
+  return { lock: 0, reload: 0 };
+}
+
+export function firePull(fires = []) {
+  return 0.04 + (fires.length > 1 ? 0.03 : 0);
 }

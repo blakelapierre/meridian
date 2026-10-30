@@ -80,6 +80,11 @@ export function clubHit(vitals, seconds = 1 / 30, side = "left") {
   return { downed: true, dead: true };
 }
 
+export function applySplint(vitals) {
+  vitals.pain = Math.max(0, (vitals.pain || 0) - 15);
+  return vitals;
+}
+
 export function coolPain(vitals, seconds = 1 / 30) {
   vitals.pain = Math.max(0, vitals.pain - 5 * seconds);
   return vitals.pain;
@@ -106,6 +111,30 @@ export function fallHurt(integrity, speedDown, landing = 0) {
   if (speedDown > -9) return integrity;
   const soak = Math.min(6, Math.floor(Math.max(0, landing) / 24));
   return Math.max(0, integrity - (8 - soak));
+}
+
+export function seedLanding(skills) {
+  const skill = skills?.landing;
+  if (!skill) return 0;
+  if (skill.falls == null) skill.falls = Math.floor((skills.jump?.value || 0) / 10);
+  return skill.falls;
+}
+
+export function countLanding(skills) {
+  const skill = skills?.landing;
+  if (!skill) return 0;
+  skill.falls = seedLanding(skills) + 1;
+  return skill.falls;
+}
+
+export function fallFromCount(integrity, speedDown, falls = 0) {
+  return fallHurt(integrity, speedDown, Math.max(0, falls) * 24);
+}
+
+export function fluxMetal(tick, yaw = 0, broken = false) {
+  if (broken) return 0;
+  const gain = yaw ? 0.6 : 1;
+  return Math.floor((finOutput(tick) * gain) / 10);
 }
 
 export function bleed(vitals, seconds = 1 / 30) {

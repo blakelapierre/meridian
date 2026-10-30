@@ -6,6 +6,8 @@ The map is a picture that stays. Looking paints the color of that ground: sand, 
 
 ## This pass
 
+The chart draws two rings at the sense radius. This slice did not draw those fogs on the world picture.
+
 The ground on your chart is what nearby players trade. Grass, rock, sand, and pits go across, not a flat sand note. A stranger can take a little of it. A friend takes more. The receiver paints it even before their own mapping has risen, tinted so told ground is distinct.
 
 ## Proves

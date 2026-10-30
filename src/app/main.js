@@ -1,5 +1,5 @@
 import { paintFrame } from "../engine/frame.js";
-import { hearStep } from "../audio/cues.js";
+import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
@@ -22,19 +22,23 @@ import {
   frontGain,
   titheDue,
   windAt,
+  storeWind,
+  windPush,
 } from "../sim/rules.js";
+import { dominionFrame } from "../sim/clocks.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { dayWord, DAY_TICKS } from "../sim/sun.js";
-import { columnFloor } from "../sim/crust.js";
+import { columnFloor, applySlump, bitMode } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, rollCart, toggleDoor, toggleGate, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, repairFin, rollCart, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
   bruise,
   clubHit,
   coolPain,
+  applySplint,
   craftNeed,
   createVitals,
   finNeed,
@@ -44,12 +48,15 @@ import {
   stepDown,
   tryFinishFin,
   tryFinishHearth,
-  fallHurt,
+  fallFromCount,
+  seedLanding,
+  countLanding,
+  fluxMetal,
   bleed,
 } from "../sim/hearth.js";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=57";
 import { createJump } from "../sim/jump.js";
-import { createSkills, claimSpecialty, grantUse, skillRows } from "../sim/skills.js";
+import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
@@ -58,14 +65,14 @@ import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unp
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
-import { paintChart } from "../render/chart.js?v=66";
+import { paintChart } from "../render/chart.js?v=69";
 import { blendDir, blendOrigin, CLOSE, easeFollow, OPTICS, rangeRead, relaxOrbit, stepFollow, zoomFov } from "../sim/sight.js?v=8";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { createIdentity, exportKey, importKey, keyPhrase, signBytes } from "../net/identity.js";
+import { createIdentity, exportKey, importKey, keyPhrase, recoveryPhrase, signBytes } from "../net/identity.js";
 import {
   acceptSheet,
   applyCharacter,
@@ -86,15 +93,15 @@ import {
   unpackPlate,
 } from "../sim/persist.js";
 import { firstCrate } from "../sim/culture.js";
-import { createPools, drainPool, flowOnce, notePool } from "../sim/pool.js";
-import { deedVolume, grantKey, mayEdit } from "../sim/deed.js";
-import { bondOpen, dragPace, hearBond, offerBond } from "../sim/fellowship.js";
-import { boltHit, penFactor, startBolt, stepBolt } from "../sim/bolt.js";
+import { createPools, drainPool, flowOnce, lowerPool, notePool, spillPool } from "../sim/pool.js";
+import { deedVolume, graceMark, grantKey, mayEdit } from "../sim/deed.js";
+import { bondOpen, dragAsk, dragPace, hearBond, offerBond, payTithe, spendPurse, stepDrag } from "../sim/fellowship.js";
+import { afterShot, boltHit, boltInSmoke, firePull, penFactor, startBolt, stepBolt, stepShotWait } from "../sim/bolt.js";
 import { noteHarm } from "../sim/identityharm.js";
-import { cellId, inInterest, quorum, sameCell } from "../sim/cell.js";
-import { maySit } from "../sim/command.js";
-import { groundLook, standHeight } from "../sim/life.js?v=66";
-import { swarmPoint } from "../sim/litho.js";
+import { cellId, castVote, inInterest, sameCell, tally } from "../sim/cell.js";
+import { maySit, sitOrder, writeVoucher } from "../sim/command.js";
+import { graze, groundLook, standHeight } from "../sim/life.js?v=67";
+import { raiseSpore, sporeMetal, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
 import { radialDown, shellDrop, shellTilt } from "../sim/shell.js";
@@ -211,7 +218,11 @@ let buyEdge = false;
 let selectEdge = false;
 let turnEdge = false;
 let smokeTicks = 0;
+let swarmAt = null;
+let cellWind = new Map();
 let shotLock = 0;
+let reloadBeat = 0;
+let ballots = new Map();
 let digs = 0;
 let awayTicks = 0;
 let blasted = false;
@@ -464,7 +475,7 @@ addEventListener("keydown", (event) => {
     offerBond(bonds, selection.id);
     report = bonds.get(selection.id) === "both" ? "fellowship" : "offered";
   }
-  if (event.code === "KeyO" && !event.repeat) report = keyPhrase(identity);
+  if (event.code === "KeyO" && !event.repeat) report = event.shiftKey ? recoveryPhrase(identity) : keyPhrase(identity);
   if (event.code === "KeyG" && !event.repeat) {
     if (yard.stone > 0) {
       yard.stone -= 1;
@@ -517,6 +528,7 @@ addEventListener("keydown", (event) => {
     const leg = vitals.left <= vitals.right ? "left" : "right";
     if (vitals[leg] < 100 && yard.sticks > 0) {
       vitals[leg] = Math.min(100, vitals[leg] + 20);
+      applySplint(vitals);
       yard.sticks -= 1;
       report = "splint";
     } else if (bandage(vitals, yard.fiber)) {
@@ -685,9 +697,12 @@ function drawnOthers() {
   const list = otherActors();
   if (!dragging || selection?.kind !== "player") return list;
   const dir = lookDirection(yaw, 0);
-  return list.map((actor) => actor.id === selection.id
-    ? { ...actor, feet: [actor.feet[0] + dir[0] * 0.9, actor.feet[1] + dir[1] * 0.9, actor.feet[2]] }
-    : actor);
+  return list.map((actor) => {
+    if (actor.id !== selection.id) return actor;
+    const asked = dragAsk(true);
+    const stepped = stepDrag(actor.feet, asked, yaw, tick);
+    return { ...actor, feet: [stepped[0] + dir[0] * 0.9, stepped[1] + dir[1] * 0.9, stepped[2]], walk: asked.walk };
+  });
 }
 
 function cameraAim(sample = {}) {
@@ -780,7 +795,7 @@ function sceneFor(sample, width, height) {
     cameraDir: cameraLook,
     fov: aim.fov,
     smoke: smokeTicks > 0 ? (smokeAt || player.position) : null,
-    swarm: swarmPoint(player.position[0], player.position[1], digs),
+    swarm: swarmAt || swarmPoint(player.position[0], player.position[1], digs),
     pools,
     bolts,
   });
@@ -972,6 +987,14 @@ function drawChart() {
       for (const point of line) plotted.marks.push({ kind: "track", id, point });
     }
   }
+  if (seated) {
+    plotted.marks.push({ kind: "order", point: [player.position[0], player.position[1]], name: sitOrder(true) });
+    const overhead = dominionFrame(true, player.position[0], player.position[1]);
+    if (overhead) plotted.marks.push({ kind: "overhead", point: [overhead.x, overhead.y] });
+  }
+  if ((yard.tracks || 0) > 0) {
+    plotted.marks.push({ kind: "graze", point: [player.position[0] + 1.2, player.position[1]], name: `graze ${yard.scrub ?? 0}` });
+  }
   const span = mapSpan(skills.mapping.value, mapZoom);
   const rise = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
   const detail = contourDetail(skills.topography.value);
@@ -1037,15 +1060,25 @@ function actOn(sample) {
     const near = Math.hypot(player.position[0] - selection.point[0], player.position[1] - selection.point[1]) < 2.4;
     if (maySit(near, entryState.joined)) {
       seated = !seated;
-      report = seated ? "seated" : "stood";
+      if (seated) {
+        const table = yard.pieces.find((piece) => piece.id === "table");
+        writeVoucher(table, "self");
+      }
+      report = seated ? sitOrder(true) : "stood";
     } else report = "closed";
     return;
   }
   if (selection.kind === "trainer") {
-    report = claimSpecialty(skills) || "refused";
+    report = claimSpecialty(skills) || teachEmpty(skills) || teachMore(skills) || "refused";
     return;
   }
   if (selection.kind === "fin" && selection.cell) {
+    const piece = yard.pieces.find((item) => item.id === "fin" && item.at[0] === selection.cell[0] && item.at[1] === selection.cell[1]);
+    if (piece?.broken) {
+      const fixed = repairFin(yard, selection.cell);
+      report = fixed.ok ? "repaired" : fixed.reason;
+      return;
+    }
     const broken = breakFin(yard, selection.cell);
     report = broken.ok ? "broken" : broken.reason;
     return;
@@ -1056,6 +1089,7 @@ function actOn(sample) {
     if (piece) {
       piece.line = told.line;
       piece.by = told.by || "";
+      piece.sig = told.sig || 0;
       report = "pinned";
       return;
     }
@@ -1218,7 +1252,8 @@ function publish() {
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const fluxPiece = yard.pieces.find((piece) => piece.id === "fin");
   const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0))}` : "";
-  const boundNote = yard.bound ? " · bound" : "";
+  const bound = yard.bound ? graceMark({ cell: yard.bound }, yard.grace) : null;
+  const boundNote = bound ? ` · bound${bound.grace ? " grace" : ""}` : "";
   const legNote = (vitals.left < 100 || vitals.right < 100) ? ` · L${Math.ceil(vitals.left)} R${Math.ceil(vitals.right)}` : "";
   const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${legNote}`;
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}/${spoilCap(skills.mining.value)}` : "";
@@ -1234,7 +1269,7 @@ function publish() {
   const bondNote = withYou.length ? ` · with ${withYou.join(" ")}` : "";
   const drop = shellDrop(player.position[0], player.position[1]);
   const dropNote = drop > 0.02 ? ` · drop ${drop.toFixed(2)}` : "";
-  const reloadNote = shotLock > 0 ? ` · reload ${shotLock}` : "";
+  const reloadNote = shotLock > 0 ? ` · lock ${shotLock}` : reloadBeat > 0 ? ` · reload ${reloadBeat}` : "";
   const harmNote = harmLog.length ? ` · harm ${harmLog.length}` : "";
   const clockNote = ` · ${clockName(entryState.joined, seated)}`;
   const cultureNote = ` · ${cultureName}`;
@@ -1360,6 +1395,10 @@ function paint(sample, width = canvas.width, height = canvas.height) {
 
 function fire(sample) {
   if (shotLock > 0) {
+    report = "lock";
+    return;
+  }
+  if (reloadBeat > 0) {
     report = "reload";
     return;
   }
@@ -1384,7 +1423,14 @@ function fire(sample) {
       const pose = poses.get(link.to);
       return pose && sameCell(cellId(player.position[1]), cellId(pose.y));
     }).length;
-    if (quorum(voters, voters)) {
+    let nos = 0;
+    for (const link of links) {
+      const pose = poses.get(link.to);
+      if (!pose || sameCell(cellId(player.position[1]), cellId(pose.y))) continue;
+      castVote(ballots, cellId(pose.y), false);
+      nos += 1;
+    }
+    if (tally(voters, nos).pass) {
       const applied = applyDummyHit(dummy, shot.hitbox);
       const scaled = Math.round(applied.damage * penFactor(0, 1));
       grantUse(skills, "marksmanship", { tick });
@@ -1399,7 +1445,9 @@ function fire(sample) {
     hitbox: shot.hitbox || "miss",
   });
   sendOps(frame);
-  shotLock = 12;
+  const armed = afterShot();
+  shotLock = armed.lock;
+  reloadBeat = armed.reload;
   if (selection?.kind === "player") {
     friends.set(selection.id, -1);
     bonds.delete(selection.id);
@@ -1437,7 +1485,8 @@ function exchangeLore() {
     const spoken = offerNotes(notes, bag, offer.tier);
     if (!offer.ground.length && !offer.places.length && !spoken.length) continue;
     const packed = packLore(offer);
-    sendLore(encodeLore(identity, { nonce: tick, friend: score, notes: spoken, ...packed }));
+    const harm = harmLog.length ? (harmLog[harmLog.length - 1].sig || 1) : 0;
+    sendLore(encodeLore(identity, { nonce: tick, friend: score, notes: spoken, harm, ...packed }));
     loreNote = `${offer.tier} ${other.id}`;
   }
 }
@@ -1505,7 +1554,7 @@ function onOps(bytes, from) {
     if (from) friends.set(from, nextFriend(Math.max(friends.get(from) || 0, accepted.friend || 0), true));
     let told = 0;
     for (const line of accepted.notes || []) {
-      if (takeTold(notes, skillBag(), line)) told += 1;
+      if (takeTold(notes, skillBag(), line, from || "", accepted.sig || 0)) told += 1;
     }
     if (learned.ground || learned.places) {
       net.heard += learned.ground + learned.places;
@@ -1836,10 +1885,15 @@ if (params.get("still") !== "1") {
         const wind = windAt(player.position[0], player.position[1]);
         const blown = dayWord(tick) === "night" ? wind.map((part) => part * 1.5) : wind;
         stepBolt(bolts[bolt], 1 / 30, 9.81, blown);
+        if (smokeTicks > 0 && boltInSmoke(bolts[bolt], smokeAt)) {
+          bolts.splice(bolt, 1);
+          continue;
+        }
         const mission = yard.pieces.find((piece) => piece.id === "mission");
         if (mission) {
-          bolts[bolt].velocity[0] += (mission.at[0] * 0.5 - bolts[bolt].position[0]) * 0.04;
-          bolts[bolt].velocity[1] += (mission.at[1] * 0.5 - bolts[bolt].position[1]) * 0.04;
+          const pull = firePull(mission.fires);
+          bolts[bolt].velocity[0] += (mission.at[0] * 0.5 - bolts[bolt].position[0]) * pull;
+          bolts[bolt].velocity[1] += (mission.at[1] * 0.5 - bolts[bolt].position[1]) * pull;
         }
         const hit = boltHit(bolts[bolt], wreckAt);
         if (hit && dummy.health > 0) applyDummyHit(dummy, "chest");
@@ -1865,12 +1919,48 @@ if (params.get("still") !== "1") {
         if (yard.metal >= 1) {
           yard.metal -= 1;
           report = "upkeep";
+        } else if (spendPurse(yard.purse, Object.keys(yard.purse || {}).find((id) => (yard.purse[id] || 0) >= 1), 1)) {
+          report = "purse";
+        } else if (!yard.grace) {
+          yard.grace = true;
+          report = "grace";
         } else {
           yard.bound = null;
+          yard.grace = false;
           report = "lapse";
         }
       }
-      if (tick % 30 === 0) rollCart(yard);
+      if (tick > 0 && tick % 1800 === 0) {
+        for (const piece of yard.pieces) {
+          if (piece.id !== "fin") continue;
+          yard.metal += fluxMetal(tick, piece.yaw || 0, piece.broken);
+        }
+      }
+      if (tick % 30 === 0) {
+        rollCart(yard);
+        storeWind(cellWind, cellId(player.position[1]), player.position[0], player.position[1]);
+        const grazed = graze({ stock: yard.scrub ?? 4 });
+        yard.scrub = grazed.stock;
+        if (grazed.track) yard.tracks = (yard.tracks || 0) + 1;
+        for (const actor of otherActors()) {
+          addFire(yard, [Math.round(actor.feet[0] / 0.5), Math.round(actor.feet[1] / 0.5)], actor.id);
+        }
+        const born = swarmPoint(player.position[0], player.position[1], digs);
+        if (!swarmAt && born) swarmAt = born;
+        if (swarmAt) {
+          const stepped = stepSwarm(swarmAt, player.position);
+          if (stepped) {
+            swarmAt = stepped.at;
+            if (stepped.bite) {
+              vitals.pain = Math.min(100, (vitals.pain || 0) + 1);
+              if (raiseSpore(true, swarmAt)) {
+                yard.spores = (yard.spores || 0) + 1;
+                yard.metal = sporeMetal(yard.metal, { beach: player.position[1] >= -190, wood: true, nearest: 30 });
+              }
+            }
+          }
+        }
+      }
       const holder = pubkeyHex(identity.pubkey);
       terrain.setDeed(yard.bound ? {
         allow(x, y, proposer) {
@@ -1885,14 +1975,17 @@ if (params.get("still") !== "1") {
         buy: buyOnce,
         yard,
         still: Math.hypot(player.velocity[0], player.velocity[1]) < 0.08,
+        fired: shotLock > 0,
         offer: buyOnce ? (entryState.joined ? SMOKE : null) : null,
       });
       if (entryState.notice) report = entryState.notice;
       if (entryState.notice === "smoke") smokeTicks = 8 * 30;
       if (smokeTicks > 0) smokeTicks -= 1;
-      if (shotLock > 0) shotLock -= 1;
+      const waited = stepShotWait(shotLock, reloadBeat);
+      shotLock = waited.lock;
+      reloadBeat = waited.reload;
       bleed(vitals, 1 / 30);
-      if (player.position[1] < -190) hear("sea");
+      if (player.position[1] < -190) hear("sea", seaGain(dayWord(tick)));
       if (tick % 30 === 0) {
         for (let step = 0; step < 2; step += 1) {
           for (const pool of pools) {
@@ -1932,6 +2025,14 @@ if (params.get("still") !== "1") {
         report = "frozen";
       } else if (slot === "hammer" && trigger && aimed.inRange && aimed.kind !== "wall" && aimed.kind !== "dummy") {
         const cell = aimed.cell;
+        const beam = aimed.kind === "ground" ? tryPlaceBeam(yard, cell) : { ok: false, reason: "skip" };
+        if (beam.ok) {
+          report = "beam";
+          hear("place");
+          raising = null;
+        } else if (yard.pieces.some((piece) => piece.id === "beam" && piece.at[0] === cell[0] && piece.at[1] === cell[1])) {
+          raising = null;
+        } else {
         const has = (id) => yard.pieces.some((piece) => piece.id === id);
         const job = aimed.kind === "footing" && !has("hearth")
           ? "hearth"
@@ -1997,10 +2098,17 @@ if (params.get("still") !== "1") {
         } else {
           work = null;
         }
+        }
       } else {
         raising = null;
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
           const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
+          const mode = bitMode(player.position[1] >= -190, brush);
+          if (mode === "slump") {
+            const wrote = applySlump(terrain.log.crust, aim.aim);
+            report = wrote == null ? "firm" : "slump";
+            hear("dig");
+          } else {
           const capped = brush === "dig" && (yard.spoil || 0) >= spoilCap(skills.mining.value);
           if (capped) {
             report = "full";
@@ -2024,6 +2132,7 @@ if (params.get("still") !== "1") {
                 if (due && yard.metal >= due) {
                   yard.metal -= due;
                   yard.tithed = (yard.tithed || 0) + due;
+                  payTithe(yard.purse || (yard.purse = {}), patron, due);
                 }
               }
             }
@@ -2031,6 +2140,7 @@ if (params.get("still") !== "1") {
             grantUse(skills, "mining", { tick, gap: 30 });
             grantUse(skills, "prospect", { tick, gap: 45 });
             writeNote(notes, skills, brush === "fill" ? "fill" : "dig");
+          }
           }
         } else if (!raising) {
           work = null;
@@ -2054,9 +2164,15 @@ if (params.get("still") !== "1") {
         world.gravity[2] += 14;
       }
       const falling = player.velocity[2];
+      const drifting = Math.hypot(player.velocity[0], player.velocity[1]) > 0.15;
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, sample, jump, skills.jump.value);
+      if (drifting && vitals.down <= 0) {
+        const push = windPush(cellWind.get(cellId(player.position[1])));
+        player.velocity[0] += push[0];
+        player.velocity[1] += push[1];
+      }
       if (vitals.down <= 0) {
         const pushed = separate(player.position, otherActors().map((actor) => actor.feet));
         player.position[0] = pushed[0];
@@ -2146,7 +2262,10 @@ if (params.get("still") !== "1") {
         player.position[2] = floor;
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
-      if (falling < -9 && player.position[2] <= (world.ground || 0) + 0.2) vitals.integrity = fallHurt(vitals.integrity, falling, skills.landing.value);
+      if (falling < -9 && player.position[2] <= (world.ground || 0) + 0.2) {
+        vitals.integrity = fallFromCount(vitals.integrity, falling, seedLanding(skills));
+        countLanding(skills);
+      }
       claimSpecialty(skills);
       const bag = skillBag();
       noteSurvey(survey, {
@@ -2192,6 +2311,14 @@ if (params.get("still") !== "1") {
       if (mark.inRange && mark.kind === "road") {
         const gate = toggleGate(yard, mark.cell);
         report = gate.ok ? (gate.gate ? "gate" : "shut") : gate.reason;
+        if (gate.ok && gate.gate) {
+          const lowered = lowerPool(pools, true);
+          const spilled = spillPool(lowered);
+          if (lowered && spilled && spilled !== lowered) {
+            lowered.y = spilled.y;
+            lowered.key = spilled.key;
+          }
+        }
       } else if (mark.inRange && mark.kind === "door") {
         const door = toggleDoor(yard, mark.cell);
         report = door.ok ? (door.open ? "open" : "shut") : door.reason;

@@ -11,6 +11,10 @@ export const CUES = {
   sea: { freq: 50, dur: 0.5, gain: 0.05, wave: "sine" },
 };
 
+export function seaGain(word) {
+  return word === "noon" ? 0.5 : 1;
+}
+
 export function cueFor(name) {
   return CUES[name] || null;
 }

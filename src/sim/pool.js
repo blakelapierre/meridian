@@ -20,6 +20,18 @@ export function drainPool(pools, { x, y, floor }) {
   return true;
 }
 
+export function lowerPool(pools, open) {
+  if (!open || !pools?.length) return null;
+  const pool = pools[0];
+  pool.floor = Math.min(pool.floor, -0.45);
+  return pool;
+}
+
+export function spillPool(pool) {
+  if (!pool || pool.floor > -0.4) return pool;
+  return { ...pool, y: pool.y + 0.5, key: `${pool.x},${pool.y + 0.5}` };
+}
+
 export function flowOnce(pool, floorHere, floorThere) {
   if (!pool || floorThere >= floorHere) return pool;
   return { ...pool, y: pool.y + 0.5, floor: floorThere, key: `${pool.x},${pool.y + 0.5}` };
