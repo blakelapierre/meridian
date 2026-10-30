@@ -6,7 +6,7 @@ The focused view aims at vsync. A hidden tab paints about once a second. Extra f
 
 ## This pass
 
-The center keeps the second reflection bounce. Past the edge the mirror is dropped, so that second trace does not run. The buffer is still one resolution.
+The mirror follows the material. It is not a circle drawn on the screen. The sand still reflects a little of the sky.
 
 ## Proves
 
@@ -14,7 +14,7 @@ The center keeps the second reflection bounce. Past the edge the mirror is dropp
 
 ## Next
 
-Standing still does not sharpen the edge. Not in this build.
+The edge does not drop the second bounce. A screen-space circle is not in this build.
 
 ## Later
 
