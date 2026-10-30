@@ -13,9 +13,9 @@
     <script type="importmap">
       {
         "imports": {
-          "@noble/ed25519": "/node_modules/@noble/ed25519/index.js",
-          "@noble/hashes/sha2.js": "/node_modules/@noble/hashes/sha2.js",
-          "@noble/hashes/blake3.js": "/node_modules/@noble/hashes/blake3.js"
+          "@noble/ed25519": "../../vendor/noble/ed25519/index.js",
+          "@noble/hashes/sha2.js": "../../vendor/noble/hashes/sha2.js",
+          "@noble/hashes/blake3.js": "../../vendor/noble/hashes/blake3.js"
         }
       }
     </script>
@@ -24,12 +24,12 @@
     <h1>Archive</h1>
     <pre id="perf">loading keeper</pre>
     <p>This process has no body and draws no world. Leave it open. It mines the chain that makes a hole official. A block has to show 16 leading zero bits. The heaviest chain wins, and an orphaned block pays nothing.</p>
-    <p>Keep is 10 per block that is still on that chain. Thirty keep, three blocks, offers one crate: 2 metal and 1 fiber. The suggested bounty is $0.20 a canonical block, capped at $40 a quarter. This page does not pay it and does not mint the metal. The rules are in <a href="/docs/keepers.md">the keeper note</a>.</p>
+    <p>Keep is 10 per block that is still on that chain. Thirty keep, three blocks, offers one crate: 2 metal and 1 fiber. The suggested bounty is $0.20 a canonical block, capped at $40 a quarter. This page does not pay it and does not mint the metal. The rules are in <a href="../../docs/keepers.md">the keeper note</a>.</p>
     <p id="status">loading keeper</p>
     <p>
       <button id="claim" type="button">Claim crate</button>
       <button id="receipt" type="button">Copy receipt</button>
-      <a href="/">Checks</a>
+      <a href="../../">Checks</a>
     </p>
     <p id="note"></p>
     <pre id="out"></pre>
@@ -48,6 +48,6 @@
         say(String(reason && reason.stack || reason || "rejected"));
       });
     </script>
-    <script type="module" src="/tools/archive/archive.js?v=5"></script>
+    <script type="module" src="../../tools/archive/archive.js?v=5"></script>
   </body>
 </html>

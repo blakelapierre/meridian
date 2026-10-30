@@ -13,9 +13,9 @@
     <script type="importmap">
       {
         "imports": {
-          "@noble/ed25519": "/node_modules/@noble/ed25519/index.js",
-          "@noble/hashes/sha2.js": "/node_modules/@noble/hashes/sha2.js",
-          "@noble/hashes/blake3.js": "/node_modules/@noble/hashes/blake3.js"
+          "@noble/ed25519": "../../vendor/noble/ed25519/index.js",
+          "@noble/hashes/sha2.js": "../../vendor/noble/hashes/sha2.js",
+          "@noble/hashes/blake3.js": "../../vendor/noble/hashes/blake3.js"
         }
       }
     </script>
@@ -28,7 +28,7 @@
     <h1>Dig check</h1>
     <p>Open either tab first. The log leaves <code>waiting</code> before <code>applied</code>. <code>lighthouse failed</code> means <code>npm start</code> is not running.</p>
     <p>Pass: both pages log <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. The line <code>voxel before</code> is negative. Two different hashes, or <code>bad signature</code>, is a fail.</p>
-    <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
+    <p><a href="../../tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="../../tools/dig/index.html?id=b&to=a">Tab B</a> · <a href="../../">All checks</a></p>
     </div>
     <pre></pre>
     <script type="module" src="./dig.js"></script>
