@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coverLevel, createPacer, easePixels, nativePixels, nextScale, paceWord, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill } from "../src/render/pace.js";
+import { coverLevel, createPacer, easePixels, fitPixels, nativePixels, nextScale, noteRayRate, paceWord, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -74,4 +74,7 @@ test("resolution climbs one octave toward the window and steps back when a frame
   assert.equal(stepOctave(2, 4), 3);
   assert.ok(tuneRays(4000, { missed: true, paintMs: 4, refresh: 16 }) < 4000);
   assert.ok(tuneRays(4000, { missed: false, paintMs: 4, refresh: 16 }) > 4000);
+  assert.equal(fitPixels(1_000_000, 16, 900_000), 16000);
+  assert.equal(fitPixels(60_000_000, 16, 900_000), 900000);
+  assert.ok(noteRayRate(0, 16000, 8) > noteRayRate(0, 16000, 20));
 });

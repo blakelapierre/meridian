@@ -345,8 +345,10 @@ vec3 skyColor(vec3 rd) {
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);
   float day = smoothstep(0.0, 0.2, sun.z);
-  float ndotl = max(dot(n, sun), 0.0) * day;
-  return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * ndotl);
+  float ndotl = max(dot(n, sun), 0.0);
+  float direct = ndotl * day;
+  if (direct > 0.0 && blocked(p + n * 0.06 + sun * 0.05, sun)) direct *= 0.28;
+  return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * direct);
 }
 
 vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {

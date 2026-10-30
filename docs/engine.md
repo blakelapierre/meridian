@@ -1,7 +1,7 @@
 # MERIDIAN
 ## Engine basis
 
-The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `c5338e3e7acd661ac86a4f783a4785fb49612b6b`. That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
+The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `37226b0afc58efc0ff93b5c18edd4679835408d4`. That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
 
 This file wins over [engineering.md](engineering.md) on what draws the frame and what integrates motion. It does not win on damage numbers, the keymap, the chunk hash, or packet layout.
 
@@ -32,7 +32,7 @@ The demo only intersects spheres. Meridian's `cast` keeps that loop and adds two
 
 Bodies, the dummy, and projectiles stay spheres. A standing character is drawn as a sphere of radius **0.35 m** until a capsule intersection exists. That sphere is the picture. It is not the merge collider.
 
-The GPU path follows the pin: sphere color from the hit normal, four reflection steps, and a picture that starts coarse. It steps one octave toward the window while the frame holds vsync, and drops an octave when a frame misses. A still view may fill the remaining pixels with scattered rays. Motion draws the whole octave. Later reflection steps test spheres, boxes, and the sea. Only the first step marches the hills. Shots still use the first hit from `cast`.
+The GPU path follows the pin: sphere color from the hit normal, four reflection steps, and a sun shadow. A hit in the light asks whether a body or a box stands between it and the sun, and that patch is darkened. The trace size is the pixel count that fits one vsync at the measured ray rate, and the picture still climbs only one octave a frame. Orbit trails from that pen are not drawn.
 
 ### Physics
 
@@ -73,6 +73,7 @@ The demo `Clock` advances from `Date`. Meridian does not. One sim tick at 30 Hz 
 | Overlap merges the smaller body into the larger, mixes color, keeps momentum | Policy on the body. `merge` is the demo and is legal for debris that should coalesce. Characters, projectiles, and structures are `separate` or `event`. A character is pushed out along the contact normal and loses the inward velocity. A projectile emits a hit event and is removed. Nobody is absorbed into the planet |
 | `size` derived from uniform-density mass, and that radius is `collisionSize` | Drawn radius and collision radius are separate fields. The planet's drawn surface is the crust, not a sphere of radius `cbrt(M)` |
 | `Math.random` sky on a miss | A fixed sky color from the sun elevation |
+| Orbit trails drawn over the preview | Not taken. Bodies do not leave a screen-space trail |
 | Sliders, pause button, `state-view` text | Not part of the game HUD |
 
 Rapier is still not the physics engine. This one is.

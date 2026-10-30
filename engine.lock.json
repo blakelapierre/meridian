@@ -1,6 +1,6 @@
 {
   "source": "https://github.com/blakelapierre/nbody-raycaster",
-  "commit": "c5338e3e7acd661ac86a4f783a4785fb49612b6b",
+  "commit": "37226b0afc58efc0ff93b5c18edd4679835408d4",
   "file": "pen.js",
   "renderer": [
     "project",

@@ -4,9 +4,9 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=64";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=65";
 import { createFps } from "../render/fps.js";
-import { createPacer, coverLevel, nativePixels, paceWord, sizeAt, stepOctave, tuneRays, viewStill } from "../render/pace.js?v=60";
+import { createPacer, coverLevel, fitPixels, nativePixels, noteRayRate, paceWord, sizeAt, stepOctave, viewStill } from "../render/pace.js?v=61";
 import {
   authority,
   bandage,
@@ -114,6 +114,7 @@ let context = null;
 let viewScale = 0.5;
 let octave = 4;
 let rayBudget = 4000;
+let rayRate = 0;
 let paintKind = "full";
 let lastPaintMs = 0;
 if (painter) {
@@ -2259,11 +2260,8 @@ if (params.get("still") !== "1") {
       const paintMs = performance.now() - started;
       if (!extra) {
         lastPaintMs = paintMs;
-        rayBudget = tuneRays(rayBudget, {
-          missed: decision.holding === false,
-          paintMs,
-          refresh: decision.refresh,
-        });
+        rayRate = noteRayRate(rayRate, pixels, paintMs);
+        rayBudget = fitPixels(rayRate, decision.refresh, native.width * native.height);
       }
       pacer.note(paintMs, active, still);
       canvas.dataset.fps = String(fps.paint(now));
