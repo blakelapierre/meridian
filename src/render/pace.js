@@ -27,11 +27,24 @@ export function coverLevel(targetW, targetH, rays) {
   return 8;
 }
 
-export function visualThroughput(pixels, frameMs, refreshMs) {
+export function cameraSpeed(previous, next, dt) {
+  if (!previous || !next || !(dt > 0)) return 0;
+  const travel = Math.hypot((next.x || 0) - (previous.x || 0), (next.y || 0) - (previous.y || 0)) / dt;
+  const turn = Math.hypot((next.yaw || 0) - (previous.yaw || 0), (next.pitch || 0) - (previous.pitch || 0)) / dt;
+  return travel + turn * 4;
+}
+
+export function motionLimit(speed, refreshMs) {
+  const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
+  const pace = Math.min(1, Math.max(0, speed / 4.4));
+  return (1000 / 12) * (1 - pace) + refresh * pace;
+}
+
+export function visualThroughput(pixels, frameMs, refreshMs, speed = 1) {
   if (!(pixels > 0) || !(frameMs > 0)) return 0;
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
   const fps = Math.min(1000 / frameMs, 1000 / refresh);
-  return pixels * fps;
+  return pixels * fps * Math.max(speed, 0);
 }
 
 export function createPicturePace() {
@@ -47,7 +60,7 @@ export function createPicturePace() {
     get scale() {
       return scale;
     },
-    step({ gap = 0, displayW = 960, displayH = 540, still = false } = {}) {
+    step({ gap = 0, displayW = 960, displayH = 540, still = false, speed = 0 } = {}) {
       if (gap >= 8 && gap <= 50) {
         period = periodSamples ? period * 0.85 + gap * 0.15 : gap;
         periodSamples += 1;
@@ -74,19 +87,19 @@ export function createPicturePace() {
         return pack(0);
       }
       bucket.push(gap);
-      if (bucket.length < 4) return pack(visualThroughput(sized().width * sized().height, gap, refresh));
+      if (bucket.length < 4) return pack(visualThroughput(sized().width * sized().height, gap, refresh, still ? 1 : speed));
       const ordered = [...bucket].sort((a, b) => a - b);
       const ms = ordered[ordered.length >> 1];
       bucket = [];
       const size = sized();
-      const score = visualThroughput(size.width * size.height, ms, refresh);
-      const floor = 1000 / 12;
-      if (!still && ms > floor) {
-        scale = Math.max(0.08, scale * Math.max(0.86, Math.sqrt(floor / ms)));
+      const score = visualThroughput(size.width * size.height, ms, refresh, still ? 1 : Math.max(speed, 0.05));
+      const limit = still ? Infinity : motionLimit(speed, refresh);
+      if (!still && ms > limit) {
+        scale = Math.max(0.08, scale * Math.max(0.86, Math.sqrt(limit / ms)));
         direction = 1;
         lastScore = 0;
       } else {
-        if (!still && ms > floor * 0.85) direction = 0;
+        if (!still && ms > limit * 0.85) direction = 0;
         else if (lastScore > 0 && score < lastScore * 0.98) direction = -direction;
         else if (!still) direction = 1;
         lastScore = score;
