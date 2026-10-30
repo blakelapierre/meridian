@@ -4,9 +4,9 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=65";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=66";
 import { createFps } from "../render/fps.js";
-import { createPacer, coverLevel, nativePixels, paceOctave, paceWord, sizeAt, stepOctave, viewStill } from "../render/pace.js?v=62";
+import { createPacer, createPicturePace, paceWord, sizeAt, viewStill } from "../render/pace.js?v=63";
 import {
   authority,
   bandage,
@@ -113,7 +113,8 @@ let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
 let octave = 4;
-let climbWait = 0;
+const picture = createPicturePace();
+let detailRays = 0;
 let rayBudget = 4000;
 let paintKind = "full";
 let lastPaintMs = 0;
@@ -1331,8 +1332,8 @@ function paint(sample) {
   canvas.dataset.center = `${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)}`;
   showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
   if (painter) {
-    const drew = paintKind === "points" && painter.paintRandom
-      ? painter.paintRandom(scene, Math.min(8000, rayBudget))
+    const drew = painter.present
+      ? painter.present(scene, canvas.dataset.traceW, canvas.dataset.traceH, detailRays)
       : painter.paint(scene);
     if (!drew) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
     return scene;
@@ -2233,33 +2234,26 @@ if (params.get("still") !== "1") {
       ? pacer.considerExtra(now, primaryHolding)
       : pacer.consider(now, extra ? false : active);
     viewScale = decision.scale;
-    const native = nativePixels(boxW, boxH, window.devicePixelRatio || 1);
-    let covered = coverLevel(native.width, native.height, rayBudget);
-    if (extra) {
-      covered = Math.max(covered, 3);
-      octave = Math.max(3, stepOctave(octave, covered));
-    } else {
-      const vsync = decision.refresh > 8 ? decision.refresh : 1000 / 60;
-      if (decision.gap > vsync * 1.15) climbWait = 0;
-      else climbWait += 1;
-      const climb = climbWait >= 10;
-      if (climb) climbWait = 0;
-      octave = paceOctave(octave, { gap: decision.gap, refresh: decision.refresh, still, climb });
-    }
-    const size = sizeAt(octave, native.width, native.height);
-    const pixels = size.width * size.height;
-    const same = canvas.width === size.width && canvas.height === size.height;
+    const displayW = Math.max(2, Math.floor(boxW));
+    const displayH = Math.max(2, Math.floor(boxH));
+    const paced = extra
+      ? { octave: Math.max(3, octave), detail: 0 }
+      : picture.step({ gap: decision.gap, refresh: decision.refresh });
+    octave = paced.octave;
+    detailRays = extra ? 0 : paced.detail;
+    const trace = sizeAt(octave, displayW, displayH);
+    canvas.dataset.traceW = String(trace.width);
+    canvas.dataset.traceH = String(trace.height);
     canvas.dataset.level = String(octave);
-    canvas.style.imageRendering = octave === 0 ? "auto" : "pixelated";
+    canvas.dataset.detail = String(detailRays);
+    canvas.style.imageRendering = "auto";
     if (painter) {
-      if (!same) {
-        canvas.width = size.width;
-        canvas.height = size.height;
-      }
+      if (canvas.width !== displayW) canvas.width = displayW;
+      if (canvas.height !== displayH) canvas.height = displayH;
     } else {
       fitCanvas(canvas, viewScale, easedPixels);
     }
-    paintKind = !painter || extra || !still || !same || rayBudget >= pixels ? "full" : "points";
+    paintKind = "full";
     const arrived = still && octave === 0;
     canvas.dataset.pace = paceWord(decision.mode, { still, arrived, holding: decision.holding });
     if (params.get("nopaint") !== "1" && decision.paint) {
