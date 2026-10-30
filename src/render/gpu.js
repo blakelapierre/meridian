@@ -54,16 +54,28 @@ export function exposureFor(sun) {
   const day = Math.min(1, Math.max(0, (z + 0.1) / 0.5));
   return 2.4 + (1 - 2.4) * day;
 }
-export const NEAR_METERS = 18;
-
-export function farPixels(width, height) {
-  const w = Math.max(2, width | 0);
-  const h = Math.max(2, height | 0);
-  return {
-    width: Math.max(2, Math.floor(w / 4)),
-    height: Math.max(2, Math.floor(h / 4)),
-  };
+// Shared GLSL for perception-driven foveation; mirrors falloff/refreshPeriod/blockLevel in src/sim/perception.js.
+// Angles are measured in camera space, so only the field of view and aspect are needed.
+export const FOVEA_GLSL = `
+uniform vec2 uGaze;
+uniform vec4 uFovea;
+uniform float uRefine;
+uniform float uTanHalf;
+uniform float uView;
+vec3 camDir(vec2 uv) {
+  return normalize(vec3((uv.x * 2.0 - 1.0) * uView * uTanHalf, (1.0 - uv.y * 2.0) * uTanHalf, 1.0));
 }
+float fovT(vec2 uv) {
+  float a = acos(clamp(dot(camDir(uv), camDir(uGaze)), -1.0, 1.0));
+  return smoothstep(uFovea.x, uFovea.x + uFovea.y, a);
+}
+float fovPeriod(float t) {
+  return floor(1.0 + (max(1.0, uFovea.z) - 1.0) * t + 0.5);
+}
+float fovBlock(float t) {
+  return exp2(max(0.0, floor(uFovea.w * t + 0.5) - uRefine));
+}
+`;
 
 export function fitCanvas(canvas, scale = 1, pixels = null) {
   const boxW = canvas.clientWidth || window.innerWidth || 960;
@@ -125,11 +137,9 @@ uniform int uDigs;
 uniform int uPrints;
 uniform vec4 uWork;
 uniform float uTime;
-uniform float uMaxDist;
-uniform vec2 uGaze;
-uniform float uGamma;
-uniform float uGazeReach;
-uniform float uSpread;
+uniform float uFrame;
+uniform float uFull;
+${FOVEA_GLSL}
 uniform float uExposure;
 uniform float uFoot;
 in vec2 vRay;
@@ -442,19 +452,21 @@ vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
   return vec3(0.0, 0.0, sign(q.z));
 }
 
-float gazeAxis(float b, float c, float g) {
-  if (g > 0.98) return b;
-  float d = b - c;
-  float side = d < 0.0 ? c : 1.0 - c;
-  if (side < 1.0e-4) return b;
-  return c + sign(d) * pow(abs(d / side), 1.0 / g) * side;
-}
-
 void main() {
-  float sharpen = uGamma < 0.2 ? 1.0 : uGamma;
-  vec2 sceneUV = vec2(gazeAxis(vRay.x, uGaze.x, sharpen), gazeAxis(vRay.y, uGaze.y, sharpen));
-  float uu = sceneUV.x;
-  float vv = sceneUV.y;
+  // Foveated progressive tracing: the gaze region traces every frame at full resolution;
+  // the periphery traces one pixel per cell, every few frames, and stays in the accumulation target between.
+  if (uFull < 0.5) {
+    float ft = fovT(vRay);
+    float cell = fovBlock(ft);
+    vec2 pix = floor(gl_FragCoord.xy);
+    if (any(greaterThan(mod(pix, cell), vec2(0.5)))) discard;
+    float period = fovPeriod(ft);
+    vec2 cid = floor(pix / cell);
+    float phase = floor(fract(sin(dot(cid, vec2(12.9898, 78.233))) * 43758.5453) * period);
+    if (mod(uFrame + phase, period) > 0.5) discard;
+  }
+  float uu = vRay.x;
+  float vv = vRay.y;
   float halfAngle = tan(uFov * 0.008726646259971648) * uPlane;
   float px = (uu * 2.0 - 1.0) * uAspect * halfAngle;
   float py = (1.0 - vv * 2.0) * halfAngle;
@@ -462,14 +474,8 @@ void main() {
   vec3 ro = uOrigin;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
-  float cover = 1.0;
   float firstT = 4000.0;
-  float limit = uMaxDist;
-  if (uMaxDist > 0.0) {
-    float gazeD = length(vec2((uu - uGaze.x) * uAspect, vv - uGaze.y));
-    float fade = smoothstep(uSpread, uSpread + 0.18, gazeD);
-    limit = mix(max(uGazeReach, uMaxDist), uMaxDist, fade);
-  }
+  float limit = 0.0;
   for (int bounce = 0; bounce < 5; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
@@ -575,16 +581,11 @@ void main() {
       if (mark && boxHit(ro, rd, vec3(uWork.x - wide, uWork.y - deep, 0.0), vec3(uWork.x + wide, uWork.y + deep, rise), gt) && gt < bestT) workT = gt;
     }
     bool ghost = workT < 1.0e20;
-    if (uMaxDist > 0.0 && bounce == 0 && workT > limit && (!found || bestT > limit)) {
-      fragColor = vec4(0.0);
-      return;
-    }
     if (!found && !ghost) {
       accum += thru * skyColor(rd);
       break;
     }
     if (bounce == 0) firstT = min(bestT, workT);
-    if (uMaxDist > 0.0 && bounce == 0) cover = smoothstep(0.0, 1.0, clamp((limit - min(bestT, workT)) / 8.0, 0.0, 1.0));
     if (found) {
       if (dot(bestN, rd) > 0.0) bestN = -bestN;
       if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
@@ -629,7 +630,7 @@ void main() {
       }
     }
     float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
-    // Same rule in the near and far passes: faint mirrors take a cheap sky tint instead of a traced bounce.
+    // One material rule everywhere: faint mirrors take a cheap sky tint instead of a traced bounce.
     if (found && mirror < 0.2) {
       vec3 rr = reflect(rd, bestN);
       float up = clamp(rr.z * 0.85 + 0.2, 0.0, 1.0);
@@ -644,9 +645,9 @@ void main() {
     rd = normalize(reflect(rd, bestN));
     ro = bestP + bestN * 0.05;
   }
-  // Far pass alpha carries log depth (0 near, 1 at 4 km) for the depth-aware upscale.
+  // Alpha carries log depth (0 near, 1 at 4 km) for future reprojection.
   float depthCode = clamp(log2(1.0 + firstT) / 12.0, 0.0, 1.0);
-  fragColor = vec4(present(accum), uMaxDist > 0.0 ? cover : depthCode);
+  fragColor = vec4(present(accum), depthCode);
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
   const fs = compile(gl, gl.FRAGMENT_SHADER, frag);
@@ -814,57 +815,37 @@ void main() {
   const blitOlder = blitProgram ? gl.getUniformLocation(blitProgram, "uOlder") : null;
   const blitNewer = blitProgram ? gl.getUniformLocation(blitProgram, "uNewer") : null;
   const blitMix = blitProgram ? gl.getUniformLocation(blitProgram, "uMix") : null;
-  const stackFs = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
+  // Resolve: fill each peripheral cell from its traced corner pixel into a full picture.
+  const resolveFs = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
-uniform sampler2D uFar;
-uniform sampler2D uNear;
-uniform vec2 uGaze;
-uniform float uGamma;
+uniform sampler2D uAccum;
+${FOVEA_GLSL}
 in vec2 vUV;
 out vec4 fragColor;
-float gazeUnaxis(float s, float c, float g) {
-  if (g > 0.98) return s;
-  float d = s - c;
-  float side = d < 0.0 ? c : 1.0 - c;
-  if (side < 1.0e-4) return s;
-  return c + sign(d) * pow(abs(d / side), g) * side;
-}
 void main() {
-  float g = uGamma < 0.2 ? 1.0 : uGamma;
   vec2 ray = vec2(vUV.x, 1.0 - vUV.y);
-  vec2 packed = vec2(gazeUnaxis(ray.x, uGaze.x, g), gazeUnaxis(ray.y, uGaze.y, g));
-  vec2 nearUV = vec2(packed.x, 1.0 - packed.y);
-  vec2 fsize = vec2(textureSize(uFar, 0));
-  vec2 st = vUV * fsize - 0.5;
-  vec2 f = fract(st);
-  vec2 base = (floor(st) + 0.5) / fsize;
-  vec4 s00 = texture(uFar, base);
-  vec4 s10 = texture(uFar, base + vec2(1.0 / fsize.x, 0.0));
-  vec4 s01 = texture(uFar, base + vec2(0.0, 1.0 / fsize.y));
-  vec4 s11 = texture(uFar, base + 1.0 / fsize);
-  // Depth-aware: the nearest surface among the four far texels is the reference;
-  // texels much deeper than it (sky behind a ridge) lose weight instead of smearing across the edge.
-  float ref = min(min(s00.a, s10.a), min(s01.a, s11.a));
-  vec4 w = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
-  vec4 dz = vec4(s00.a, s10.a, s01.a, s11.a) - ref;
-  w *= exp(-dz * dz * 900.0) + 1.0e-3;
-  vec3 farRgb = (s00.rgb * w.x + s10.rgb * w.y + s01.rgb * w.z + s11.rgb * w.w) / max(dot(w, vec4(1.0)), 1.0e-5);
-  vec4 nearColor = texture(uNear, clamp(nearUV, 0.0, 1.0));
-  fragColor = vec4(mix(farRgb, nearColor.rgb, nearColor.a), 1.0);
+  float cell = fovBlock(fovT(ray));
+  vec2 pix = floor(gl_FragCoord.xy);
+  fragColor = vec4(texelFetch(uAccum, ivec2(pix - mod(pix, cell)), 0).rgb, 1.0);
 }`);
-  let stackProgram = null;
-  if (blitVs && stackFs) {
-    stackProgram = gl.createProgram();
-    gl.attachShader(stackProgram, blitVs);
-    gl.attachShader(stackProgram, stackFs);
-    gl.bindAttribLocation(stackProgram, 0, "aPos");
-    gl.linkProgram(stackProgram);
-    if (!gl.getProgramParameter(stackProgram, gl.LINK_STATUS)) stackProgram = null;
+  let resolveProgram = null;
+  if (blitVs && resolveFs) {
+    resolveProgram = gl.createProgram();
+    gl.attachShader(resolveProgram, blitVs);
+    gl.attachShader(resolveProgram, resolveFs);
+    gl.bindAttribLocation(resolveProgram, 0, "aPos");
+    gl.linkProgram(resolveProgram);
+    if (!gl.getProgramParameter(resolveProgram, gl.LINK_STATUS)) resolveProgram = null;
   }
-  const stackFar = stackProgram ? gl.getUniformLocation(stackProgram, "uFar") : null;
-  const stackNear = stackProgram ? gl.getUniformLocation(stackProgram, "uNear") : null;
-  const stackGaze = stackProgram ? gl.getUniformLocation(stackProgram, "uGaze") : null;
-  const stackGamma = stackProgram ? gl.getUniformLocation(stackProgram, "uGamma") : null;
+  const setFovea = (prog, fovea, camera, full) => {
+    const u = (name) => gl.getUniformLocation(prog, name);
+    gl.uniform2f(u("uGaze"), fovea.x, fovea.y);
+    gl.uniform4f(u("uFovea"), fovea.fovea, fovea.falloff, fovea.period, fovea.block);
+    gl.uniform1f(u("uRefine"), fovea.refine);
+    gl.uniform1f(u("uTanHalf"), Math.tan(((camera.fov || 70) * Math.PI) / 360));
+    gl.uniform1f(u("uView"), camera.aspect || 1);
+    if (full !== undefined) gl.uniform1f(u("uFull"), full ? 1 : 0);
+  };
   const makeTarget = (filter) => {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -874,9 +855,11 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
   };
-  const farSlot = makeTarget(gl.LINEAR);
-  const nearSlot = makeTarget(gl.LINEAR);
-  const draw = (scene, mode, count, maxDist = 0) => {
+  const accumSlot = makeTarget(gl.NEAREST);
+  let frame = 0;
+  let stillFrames = 0;
+  let forceFull = true;
+  const draw = (scene, mode, count, fovea = null) => {
       sphereData.fill(0);
       sphereColor.fill(0);
       boxMin.fill(0);
@@ -998,13 +981,8 @@ void main() {
       const work = scene.work;
       gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
       gl.uniform1f(u("uTime"), scene.time || 0);
-      gl.uniform1f(u("uMaxDist"), maxDist || 0);
-      const gaze = scene.gaze;
-      const sharpen = maxDist > 0 && gaze ? gaze.gamma : 1;
-      gl.uniform2f(u("uGaze"), gaze ? gaze.x : 0.5, gaze ? gaze.y : 0.5);
-      gl.uniform1f(u("uGamma"), sharpen || 1);
-      gl.uniform1f(u("uGazeReach"), gaze ? gaze.reach : maxDist || 0);
-      gl.uniform1f(u("uSpread"), gaze ? gaze.spread : 0.22);
+      gl.uniform1f(u("uFrame"), frame);
+      setFovea(prog, fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, refine: 0 }, scene.camera, !fovea || forceFull);
       gl.uniform1f(u("uExposure"), exposureFor(sun));
       const halfTan = Math.tan(((scene.camera.fov || 70) * Math.PI) / 360);
       gl.uniform1f(u("uFoot"), (2 * halfTan) / Math.max(2, rh));
@@ -1037,9 +1015,9 @@ void main() {
         viewSize = null;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.disable(gl.BLEND);
-        return draw(scene, "full", 0, 0);
+        return draw(scene, "full", 0, null);
       };
-      if (!blitProgram || !stackProgram) return single();
+      if (!blitProgram || !resolveProgram) return single();
       let index = 0;
       for (let i = 0; i < hold.length; i += 1) {
         if (i !== newest && i !== prior) {
@@ -1048,49 +1026,47 @@ void main() {
         }
       }
       const slot = hold[index];
-      const far = farPixels(tw, th);
-      if (!fitHold(farSlot, far.width, far.height) || !fitHold(nearSlot, tw, th) || !fitHold(slot, tw, th)) return single();
+      const sized = accumSlot.w === tw && accumSlot.h === th;
+      if (!fitHold(accumSlot, tw, th) || !fitHold(slot, tw, th)) return single();
+      if (!sized) forceFull = true;
+      const base = scene.fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, still: false };
+      stillFrames = base.still ? stillFrames + 1 : 0;
+      // Each full peripheral cycle of a stable view halves the peripheral cell size.
+      const fovea = { ...base, refine: Math.floor(stillFrames / Math.max(1, base.period)) };
       releaseHold();
       gl.disable(gl.BLEND);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, farSlot.fbo);
-      viewSize = { w: far.width, h: far.height };
-      if (!draw(scene, "full", 0, 0)) {
-        viewSize = null;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        return false;
-      }
-      gl.bindFramebuffer(gl.FRAMEBUFFER, nearSlot.fbo);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, accumSlot.fbo);
       viewSize = { w: tw, h: th };
-      if (!draw(scene, "full", 0, NEAR_METERS)) {
+      const drew = draw(scene, "full", 0, fovea);
+      forceFull = false;
+      frame = (frame + 1) % 3600;
+      if (!drew) {
         viewSize = null;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         return false;
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, slot.fbo);
       gl.viewport(0, 0, tw, th);
-      gl.useProgram(stackProgram);
-      const gaze = scene.gaze || { x: 0.5, y: 0.5, gamma: 1 };
-      gl.uniform2f(stackGaze, gaze.x, gaze.y);
-      gl.uniform1f(stackGamma, gaze.gamma || 1);
+      gl.useProgram(resolveProgram);
+      setFovea(resolveProgram, fovea, scene.camera);
       gl.activeTexture(gl.TEXTURE11);
-      gl.bindTexture(gl.TEXTURE_2D, farSlot.tex);
-      gl.uniform1i(stackFar, 11);
-      gl.activeTexture(gl.TEXTURE12);
-      gl.bindTexture(gl.TEXTURE_2D, nearSlot.tex);
-      gl.uniform1i(stackNear, 12);
+      gl.bindTexture(gl.TEXTURE_2D, accumSlot.tex);
+      gl.uniform1i(gl.getUniformLocation(resolveProgram, "uAccum"), 11);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.activeTexture(gl.TEXTURE11);
       gl.bindTexture(gl.TEXTURE_2D, null);
-      gl.activeTexture(gl.TEXTURE12);
-      gl.bindTexture(gl.TEXTURE_2D, null);
       viewSize = null;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       if (newest >= 0) prior = newest;
       newest = index;
       return true;
+    },
+    // Force the next paint to trace every pixel (teleports, cuts).
+    invalidate() {
+      forceFull = true;
     },
     present(amount = 1) {
       if (!blitProgram || newest < 0) return false;
