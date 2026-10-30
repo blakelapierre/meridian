@@ -98,6 +98,16 @@ test("the trace rate follows acceleration, and the screen can still refresh", ()
   assert.ok(traceInterval(true, 0, 16) >= 125);
 });
 
+test("a moving camera never keeps a frame slower than 12fps", () => {
+  const box = { displayW: 1280, displayH: 720 };
+  const pace = createPicturePace();
+  let seen = pace.step({ gap: 16, ...box, still: false, speed: 1, accel: 0 });
+  for (let i = 0; i < 4; i += 1) seen = pace.step({ gap: 200, ...box, still: false, speed: 1, accel: 0 });
+  assert.ok(seen.scale < 0.4);
+  assert.ok(traceInterval(false, 0, 16) <= 1000 / 12 + 0.1);
+  assert.ok(traceInterval(true, 0, 16) > 1000 / 12);
+});
+
 test("a moving camera is pulled to at least 12fps in one step", () => {
   const box = { displayW: 1280, displayH: 720 };
   const pace = createPicturePace();
