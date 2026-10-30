@@ -8,11 +8,15 @@ The beach is two cells split at y = −40 m. South of that line is `atoll-0`. No
 
 ## This pass
 
-Whose turn it is still does not award a hit. A pose and an edit stay on different channels.
+A hit waits for a quorum of your cell. Everyone in the cell counts as a yes, so the shot still lands. The other cell does not vote.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+The other cell cannot vote no. A quorum of your own cell still passes.
 
 ## Later
 

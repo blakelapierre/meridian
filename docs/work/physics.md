@@ -8,11 +8,15 @@ The beach body is a capsule with weight, a stop window, jump, and crouch. Gravit
 
 ## This pass
 
-The shove happens once, when the dummy drops, not on every tick it stays down.
+Wind comes from where you are standing, not from one constant. Night still multiplies it.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+Wind is a function of where you stand. It is not stored on the cells.
 
 ## Later
 

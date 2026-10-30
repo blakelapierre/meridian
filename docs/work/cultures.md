@@ -8,11 +8,15 @@ Everyone wakes in a culture. The default is Holds. `?culture=hosts` starts with 
 
 ## This pass
 
-Walking back south of the cell line restores the name of the crate you woke with. The skills do not notice.
+A trainer stands by the table. Using them can mark a specialty, and a third is refused.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+The trainer does not raise a skill from nothing. They only refuse or mark a specialty.
 
 ## Later
 

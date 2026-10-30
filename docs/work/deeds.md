@@ -8,11 +8,15 @@ A bound hearth claims a 6 m radius. The binder may edit it. A stranger's certifi
 
 ## This pass
 
-While you are far from the hearth the line counts `away` in seconds. At 60 the claim still lapses.
+Once a minute a bound hearth spends 1 metal. If you cannot pay, the claim lapses.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+One missed upkeep lapses the claim. A second chance is not in the build.
 
 ## Later
 

@@ -6,11 +6,15 @@ Other clients are bodies. Tab cycles them. Backtick cycles objects. Standing ins
 
 ## This pass
 
-Dragging still does not slide the other body. Your pace stays cut while X is held and they are close.
+While you drag someone, they are drawn just ahead of you on your screen. Their own client does not move.
 
 ## Proves
 
 `test/lore.test.js` for the tier cutoffs at 12 and 40.
+
+## Next
+
+The dragged body is not asked to walk. The follow is only on your screen.
 
 ## Later
 

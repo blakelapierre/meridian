@@ -6,11 +6,15 @@ Walking into the compound volume offers `atoll-skirmish`. E joins the side you e
 
 ## This pass
 
-The channel name stays on the strike line. Planting is still the contract's own channel, not a new button.
+Holding still and pressing E on a live core starts a defuse. Moving cancels it. The line says `puzzle`.
 
 ## Proves
 
 `test/enter.test.js`.
+
+## Next
+
+Moving breaks a defuse. Firing does not.
 
 ## Later
 

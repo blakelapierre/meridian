@@ -8,11 +8,15 @@ Friendliness is still a score. Y offers a fellowship to the person you have targ
 
 ## This pass
 
-A charter still cannot tithe. `no spend` stays on the line while the wallet is empty.
+The first fellowship is a patron. A vein tap pays them 1 metal, counted on you, not handed over.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+The tithe is a count on you. It is not paid into the patron's hands.
 
 ## Later
 

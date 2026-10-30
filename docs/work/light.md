@@ -6,11 +6,15 @@ The sun is a direction on a 72-minute day. The picture brightens when the sun is
 
 ## This pass
 
-Dusk and dawn do not change the fin. Only turning it does, and only to 60%.
+Using a fin breaks it. A broken fin gives no flux.
 
 ## Proves
 
 `test/hearth.test.js` for noon against the horizon.
+
+## Next
+
+A broken fin stays broken. Metal will not repair it.
 
 ## Later
 

@@ -16,11 +16,15 @@ Peers meet through the lighthouse and a WebRTC data channel. Positions are unrel
 
 ## This pass
 
-A pose goes out on the snap channel. An edit goes out on ops. They are not the same socket.
+Lore has its own channel. If that channel is not open, the same packet falls back to ops.
 
 ## Proves
 
 `test/fill.test.js` for the edit. The frame is the existing terrain proposal.
+
+## Next
+
+The harm signature is not sent on the lore channel, even when an archive is linked.
 
 ## Later
 

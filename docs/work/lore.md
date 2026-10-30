@@ -8,11 +8,15 @@ There is no narrator and no quest line. The names in the world are Cairn, Atoll,
 
 ## This pass
 
-Picking up a slip keeps who wrote it, when the slip has a name. Yours says self.
+A charter names its first person as voucher, on the line. That name is not written on an object.
 
 ## Proves
 
 `test/audio.test.js`.
+
+## Next
+
+The voucher is on the status line. Identifying the table does not read that name.
 
 ## Later
 

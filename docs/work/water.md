@@ -8,11 +8,15 @@ The sea is still the edge of the beach. A dug pit whose floor is below −0.2 m 
 
 ## This pass
 
-A pool that reaches y = −190 is taken by the sea and removed. It still will not climb.
+Z on a road opens a gate. Water steps through an open gate and is dammed by a shut one.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+An open gate lets a pool through. It does not lower the pool.
 
 ## Later
 

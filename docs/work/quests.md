@@ -8,11 +8,15 @@ Nothing on the status line is an objective. The atoll paper is lore only. The ch
 
 ## This pass
 
-The picked-up slip remembers who wrote it. The screen still has no objective.
+Using a wall pins your latest told sentence onto it. Salvaging the wall does not yet drop that sentence.
 
 ## Proves
 
 `test/audio.test.js`.
+
+## Next
+
+Salvaging a wall does not drop its pinned sentence as a slip.
 
 ## Later
 

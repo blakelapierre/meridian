@@ -8,11 +8,15 @@ Each client mints an Ed25519 key and signs proposals, shots, walls, lore, and pi
 
 ## This pass
 
-The harm count stays on this client. It is not yet a log an archive keeps.
+A harm line keeps one signature byte. It is not delivered to an archive.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+The signature is one byte. An archive does not keep the receipt.
 
 ## Later
 
