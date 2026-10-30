@@ -13,8 +13,8 @@
     <script type="importmap">
       {
         "imports": {
-          "@noble/ed25519": "/node_modules/@noble/ed25519/index.js",
-          "@noble/hashes/sha2.js": "/node_modules/@noble/hashes/sha2.js"
+          "@noble/ed25519": "../../vendor/noble/ed25519/index.js",
+          "@noble/hashes/sha2.js": "../../vendor/noble/hashes/sha2.js"
         }
       }
     </script>
@@ -27,7 +27,7 @@
     <h1>Shot check</h1>
     <p>Open either tab first. One side logs <code>offered</code>, the other <code>answered</code>. <code>lighthouse failed</code> means <code>npm start</code> is not running.</p>
     <p>Pass: tab A logs <code>verified hit</code>. Tab B logs <code>traced hit</code>. <code>bad signature</code> or a miss is a fail.</p>
-    <p><a href="/tools/shot/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/shot/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
+    <p><a href="../../tools/shot/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="../../tools/shot/index.html?id=b&to=a">Tab B</a> · <a href="../../">All checks</a></p>
     </div>
     <pre></pre>
     <script type="module" src="./shot.js"></script>
