@@ -23,7 +23,7 @@ test("looking around reveals a wedge that grows with mapping", () => {
   assert.ok(wide.length > near.length);
 });
 
-test("a look stamps the ground under the view, not a flat guess ahead of the feet", () => {
+test("a look stamps the ground from the eyes, not from the chase camera", () => {
   const steep = revealLook({ x: 0, y: -150, yaw: 0, pitch: -1.2, skills: { mapping: 0 } });
   const ahead = steep.filter((point) => point.y !== -150 || point.x !== 0);
   assert.ok(ahead.length > 0);
@@ -33,34 +33,21 @@ test("a look stamps the ground under the view, not a flat guess ahead of the fee
   const levelHits = level.filter((point) => point.x !== 0 || point.y !== 0);
   assert.ok(levelHits.length > 0);
   assert.ok(levelHits.every((point) => point.y > 0 && point.y < 8), levelHits);
-  const behind = [0, -153.4, 2.2];
-  const chase = revealLook({
-    x: 0,
-    y: -150,
-    yaw: 0,
-    pitch: -0.45,
-    origin: behind,
-    dir: lookDirection(0, -0.45),
-    skills: { mapping: 0 },
-  });
-  assert.ok(chase.length > 1);
-  assert.ok(chase.every((point) => Math.hypot(point.x, point.y + 150) < revealRange({}) + 0.05), chase);
   const feet = [0, -150, 0];
-  const origin = chaseOrigin(feet, 0, 0);
-  const levelChase = revealLook({
+  const eyes = revealLook({ x: feet[0], y: feet[1], yaw: 0, pitch: 0, skills: { mapping: 0 } });
+  const chase = revealLook({
     x: feet[0],
     y: feet[1],
     yaw: 0,
     pitch: 0,
-    origin,
+    origin: chaseOrigin(feet, 0, 0),
     dir: lookDirection(0, 0),
     skills: { mapping: 0 },
   });
-  const near = levelChase.filter((point) => point.x !== feet[0] || point.y !== feet[1]);
-  assert.ok(near.length > 0);
-  const closest = Math.min(...near.map((point) => Math.hypot(point.x - feet[0], point.y - feet[1])));
-  assert.ok(closest < 6, closest);
-  assert.ok(near.every((point) => point.y > origin[1]));
+  const eyeHits = eyes.filter((point) => point.x !== feet[0] || point.y !== feet[1]);
+  const chaseHits = chase.filter((point) => point.x !== feet[0] || point.y !== feet[1]);
+  assert.ok(eyeHits.every((point) => point.y > feet[1]));
+  assert.ok(Math.min(...eyeHits.map((point) => point.y)) > Math.min(...chaseHits.map((point) => point.y)));
   const hill = hitGround([0, 0, 2], [0, 1, 0], (x, y) => (y > 6 ? 3 : 0), 16);
   assert.ok(hill.y > 5.5 && hill.y < 7, hill.y);
 });
