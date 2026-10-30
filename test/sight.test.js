@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { blendOrigin, easeFollow, gazeAxis, gazeFor, gazeOnScreen, gazePlan, gazeUnaxis, maxZoom, rangeRead, relaxOrbit, stepFollow, stepZoom, zoomFov } from "../src/sim/sight.js";
+import { blendOrigin, easeFollow, gazeAxis, gazeFor, gazeOnScreen, gazePlan, gazeUnaxis, maxZoom, rangeRead, relaxOrbit, sightPractice, stepFollow, stepZoom, zoomFov } from "../src/sim/sight.js";
 import { lookDirection } from "../src/sim/hands.js";
 
 test("the wheel sets follow distance and height instead of zooming", () => {
@@ -108,4 +108,14 @@ test("rays gather on the gaze, and eyesight and focus scale that patch", () => {
   assert.ok(Math.abs(down.x - 0.5) < 0.08, down.x);
   assert.ok(down.y > 0.55, down.y);
   assert.ok(down.reach > 18);
+});
+
+test("looking trains the eyes, and focus only while they are held on something", () => {
+  assert.deepEqual(sightPractice({}), { eyesight: true, focus: false });
+  assert.deepEqual(sightPractice({ down: true, aimed: true, eyes: true }), { eyesight: false, focus: false });
+  assert.equal(sightPractice({ aimed: true }).focus, true);
+  assert.equal(sightPractice({ zoom: 0.2 }).focus, true);
+  assert.equal(sightPractice({ eyes: true, still: true }).focus, true);
+  assert.equal(sightPractice({ eyes: true }).focus, false);
+  assert.equal(sightPractice({ still: true }).focus, false);
 });
