@@ -47,6 +47,16 @@ function texture(gl, width) {
 }
 
 export const SPHERE_BUDGET = MAX_SPHERES;
+export const NEAR_METERS = 18;
+
+export function farPixels(width, height) {
+  const w = Math.max(2, width | 0);
+  const h = Math.max(2, height | 0);
+  return {
+    width: Math.max(2, Math.floor(w / 4)),
+    height: Math.max(2, Math.floor(h / 4)),
+  };
+}
 
 export function fitCanvas(canvas, scale = 1, pixels = null) {
   const boxW = canvas.clientWidth || window.innerWidth || 960;
@@ -108,6 +118,7 @@ uniform int uDigs;
 uniform int uPrints;
 uniform vec4 uWork;
 uniform float uTime;
+uniform float uMaxDist;
 in vec2 vRay;
 uniform sampler2D uSphereTex;
 uniform sampler2D uSphereColor;
@@ -240,15 +251,18 @@ bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
     tFar = min(tFar, tGround);
   }
   tFar = clamp(tFar, tNear, 8000.0);
+  if (uMaxDist > 0.0) tFar = min(tFar, uMaxDist);
   float prevT = tNear;
   vec3 prevQ = ro + rd * prevT;
   float prevDist = prevQ.z - duneHeight(prevQ.xy);
   bool hit = false;
   float lo = prevT;
   float hi = prevT;
-  float advance = max((tFar - prevT) / 80.0, 0.2);
+  float budget = uMaxDist > 0.0 ? 28.0 : 80.0;
+  float advance = max((tFar - prevT) / budget, 0.12);
   t = prevT;
   for (int i = 0; i < 80; i++) {
+    if (float(i) >= budget || t >= tFar) break;
     t += advance;
     vec3 q = ro + rd * t;
     float dist = q.z - duneHeight(q.xy);
@@ -257,6 +271,7 @@ bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
       hit = true;
       lo = prevT;
       hi = t;
+      break;
     }
     prevDist = dist;
     prevT = t;
@@ -369,6 +384,7 @@ void main() {
   vec3 ro = uOrigin;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
+  float cover = 1.0;
   for (int bounce = 0; bounce < 5; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
@@ -468,22 +484,39 @@ void main() {
         found = true;
       }
     }
-    if (!found) {
+    float workT = 1.0e30;
+    if (bounce == 0 && uWork.w > 0.5) {
+      float rise = max(uWork.z, 0.08);
+      float wide = rise < 0.4 ? 0.42 : 0.24;
+      float deep = rise < 0.4 ? 0.42 : 0.08;
+      float gt;
+      bool mark = uWork.w < 1.5 || uWork.w > 3.5;
+      if (mark && boxHit(ro, rd, vec3(uWork.x - wide, uWork.y - deep, 0.0), vec3(uWork.x + wide, uWork.y + deep, rise), gt) && gt < bestT) workT = gt;
+    }
+    bool ghost = workT < 1.0e20;
+    if (uMaxDist > 0.0 && bounce == 0 && !ghost && (!found || bestT > uMaxDist)) {
+      fragColor = vec4(0.0);
+      return;
+    }
+    if (!found && !ghost) {
       accum += thru * skyColor(rd);
       break;
     }
-    if (dot(bestN, rd) > 0.0) bestN = -bestN;
-    if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
-    else {
-      float nd = max(dot(bestN, normalize(uSun)), 0.0);
-      bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;
-    }
-    if (bounce == 0) {
-      float low = exp(-max(bestP.z, 0.0) * 0.11);
-      float fog = (1.0 - exp(-bestT * 0.0011)) * mix(0.35, 1.0, low);
-      fog = clamp(fog, 0.0, 0.62);
-      vec3 haze = mix(vec3(0.42, 0.48, 0.54), vec3(0.74, 0.8, 0.86), smoothstep(-0.05, 0.25, normalize(uSun).z));
-      bestRgb = mix(bestRgb, haze, fog);
+    if (uMaxDist > 0.0 && bounce == 0) cover = clamp((uMaxDist - min(bestT, workT)) / 6.0, 0.0, 1.0);
+    if (found) {
+      if (dot(bestN, rd) > 0.0) bestN = -bestN;
+      if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
+      else {
+        float nd = max(dot(bestN, normalize(uSun)), 0.0);
+        bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;
+      }
+      if (bounce == 0) {
+        float low = exp(-max(bestP.z, 0.0) * 0.11);
+        float fog = (1.0 - exp(-bestT * 0.0011)) * mix(0.35, 1.0, low);
+        fog = clamp(fog, 0.0, 0.62);
+        vec3 haze = mix(vec3(0.42, 0.48, 0.54), vec3(0.74, 0.8, 0.86), smoothstep(-0.05, 0.25, normalize(uSun).z));
+        bestRgb = mix(bestRgb, haze, fog);
+      }
     }
     if (bounce == 0 && uWork.w > 0.5) {
       vec2 cell = uWork.xy;
@@ -514,13 +547,14 @@ void main() {
       }
     }
     float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
+    if (uMaxDist > 0.0 && mirror < 0.2) mirror = 0.0;
     accum += thru * bestRgb * (1.0 - mirror);
     thru *= mirror;
     if (thru <= 0.001) break;
     rd = normalize(reflect(rd, bestN));
     ro = bestP + bestN * 0.05;
   }
-  fragColor = vec4(accum, 1.0);
+  fragColor = vec4(accum, uMaxDist > 0.0 ? cover : 1.0);
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
   const fs = compile(gl, gl.FRAGMENT_SHADER, frag);
@@ -668,7 +702,40 @@ void main() {
   const blitOlder = blitProgram ? gl.getUniformLocation(blitProgram, "uOlder") : null;
   const blitNewer = blitProgram ? gl.getUniformLocation(blitProgram, "uNewer") : null;
   const blitMix = blitProgram ? gl.getUniformLocation(blitProgram, "uMix") : null;
-  const draw = (scene, mode, count) => {
+  const stackFs = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
+precision highp float;
+uniform sampler2D uFar;
+uniform sampler2D uNear;
+in vec2 vUV;
+out vec4 fragColor;
+void main() {
+  vec4 farColor = texture(uFar, vUV);
+  vec4 nearColor = texture(uNear, vUV);
+  fragColor = vec4(mix(farColor.rgb, nearColor.rgb, nearColor.a), 1.0);
+}`);
+  let stackProgram = null;
+  if (blitVs && stackFs) {
+    stackProgram = gl.createProgram();
+    gl.attachShader(stackProgram, blitVs);
+    gl.attachShader(stackProgram, stackFs);
+    gl.bindAttribLocation(stackProgram, 0, "aPos");
+    gl.linkProgram(stackProgram);
+    if (!gl.getProgramParameter(stackProgram, gl.LINK_STATUS)) stackProgram = null;
+  }
+  const stackFar = stackProgram ? gl.getUniformLocation(stackProgram, "uFar") : null;
+  const stackNear = stackProgram ? gl.getUniformLocation(stackProgram, "uNear") : null;
+  const makeTarget = (filter) => {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
+  };
+  const farSlot = makeTarget(gl.LINEAR);
+  const nearSlot = makeTarget(gl.NEAREST);
+  const draw = (scene, mode, count, maxDist = 0) => {
       sphereData.fill(0);
       sphereColor.fill(0);
       boxMin.fill(0);
@@ -789,6 +856,7 @@ void main() {
       const work = scene.work;
       gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
       gl.uniform1f(u("uTime"), scene.time || 0);
+      gl.uniform1f(u("uMaxDist"), maxDist || 0);
       if (prog === pointProgram) {
         const n = Math.max(0, Math.min(count | 0, rayUVs.length / 2));
         const w = Math.max(1, canvas.width);
@@ -814,11 +882,13 @@ void main() {
     paint(scene, width, height) {
       const tw = Math.max(2, width | 0 || canvas.width);
       const th = Math.max(2, height | 0 || canvas.height);
-      if (!blitProgram) {
+      const single = () => {
         viewSize = null;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        return draw(scene, "full", 0);
-      }
+        gl.disable(gl.BLEND);
+        return draw(scene, "full", 0, 0);
+      };
+      if (!blitProgram || !stackProgram) return single();
       let index = 0;
       for (let i = 0; i < hold.length; i += 1) {
         if (i !== newest && i !== prior) {
@@ -827,19 +897,43 @@ void main() {
         }
       }
       const slot = hold[index];
-      if (!fitHold(slot, tw, th)) {
+      const far = farPixels(tw, th);
+      if (!fitHold(farSlot, far.width, far.height) || !fitHold(nearSlot, tw, th) || !fitHold(slot, tw, th)) return single();
+      releaseHold();
+      gl.disable(gl.BLEND);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, farSlot.fbo);
+      viewSize = { w: far.width, h: far.height };
+      if (!draw(scene, "full", 0, 0)) {
         viewSize = null;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        return draw(scene, "full", 0);
+        return false;
       }
-      releaseHold();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, nearSlot.fbo);
+      viewSize = { w: tw, h: th };
+      if (!draw(scene, "full", 0, NEAR_METERS)) {
+        viewSize = null;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return false;
+      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, slot.fbo);
       gl.viewport(0, 0, tw, th);
-      viewSize = { w: tw, h: th };
-      const traced = draw(scene, "full", 0);
+      gl.useProgram(stackProgram);
+      gl.activeTexture(gl.TEXTURE11);
+      gl.bindTexture(gl.TEXTURE_2D, farSlot.tex);
+      gl.uniform1i(stackFar, 11);
+      gl.activeTexture(gl.TEXTURE12);
+      gl.bindTexture(gl.TEXTURE_2D, nearSlot.tex);
+      gl.uniform1i(stackNear, 12);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.activeTexture(gl.TEXTURE11);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.activeTexture(gl.TEXTURE12);
+      gl.bindTexture(gl.TEXTURE_2D, null);
       viewSize = null;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      if (!traced) return false;
       if (newest >= 0) prior = newest;
       newest = index;
       return true;
