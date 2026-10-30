@@ -18,6 +18,8 @@ export function createJump() {
 }
 
 export function stepLift(world, player, stamina, input, jump, skill, acceleration, airborne) {
+  const ground = world.ground || 0;
+  const altitude = player.position[2] - ground;
   const cap = jumpAbility(skill);
   const sprint = !airborne && input.sprint;
   if (!airborne && !input.jump) jump.spent = false;
@@ -28,15 +30,15 @@ export function stepLift(world, player, stamina, input, jump, skill, acceleratio
     jump.lift = true;
     jump.spent = true;
     launched = true;
-  } else if (airborne && input.jump && jump.lift && player.position[2] < cap && player.velocity[2] > 0) {
+  } else if (airborne && input.jump && jump.lift && altitude < cap && player.velocity[2] > 0) {
     impulse = LIFT_ACCEL;
   } else if (!input.jump) {
     jump.lift = false;
   }
   stepStamina(stamina, { sprint, jump: launched });
   stepPlayer(world, player, acceleration, false, impulse);
-  if (jump.lift && player.position[2] > cap) {
-    player.position[2] = cap;
+  if (jump.lift && player.position[2] - ground > cap) {
+    player.position[2] = ground + cap;
     if (player.velocity[2] > 0) player.velocity[2] = 0;
     jump.lift = false;
   }

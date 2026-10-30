@@ -132,36 +132,47 @@ vec3 duneNormal(vec2 p) {
 }
 
 bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
-  t = 0.08;
+  if (dot(ro.xy, ro.xy) <= 65536.0 && ro.z < duneHeight(ro.xy) + 0.02) {
+    t = 0.02;
+    p = ro + rd * t;
+    p.z = duneHeight(p.xy);
+    return true;
+  }
+  float prevT = 0.02;
+  vec3 prevP = ro + rd * prevT;
+  float prevDist = prevP.z - duneHeight(prevP.xy);
+  t = 0.28;
   bool hit = false;
-  float tHit = 0.08;
-  p = ro;
-  for (int i = 0; i < 28; i++) {
+  float lo = prevT;
+  float hi = t;
+  for (int i = 0; i < 40; i++) {
     vec3 q = ro + rd * t;
     float dist = q.z - duneHeight(q.xy);
     bool beach = dot(q.xy, q.xy) <= 65536.0;
-    bool close = !hit && beach && t > 0.02 && t < 160.0 && dist < 0.35;
-    if (close) {
+    bool cross = !hit && beach && t < 140.0 && prevDist > 0.0 && dist <= 0.02;
+    if (cross) {
       hit = true;
-      tHit = t;
-      p = q;
-      p.z = q.z - dist;
+      lo = prevT;
+      hi = t;
     }
-    float advance = clamp(dist * 0.5, 0.45, 3.2);
-    t += (!hit && beach && t < 160.0) ? advance : 0.0;
+    prevDist = dist;
+    prevT = t;
+    t += (!hit && beach && t < 140.0) ? clamp(max(dist, 0.0) * 0.55, 0.28, 2.0) : 0.0;
   }
-  if (!hit && rd.z < -0.02) {
-    float tf = -ro.z / rd.z;
-    vec3 q = ro + rd * tf;
-    if (tf > 0.02 && tf < 400.0 && dot(q.xy, q.xy) <= 65536.0) {
-      hit = true;
-      tHit = tf;
-      p = q;
-      p.z = duneHeight(q.xy);
-    }
+  if (!hit) {
+    p = ro;
+    return false;
   }
-  t = tHit;
-  return hit;
+  for (int k = 0; k < 8; k++) {
+    float mid = 0.5 * (lo + hi);
+    vec3 m = ro + rd * mid;
+    if (m.z - duneHeight(m.xy) > 0.0) lo = mid;
+    else hi = mid;
+  }
+  t = hi;
+  p = ro + rd * t;
+  p.z = duneHeight(p.xy);
+  return dot(p.xy, p.xy) <= 65536.0;
 }
 
 bool boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t) {
