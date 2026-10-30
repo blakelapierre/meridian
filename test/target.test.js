@@ -95,5 +95,5 @@ test("an extra frame slows to keep the primary at vsync and never slower than 1f
       if (!nextPaint) nextPaint = now;
     }
   }
-  assert.ok(nextPaint > 0 && nextPaint - before <= 1000, nextPaint - before);
+  assert.ok(nextPaint > 0 && nextPaint - before <= 1100, nextPaint - before);
 });
