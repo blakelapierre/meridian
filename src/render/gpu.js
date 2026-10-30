@@ -116,12 +116,32 @@ vec3 sphereAlbedo(vec3 n, int i, vec3 fallback) {
   return tiled(i, vec2(u, v), fallback);
 }
 
+float duneHeight(vec2 p) {
+  float roll = sin(p.x * 0.05) * cos(p.y * 0.041);
+  float wash = sin((p.x + p.y) * 0.08 + 1.3);
+  return 0.22 * roll + 0.12 * wash;
+}
+
+vec3 duneNormal(vec2 p) {
+  float e = 0.75;
+  float h = duneHeight(p);
+  float hx = duneHeight(p + vec2(e, 0.0));
+  float hy = duneHeight(p + vec2(0.0, e));
+  return normalize(vec3(h - hx, h - hy, e));
+}
+
 bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
   if (rd.z > -1.0e-4) return false;
   t = -ro.z / rd.z;
-  if (t < 0.02 || t > 400.0) return false;
+  if (t < 0.02) t = 0.02;
+  for (int i = 0; i < 3; i++) {
+    p = ro + rd * t;
+    t = (duneHeight(p.xy) - ro.z) / rd.z;
+    if (t < 0.02) t = 0.02;
+  }
+  if (t > 400.0) return false;
   p = ro + rd * t;
-  p.z = 0.0;
+  p.z = duneHeight(p.xy);
   return dot(p.xy, p.xy) <= 256.0 * 256.0;
 }
 
@@ -259,8 +279,9 @@ void main() {
     } else if (sand && !openMouth && sandT < bestT) {
       bestT = sandT;
       bestP = sandP;
-      bestN = vec3(0.0, 0.0, 1.0);
-      bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.55, 0.48, 0.32));
+      bestN = duneNormal(sandP.xy);
+      float crest = clamp(sandP.z * 1.8 + 0.5, 0.0, 1.0);
+      bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.55, 0.48, 0.32)) * mix(0.84, 1.06, crest);
       bestRef = 0.02;
       found = true;
     }

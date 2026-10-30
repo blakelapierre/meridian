@@ -21,6 +21,7 @@ The prose for the world is in [docs/lore](../lore/README.md). The errands are in
 | [strike.md](strike.md) | The compound contract |
 | [light.md](light.md) | Sun and the fin |
 | [picture.md](picture.md) | Resolution and frame pace |
+| [life.md](life.md) | Dunes, scrub, and the animals |
 | [wire.md](wire.md) | What peers actually exchange |
 | [audio.md](audio.md) | Cues and the mute key |
 | [lore.md](lore.md) | What the beach is allowed to say |
