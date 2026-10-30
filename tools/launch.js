@@ -1,8 +1,11 @@
+// Site root: "/" under npm start, "/meridian/" on GitHub Pages.
+export const ROOT = typeof document !== "undefined" ? new URL("../", import.meta.url).pathname : "/";
+
 export const AI_ORDER = ["surveyor", "miner", "builder", "marksman"];
 
 export function aiHrefs(primaryId, origin = "http://127.0.0.1") {
   return AI_ORDER.map((agenda) => {
-    const url = new URL("/tools/view/index.html", origin);
+    const url = new URL(ROOT + "tools/view/index.html", origin);
     url.searchParams.set("id", agenda);
     url.searchParams.set("to", `${primaryId},c`);
     url.searchParams.set("offer", "c");
@@ -26,7 +29,7 @@ export function trio(href, origin = "http://127.0.0.1") {
   second.searchParams.set("to", id);
   if (primary.searchParams.get("offer") === "1") second.searchParams.delete("offer");
   else second.searchParams.set("offer", "1");
-  const follow = new URL("/tools/view/index.html", origin);
+  const follow = new URL(ROOT + "tools/view/index.html", origin);
   follow.searchParams.set("id", "c");
   follow.searchParams.set("follow", id);
   const look = primary.searchParams.get("look");
@@ -77,7 +80,7 @@ export function tiles(availWidth, availHeight, availLeft = 0, availTop = 0) {
 
 export function benchHref(href, origin = "http://127.0.0.1") {
   const [primary, second, follow] = trio(href, origin);
-  const bench = new URL("/tools/bench/index.html", origin);
+  const bench = new URL(ROOT + "tools/bench/index.html", origin);
   bench.searchParams.set("primary", primary);
   bench.searchParams.set("follow", follow);
   const primaryUrl = new URL(primary, origin);
@@ -106,12 +109,14 @@ if (typeof document !== "undefined") {
   let bench = null;
   document.addEventListener("click", (event) => {
     if (!event.isTrusted || (event.button !== undefined && event.button !== 0)) return;
-    const link = event.target.closest?.("a[href^='/tools/']");
+    const link = event.target.closest?.("a[href*='tools/']");
     if (!link) return;
-    const hrefAttr = link.getAttribute("href");
-    if (hrefAttr.startsWith("/tools/archive")) return;
+    const target = new URL(link.href);
+    if (target.origin !== location.origin || !target.pathname.startsWith(ROOT + "tools/")) return;
+    const hrefAttr = target.pathname + target.search;
+    if (hrefAttr.startsWith(ROOT + "tools/archive")) return;
     event.preventDefault();
-    const href = benchHref(link.getAttribute("href"), location.origin);
+    const href = benchHref(hrefAttr, location.origin);
     const width = screen.availWidth;
     const height = screen.availHeight;
     const left = screen.availLeft || 0;

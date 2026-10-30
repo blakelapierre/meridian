@@ -163,10 +163,10 @@ const agent = agendaName && AGENDAS[agendaName] ? createAgent(agendaName) : null
 const keys = new Set();
 const peer = Boolean(params.get("id"));
 
-const atoll = await fetch("/content/atoll.json").then((response) => response.json());
+const atoll = await fetch(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.json());
 const catalogHex = await Promise.all([
-  fetch("/content/atoll.json").then((response) => response.arrayBuffer()),
-  fetch("/content/catalog.json").then((response) => response.arrayBuffer()),
+  fetch(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.arrayBuffer()),
+  fetch(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
 ]).then(([atollBytes, catalogBytes]) => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
 const home = agent ? AGENDAS[agendaName].home : null;
 const spawn = home
