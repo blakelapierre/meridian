@@ -7,6 +7,39 @@ export function nextScale(scale, averageMs, refreshMs, still = false) {
   return scale;
 }
 
+export function sizeAt(level, targetW, targetH) {
+  const scale = 1 / 2 ** Math.max(0, level);
+  let width = Math.max(2, Math.round(targetW * scale));
+  let height = Math.max(2, Math.round(targetH * scale));
+  if (width % 2) width -= 1;
+  if (height % 2) height -= 1;
+  return { width: Math.max(2, width), height: Math.max(2, height) };
+}
+
+export function coverLevel(targetW, targetH, rays) {
+  const budget = Math.max(80, rays);
+  let level = 0;
+  while (level < 8) {
+    const size = sizeAt(level, targetW, targetH);
+    if (size.width * size.height <= budget) return level;
+    level += 1;
+  }
+  return 8;
+}
+
+export function stepOctave(level, covered) {
+  if (covered < level) return Math.max(0, level - 1);
+  if (covered > level) return Math.min(8, level + 1);
+  return Math.max(0, Math.min(8, level));
+}
+
+export function tuneRays(rays, { missed = false, paintMs = 0, refresh = 1000 / 60, cap = 2000000 } = {}) {
+  const budget = Math.max(8, refresh * 0.9);
+  if (missed || paintMs > budget) return Math.max(800, rays * 0.65);
+  if (paintMs < budget * 0.75) return Math.min(cap, rays * 1.3 + 200, rays + 30000);
+  return rays;
+}
+
 export function viewStill(previous, next) {
   if (!previous || !next) return false;
   if (next.busy) return false;

@@ -1,7 +1,7 @@
 # MERIDIAN
 ## Engine basis
 
-The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `4698794ab1b3c170163ba9bce1f746c9269945fe` (`pen.js`). That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
+The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `c5338e3e7acd661ac86a4f783a4785fb49612b6b`. That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
 
 This file wins over [engineering.md](engineering.md) on what draws the frame and what integrates motion. It does not win on damage numbers, the keymap, the chunk hash, or packet layout.
 
@@ -32,7 +32,7 @@ The demo only intersects spheres. Meridian's `cast` keeps that loop and adds two
 
 Bodies, the dummy, and projectiles stay spheres. A standing character is drawn as a sphere of radius **0.35 m** until a capsule intersection exists. That sphere is the picture. It is not the merge collider.
 
-One extra ray toward the sun is allowed, using `cast`, and only to darken a hit. The pinned pen's picture is four reflection steps, and sphere color read from the hit normal. The GPU path does those five hits. Later steps test spheres, boxes, and the sea. Only the first step marches the hills. Shots still use the first hit from `cast`.
+The GPU path follows the pin: sphere color from the hit normal, four reflection steps, and a picture that starts coarse. It steps one octave toward the window while the frame holds vsync, and drops an octave when a frame misses. A still view may fill the remaining pixels with scattered rays. Motion draws the whole octave. Later reflection steps test spheres, boxes, and the sea. Only the first step marches the hills. Shots still use the first hit from `cast`.
 
 ### Physics
 

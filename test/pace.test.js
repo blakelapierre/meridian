@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPacer, easePixels, nativePixels, nextScale, paceWord, playPixels, shouldPaint, viewStill } from "../src/render/pace.js";
+import { coverLevel, createPacer, easePixels, nativePixels, nextScale, paceWord, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -63,4 +63,15 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: true, arrived: true, holding: false }), "vsync recover");
   assert.equal(paceWord("vsync", { still: true, arrived: true, holding: true }), "vsync native");
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
+});
+
+test("resolution climbs one octave toward the window and steps back when a frame misses", () => {
+  const coarse = sizeAt(2, 960, 540);
+  assert.equal(coarse.width, 240);
+  assert.equal(coarse.height, 134);
+  assert.ok(coverLevel(960, 540, 4000) > coverLevel(960, 540, 200000));
+  assert.equal(stepOctave(4, 2), 3);
+  assert.equal(stepOctave(2, 4), 3);
+  assert.ok(tuneRays(4000, { missed: true, paintMs: 4, refresh: 16 }) < 4000);
+  assert.ok(tuneRays(4000, { missed: false, paintMs: 4, refresh: 16 }) > 4000);
 });

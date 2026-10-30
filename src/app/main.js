@@ -4,9 +4,9 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=59";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=60";
 import { createFps } from "../render/fps.js";
-import { createPacer, easePixels, nativePixels, paceWord, playPixels, soldierTarget, viewStill } from "../render/pace.js?v=52";
+import { createPacer, coverLevel, nativePixels, paceWord, sizeAt, stepOctave, tuneRays, viewStill } from "../render/pace.js?v=60";
 import {
   authority,
   bandage,
@@ -91,6 +91,9 @@ const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
+let octave = 4;
+let rayBudget = 4000;
+let paintKind = "full";
 if (painter) {
   fitCanvas(canvas, viewScale);
   canvas.style.imageRendering = "auto";
@@ -1165,7 +1168,10 @@ function paint(sample) {
   canvas.dataset.center = `${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)}`;
   showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
   if (painter) {
-    if (!painter.paint(scene)) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
+    const drew = paintKind === "points" && painter.paintRandom
+      ? painter.paintRandom(scene, Math.min(8000, rayBudget))
+      : painter.paint(scene);
+    if (!drew) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
     return scene;
   }
   if (!context) {
@@ -1971,25 +1977,44 @@ if (params.get("still") !== "1") {
     const still = stillFor >= 0.45;
     const boxW = canvas.clientWidth || window.innerWidth || 960;
     const boxH = canvas.clientHeight || window.innerHeight || 540;
-    const targetPixels = soldierTarget(
-      still,
-      nativePixels(boxW, boxH, window.devicePixelRatio || 1),
-      playPixels(boxW, boxH),
-    );
-    easedPixels = easedPixels ? easePixels(easedPixels, targetPixels, dt) : targetPixels;
     const decision = extra && !document.hidden
       ? pacer.considerExtra(now, primaryHolding)
       : pacer.consider(now, extra ? false : active);
     if (!extra && paceBus) paceBus.postMessage({ role: "primary", holding: decision.holding });
     viewScale = decision.scale;
     const native = nativePixels(boxW, boxH, window.devicePixelRatio || 1);
-    const arrived = still && easedPixels && easedPixels.width >= native.width * 0.95 && easedPixels.height >= native.height * 0.95;
+    let covered = coverLevel(native.width, native.height, rayBudget);
+    if (extra) covered = Math.max(covered, 3);
+    octave = stepOctave(octave, covered);
+    if (!still) octave = Math.max(octave, covered);
+    const size = sizeAt(octave, native.width, native.height);
+    const pixels = size.width * size.height;
+    const same = canvas.width === size.width && canvas.height === size.height;
+    canvas.dataset.level = String(octave);
+    canvas.style.imageRendering = octave === 0 ? "auto" : "pixelated";
+    if (painter) {
+      if (!same) {
+        canvas.width = size.width;
+        canvas.height = size.height;
+      }
+    } else {
+      fitCanvas(canvas, viewScale, easedPixels);
+    }
+    paintKind = !painter || extra || !still || !same || rayBudget >= pixels ? "full" : "points";
+    const arrived = still && octave === 0;
     canvas.dataset.pace = paceWord(decision.mode, { still, arrived, holding: decision.holding });
     if (params.get("nopaint") !== "1" && decision.paint) {
-      if (painter) fitCanvas(canvas, viewScale, easedPixels);
       const started = performance.now();
       paint(sample);
-      pacer.note(performance.now() - started, active, still);
+      const paintMs = performance.now() - started;
+      if (!extra) {
+        rayBudget = tuneRays(rayBudget, {
+          missed: decision.holding === false,
+          paintMs,
+          refresh: decision.refresh,
+        });
+      }
+      pacer.note(paintMs, active, still);
       canvas.dataset.fps = String(fps.paint(now));
       const fpsNode = document.querySelector("#fps");
       if (fpsNode) fpsNode.style.color = String(canvas.dataset.pace || "").includes("recover") ? "#fc8" : "#9f9";

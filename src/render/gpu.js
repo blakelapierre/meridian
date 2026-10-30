@@ -65,7 +65,7 @@ export function createGpuPainter(canvas) {
       antialias: false,
       depth: false,
       stencil: false,
-      preserveDrawingBuffer: false,
+      preserveDrawingBuffer: true,
     });
   } catch {
     return null;
@@ -74,7 +74,20 @@ export function createGpuPainter(canvas) {
   gl.getExtension("EXT_color_buffer_float");
   const vert = `#version 300 es
 in vec2 aPos;
-void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+out vec2 vRay;
+void main() {
+  vec2 uv = aPos * 0.5 + 0.5;
+  vRay = vec2(uv.x, 1.0 - uv.y);
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+  const pointVert = `#version 300 es
+in vec2 aRay;
+out vec2 vRay;
+void main() {
+  vRay = aRay;
+  gl_Position = vec4(aRay.x * 2.0 - 1.0, (1.0 - aRay.y) * 2.0 - 1.0, 0.0, 1.0);
+  gl_PointSize = 1.0;
+}`;
   const frag = `#version 300 es
 precision highp float;
 uniform vec3 uOrigin;
@@ -92,6 +105,7 @@ uniform int uBoxes;
 uniform int uDigs;
 uniform vec4 uWork;
 uniform float uTime;
+in vec2 vRay;
 uniform sampler2D uSphereTex;
 uniform sampler2D uSphereColor;
 uniform sampler2D uBoxMin;
@@ -273,8 +287,8 @@ vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
 }
 
 void main() {
-  float uu = gl_FragCoord.x / uRes.x;
-  float vv = 1.0 - gl_FragCoord.y / uRes.y;
+  float uu = vRay.x;
+  float vv = vRay.y;
   float halfAngle = tan(uFov * 0.008726646259971648) * uPlane;
   float px = (uu * 2.0 - 1.0) * uAspect * halfAngle;
   float py = (1.0 - vv * 2.0) * halfAngle;
@@ -491,8 +505,19 @@ void main() {
   };
   const boundTex = new Array(MAX_SPHERES);
   let atlasDirty = false;
-  return {
-    paint(scene) {
+  const pointVs = compile(gl, gl.VERTEX_SHADER, pointVert);
+  let pointProgram = null;
+  const rayUVs = new Float32Array(8000 * 2);
+  const rayBuffer = gl.createBuffer();
+  if (pointVs) {
+    pointProgram = gl.createProgram();
+    gl.attachShader(pointProgram, pointVs);
+    gl.attachShader(pointProgram, fs);
+    gl.bindAttribLocation(pointProgram, 0, "aRay");
+    gl.linkProgram(pointProgram);
+    if (!gl.getProgramParameter(pointProgram, gl.LINK_STATUS)) pointProgram = null;
+  }
+  const draw = (scene, mode, count) => {
       sphereData.fill(0);
       sphereColor.fill(0);
       boxMin.fill(0);
@@ -558,7 +583,9 @@ void main() {
       const basis = cameraBasis(scene.camera);
       const miss = scene.miss || [0.45, 0.62, 0.85, 1];
       const sun = scene.sun || [0, 0, 1];
-      gl.useProgram(program);
+      const prog = mode === "points" && pointProgram ? pointProgram : program;
+      const u = (name) => gl.getUniformLocation(prog, name);
+      gl.useProgram(prog);
       gl.viewport(0, 0, canvas.width, canvas.height);
       upload(0, sphereTex, MAX_SPHERES, sphereData);
       upload(1, sphereColorTex, MAX_SPHERES, sphereColor);
@@ -573,27 +600,58 @@ void main() {
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ATLAS, ATLAS, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
         atlasDirty = false;
       }
-      gl.uniform3f(loc("uOrigin"), scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
-      gl.uniform3f(loc("uForward"), basis.forward[0], basis.forward[1], basis.forward[2]);
-      gl.uniform3f(loc("uRight"), basis.right[0], basis.right[1], basis.right[2]);
-      gl.uniform3f(loc("uUp"), basis.up[0], basis.up[1], basis.up[2]);
-      gl.uniform3f(loc("uSun"), sun[0], sun[1], sun[2]);
-      gl.uniform4f(loc("uMiss"), miss[0], miss[1], miss[2], miss[3]);
-      gl.uniform1f(loc("uFov"), scene.camera.fov);
-      gl.uniform1f(loc("uAspect"), scene.camera.aspect);
-      gl.uniform1f(loc("uPlane"), scene.camera.planeDistance);
-      gl.uniform2f(loc("uRes"), canvas.width, canvas.height);
-      gl.uniform1i(loc("uSpheres"), spheres);
-      gl.uniform1i(loc("uBoxes"), boxes);
-      gl.uniform1i(loc("uDigs"), digs);
+      gl.uniform1i(u("uSphereTex"), 0);
+      gl.uniform1i(u("uSphereColor"), 1);
+      gl.uniform1i(u("uBoxMin"), 2);
+      gl.uniform1i(u("uBoxMax"), 3);
+      gl.uniform1i(u("uBoxColor"), 4);
+      gl.uniform1i(u("uDigTex"), 5);
+      gl.uniform1i(u("uTexRects"), 6);
+      gl.uniform1i(u("uAtlas"), 7);
+      gl.uniform3f(u("uOrigin"), scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
+      gl.uniform3f(u("uForward"), basis.forward[0], basis.forward[1], basis.forward[2]);
+      gl.uniform3f(u("uRight"), basis.right[0], basis.right[1], basis.right[2]);
+      gl.uniform3f(u("uUp"), basis.up[0], basis.up[1], basis.up[2]);
+      gl.uniform3f(u("uSun"), sun[0], sun[1], sun[2]);
+      gl.uniform4f(u("uMiss"), miss[0], miss[1], miss[2], miss[3]);
+      gl.uniform1f(u("uFov"), scene.camera.fov);
+      gl.uniform1f(u("uAspect"), scene.camera.aspect);
+      gl.uniform1f(u("uPlane"), scene.camera.planeDistance);
+      gl.uniform2f(u("uRes"), canvas.width, canvas.height);
+      gl.uniform1i(u("uSpheres"), spheres);
+      gl.uniform1i(u("uBoxes"), boxes);
+      gl.uniform1i(u("uDigs"), digs);
       const work = scene.work;
-      gl.uniform4f(loc("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
-      gl.uniform1f(loc("uTime"), scene.time || 0);
+      gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
+      gl.uniform1f(u("uTime"), scene.time || 0);
+      if (prog === pointProgram) {
+        const n = Math.max(0, Math.min(count | 0, rayUVs.length / 2));
+        const w = Math.max(1, canvas.width);
+        const h = Math.max(1, canvas.height);
+        for (let i = 0; i < n; i += 1) {
+          rayUVs[i * 2] = (Math.random() * (w - 1) + 0.5) / w;
+          rayUVs[i * 2 + 1] = (Math.random() * (h - 1) + 0.5) / h;
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, rayBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, rayUVs.subarray(0, n * 2), gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.POINTS, 0, n);
+        return true;
+      }
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       return true;
+  };
+  return {
+    paint(scene) {
+      return draw(scene, "full", 0);
+    },
+    paintRandom(scene, count) {
+      if (!pointProgram) return draw(scene, "full", 0);
+      return draw(scene, "points", count);
     },
   };
 }
