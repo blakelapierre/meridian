@@ -123,6 +123,66 @@ export function noteNearby(survey, self, landmarks, skills = {}) {
   return survey;
 }
 
+export function contourStep(mapping = 0) {
+  const trained = Math.max(0, mapping);
+  if (trained >= 80) return 0.5;
+  if (trained >= 30) return 1;
+  return 2;
+}
+
+export function contourLines({ x = 0, y = 0, span = 32, step = 2, heightAt, knownAt, cells = 20 } = {}) {
+  if (!(step > 0) || typeof heightAt !== "function" || !(span > 0)) return [];
+  const n = cells;
+  const x0 = x - span / 2;
+  const y0 = y - span / 2;
+  const count = (n + 1) * (n + 1);
+  const hs = new Array(count);
+  const seen = new Array(count);
+  const at = (i, j) => j * (n + 1) + i;
+  for (let j = 0; j <= n; j += 1) {
+    for (let i = 0; i <= n; i += 1) {
+      const px = x0 + span * (i / n);
+      const py = y0 + span * (j / n);
+      seen[at(i, j)] = knownAt ? knownAt(px, py) === true : true;
+      hs[at(i, j)] = heightAt(px, py);
+    }
+  }
+  const point = (i, j) => [x0 + span * (i / n), y0 + span * (j / n)];
+  const mix = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+  const lines = [];
+  for (let j = 0; j < n; j += 1) {
+    for (let i = 0; i < n; i += 1) {
+      const ids = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]];
+      if (ids.some(([a, b]) => !seen[at(a, b)])) continue;
+      const edges = [[0, 1], [1, 2], [2, 3], [3, 0]];
+      const byLevel = new Map();
+      for (const [c, d] of edges) {
+        const h0 = hs[at(ids[c][0], ids[c][1])];
+        const h1 = hs[at(ids[d][0], ids[d][1])];
+        if (h0 === h1) continue;
+        const lo = Math.floor(Math.min(h0, h1) / step);
+        const hi = Math.floor(Math.max(h0, h1) / step);
+        for (let band = lo + 1; band <= hi; band += 1) {
+          const level = band * step;
+          const t = (level - h0) / (h1 - h0);
+          const hit = mix(point(ids[c][0], ids[c][1]), point(ids[d][0], ids[d][1]), t);
+          if (!byLevel.has(level)) byLevel.set(level, []);
+          byLevel.get(level).push(hit);
+        }
+      }
+      for (const [level, pts] of byLevel) {
+        if (pts.length < 2) continue;
+        lines.push({
+          a: pts[0],
+          b: pts[1],
+          major: Math.abs((level / step) % 2) < 1e-3,
+        });
+      }
+    }
+  }
+  return lines;
+}
+
 export function pathKeep(tracking = 0) {
   const trained = Math.max(0, Math.min(140, tracking));
   if (trained < 1) return 0;

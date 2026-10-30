@@ -32,7 +32,9 @@ export function groundLook(x, y) {
   const grass = [72, 132, 54];
   const rock = [142, 136, 124];
   const mix = (a, b, t) => a.map((channel, i) => Math.round(channel + (b[i] - channel) * t));
-  const color = [...mix(mix(sand, grass, grassW), rock, rockW), 255];
+  const mixed = mix(mix(sand, grass, grassW), rock, rockW);
+  const lift = 0.78 + crest * 0.34;
+  const color = [...mixed.map((channel) => Math.min(255, Math.round(channel * lift))), 255];
   const kind = rockW > 0.45 ? "rock" : grassW > 0.35 ? "grass" : "sand";
   return { kind, color, crest, grassW, rockW };
 }

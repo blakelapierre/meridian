@@ -52,13 +52,13 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
-import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp } from "../sim/map.js";
-import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
+import { cellSize, contourLines, contourStep, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp } from "../sim/map.js";
+import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, samplePlate, stamp } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
-import { paintChart } from "../render/chart.js?v=63";
+import { paintChart } from "../render/chart.js?v=66";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -74,7 +74,7 @@ import { boltHit, penFactor, startBolt, stepBolt } from "../sim/bolt.js";
 import { noteHarm } from "../sim/identityharm.js";
 import { cellId, inInterest, quorum, sameCell } from "../sim/cell.js";
 import { maySit } from "../sim/command.js";
-import { groundLook, standHeight } from "../sim/life.js?v=65";
+import { groundLook, standHeight } from "../sim/life.js?v=66";
 import { swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -890,6 +890,17 @@ function drawChart() {
       for (const point of line) plotted.marks.push({ kind: "track", id, point });
     }
   }
+  const span = mapSpan(skills.mapping.value, mapZoom);
+  const rise = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
+  const contours = contourLines({
+    x: mapCenter[0],
+    y: mapCenter[1],
+    span,
+    step: contourStep(skills.mapping.value),
+    cells: mapMode === "full" ? 28 : 18,
+    heightAt: (x, y) => standHeight(x, y, columnFloor(terrain.log.crust, x, y)),
+    knownAt: (x, y) => samplePlate(plate, x, y)[3] > 0,
+  });
   paintChart(document.querySelector("#map"), document.querySelector("#fix"), {
     self: player.position,
     yaw,
@@ -898,7 +909,9 @@ function drawChart() {
     radius: ability.radius,
     plate,
     center: mapCenter,
-    span: mapSpan(skills.mapping.value, mapZoom),
+    span,
+    rise,
+    contours,
   });
 }
 
