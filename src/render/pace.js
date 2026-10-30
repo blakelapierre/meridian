@@ -121,7 +121,7 @@ export function createPacer() {
       if (lastNow) gap = now - lastNow;
       lastNow = now;
       if (holding) extraGap = Math.max(refresh, extraGap * 0.92);
-      else extraGap = Math.min(1000, Math.max(refresh, extraGap * 1.25));
+      else extraGap = Math.min(1000, Math.max(refresh, extraGap * 1.6));
       const paint = now - lastPaint >= extraGap;
       const mode = extraGap >= 900 ? "1fps" : holding ? "ease" : "yield";
       return {

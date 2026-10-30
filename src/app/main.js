@@ -94,6 +94,7 @@ let viewScale = 0.5;
 let octave = 4;
 let rayBudget = 4000;
 let paintKind = "full";
+let lastPaintMs = 0;
 if (painter) {
   fitCanvas(canvas, viewScale);
   canvas.style.imageRendering = "auto";
@@ -1980,7 +1981,6 @@ if (params.get("still") !== "1") {
     const decision = extra && !document.hidden
       ? pacer.considerExtra(now, primaryHolding)
       : pacer.consider(now, extra ? false : active);
-    if (!extra && paceBus) paceBus.postMessage({ role: "primary", holding: decision.holding });
     viewScale = decision.scale;
     const native = nativePixels(boxW, boxH, window.devicePixelRatio || 1);
     let covered = coverLevel(native.width, native.height, rayBudget);
@@ -2008,6 +2008,7 @@ if (params.get("still") !== "1") {
       paint(sample);
       const paintMs = performance.now() - started;
       if (!extra) {
+        lastPaintMs = paintMs;
         rayBudget = tuneRays(rayBudget, {
           missed: decision.holding === false,
           paintMs,
@@ -2018,6 +2019,10 @@ if (params.get("still") !== "1") {
       canvas.dataset.fps = String(fps.paint(now));
       const fpsNode = document.querySelector("#fps");
       if (fpsNode) fpsNode.style.color = String(canvas.dataset.pace || "").includes("recover") ? "#fc8" : "#9f9";
+    }
+    if (!extra && paceBus) {
+      const spare = decision.holding && octave === 0 && lastPaintMs > 0 && lastPaintMs < decision.refresh * 0.55;
+      paceBus.postMessage({ role: "primary", holding: spare });
     }
     flush();
     } catch (error) {
