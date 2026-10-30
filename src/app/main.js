@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=66";
 import { createFps } from "../render/fps.js";
-import { createPacer, createPicturePace, paceWord, sizeAt, viewStill } from "../render/pace.js?v=68";
+import { createPacer, createPicturePace, paceWord, pictureSize, viewStill } from "../render/pace.js?v=69";
 import {
   authority,
   bandage,
@@ -112,7 +112,6 @@ const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
-let octave = 2;
 const picture = createPicturePace();
 let detailRays = 0;
 let rayBudget = 4000;
@@ -2237,16 +2236,14 @@ if (params.get("still") !== "1") {
     const displayW = Math.max(2, Math.floor(boxW));
     const displayH = Math.max(2, Math.floor(boxH));
     const paced = extra
-      ? { octave: Math.max(3, octave), detail: 0 }
+      ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
       : picture.step({ gap: decision.gap, displayW, displayH });
-    octave = paced.octave;
-    detailRays = extra ? 0 : paced.detail;
-    const trace = sizeAt(octave, displayW, displayH);
+    const trace = { width: paced.width, height: paced.height };
     canvas.dataset.traceW = String(trace.width);
     canvas.dataset.traceH = String(trace.height);
-    canvas.dataset.level = String(octave);
-    canvas.dataset.detail = String(detailRays);
-    canvas.style.imageRendering = octave === 0 ? "auto" : "pixelated";
+    canvas.dataset.level = Number(paced.scale || 0).toFixed(2);
+    canvas.dataset.detail = "0";
+    canvas.style.imageRendering = trace.width >= displayW - 4 ? "auto" : "pixelated";
     if (painter) {
       if (canvas.width !== trace.width) canvas.width = trace.width;
       if (canvas.height !== trace.height) canvas.height = trace.height;
@@ -2254,7 +2251,7 @@ if (params.get("still") !== "1") {
       fitCanvas(canvas, viewScale, easedPixels);
     }
     paintKind = "full";
-    const arrived = still && octave === 0;
+    const arrived = still && paced.scale > 0.98;
     canvas.dataset.cadence = String(Math.round(paced.refresh || decision.refresh));
     canvas.dataset.info = String(Math.round(paced.info || 0));
     const late = !extra && active && decision.gap > (paced.refresh || decision.refresh) * 1.35;
@@ -2273,7 +2270,7 @@ if (params.get("still") !== "1") {
       if (fpsNode) fpsNode.style.color = String(canvas.dataset.pace || "").includes("recover") ? "#fc8" : "#9f9";
     }
     if (!extra && paceBus) {
-      const spare = decision.holding && octave === 0 && lastPaintMs > 0 && lastPaintMs < decision.refresh * 0.55;
+      const spare = decision.holding && paced.scale > 0.98 && lastPaintMs > 0 && lastPaintMs < decision.refresh * 0.55;
       paceBus.postMessage({ role: "primary", holding: spare });
     }
     flush();
