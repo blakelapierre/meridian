@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=66";
 import { createFps } from "../render/fps.js";
-import { createPacer, createPicturePace, paceWord, sizeAt, viewStill } from "../render/pace.js?v=63";
+import { createPacer, createPicturePace, paceWord, sizeAt, viewStill } from "../render/pace.js?v=64";
 import {
   authority,
   bandage,
@@ -1277,7 +1277,7 @@ function publish() {
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
-  if (counter) counter.textContent = `${rate} fps`;
+  if (counter) counter.textContent = `${rate} fps · ${canvas.width}×${canvas.height}`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = shown === null ? "" : String(shown);

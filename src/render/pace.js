@@ -29,47 +29,27 @@ export function coverLevel(targetW, targetH, rays) {
 
 export function createPicturePace() {
   let octave = 2;
-  let finest = 0;
-  let climbWait = 0;
-  let sinceProbe = 0;
-  let detailOn = false;
+  let wait = 0;
   return {
     get octave() {
       return octave;
     },
     step({ gap = 0, refresh = 1000 / 60 } = {}) {
-      const vsync = refresh > 8 ? Math.min(refresh, 1000 / 30) : 1000 / 60;
+      const vsync = 1000 / 60;
       if (!(gap > 0)) return { octave, detail: 0 };
       if (gap > vsync * 1.15) {
-        if (detailOn) {
-          detailOn = false;
-          climbWait = 0;
-          return { octave, detail: 0 };
-        }
-        finest = Math.min(8, Math.max(finest, octave + 1));
         const over = gap / vsync;
-        const steps = over >= 8 ? 3 : over >= 3 ? 2 : 1;
+        const steps = over >= 8 ? 2 : 1;
         octave = Math.min(8, octave + steps);
-        climbWait = 0;
-        sinceProbe = 0;
-        detailOn = false;
+        wait = 0;
         return { octave, detail: 0 };
       }
-      climbWait += 1;
-      sinceProbe += 1;
-      if (sinceProbe > 180 && finest > 0) {
-        finest -= 1;
-        sinceProbe = 0;
-      }
-      if (climbWait >= 10 && octave > finest) {
+      wait += 1;
+      if (wait >= 8 && octave > 0) {
         octave -= 1;
-        climbWait = 0;
-        detailOn = false;
-        return { octave, detail: 0 };
+        wait = 0;
       }
-      detailOn = octave === finest && octave > 0 && climbWait >= 10;
-      if (detailOn) climbWait = 0;
-      return { octave, detail: detailOn ? 800 : 0 };
+      return { octave, detail: 0 };
     },
   };
 }
