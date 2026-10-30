@@ -88,7 +88,19 @@ export function createPicturePace() {
         return { scale, refresh, info, width: size.width, height: size.height };
       };
       if (!(gap > 0)) return pack(0);
+      const floorMs = 1000 / 12;
       const surge = Math.min(1, Math.max(0, accel) / 3);
+      if (!still && gap > floorMs) {
+        const limit = Math.min(floorMs, motionLimit(speed, refresh, accel));
+        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(limit / gap)));
+        bucket = [];
+        skip = true;
+        direction = 0;
+        lastScore = 0;
+        surged = accel >= 2;
+        wasStill = false;
+        return pack(0);
+      }
       if (!still && accel >= 2 && !surged && gap > refresh) {
         scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(refresh / gap)));
         bucket = [];
