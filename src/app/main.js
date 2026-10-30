@@ -112,7 +112,7 @@ const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
-let octave = 4;
+let octave = 2;
 const picture = createPicturePace();
 let detailRays = 0;
 let rayBudget = 4000;
@@ -1332,9 +1332,7 @@ function paint(sample) {
   canvas.dataset.center = `${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)}`;
   showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
   if (painter) {
-    const drew = painter.present
-      ? painter.present(scene, canvas.dataset.traceW, canvas.dataset.traceH, detailRays)
-      : painter.paint(scene);
+    const drew = painter.paint(scene);
     if (!drew) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
     return scene;
   }
@@ -2246,16 +2244,17 @@ if (params.get("still") !== "1") {
     canvas.dataset.traceH = String(trace.height);
     canvas.dataset.level = String(octave);
     canvas.dataset.detail = String(detailRays);
-    canvas.style.imageRendering = "auto";
+    canvas.style.imageRendering = octave === 0 ? "auto" : "pixelated";
     if (painter) {
-      if (canvas.width !== displayW) canvas.width = displayW;
-      if (canvas.height !== displayH) canvas.height = displayH;
+      if (canvas.width !== trace.width) canvas.width = trace.width;
+      if (canvas.height !== trace.height) canvas.height = trace.height;
     } else {
       fitCanvas(canvas, viewScale, easedPixels);
     }
     paintKind = "full";
     const arrived = still && octave === 0;
-    canvas.dataset.pace = paceWord(decision.mode, { still, arrived, holding: decision.holding });
+    const paceLabel = !extra && active && decision.gap > decision.refresh * 1.15 ? "behind" : paceWord(decision.mode, { still, arrived, holding: decision.holding });
+    canvas.dataset.pace = paceLabel;
     if (params.get("nopaint") !== "1" && decision.paint) {
       const started = performance.now();
       paint(sample);

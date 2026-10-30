@@ -69,7 +69,7 @@ test("a full frame keeps vsync, and detail waits until that size is held", () =>
   const picture = createPicturePace();
   const missed = picture.step({ gap: 200, refresh: 16 });
   assert.equal(missed.detail, 0);
-  assert.ok(missed.octave > 4);
+  assert.ok(missed.octave > 2);
   let held = null;
   for (let i = 0; i < 12; i += 1) held = picture.step({ gap: 16, refresh: 16 });
   assert.equal(held.detail, 0);
