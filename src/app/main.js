@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=68";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=82";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=83";
 import {
   authority,
   bandage,
@@ -2225,6 +2225,7 @@ if (params.get("still") !== "1") {
     const stillSample = {
       x: player.position[0],
       y: player.position[1],
+      z: player.position[2],
       yaw,
       pitch,
       distance: follow.distance,
@@ -2236,6 +2237,7 @@ if (params.get("still") !== "1") {
     const speed = cameraSpeed(stillPose, stillSample, dt);
     const accel = cameraAccel(lastCameraSpeed, speed, dt);
     lastCameraSpeed = speed;
+    const wasParked = stillFor >= 0.45;
     if (viewStill(stillPose, stillSample)) stillFor += dt;
     else stillFor = 0;
     stillPose = stillSample;
@@ -2248,12 +2250,13 @@ if (params.get("still") !== "1") {
     viewScale = decision.scale;
     const displayW = Math.max(2, Math.floor(boxW));
     const displayH = Math.max(2, Math.floor(boxH));
-    const settled = still && speed < 0.08 && accel < 0.5;
-    const traceCost = Math.max(lastPaintMs || 0, decision.gap || 0);
+    const burst = accel >= 1;
+    const settled = still && speed < 0.08 && !burst;
+    const traceCost = Math.max(lastPaintMs || 0, decision.gap || 0, wasParked && burst ? 125 : 0);
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
       : picture.step({
-        gap: settled ? Math.max(decision.gap, 1) : issued ? Math.max(traceCost, 1) : 0,
+        gap: settled ? Math.max(decision.gap, 1) : burst || issued ? Math.max(traceCost, 1) : 0,
         displayW,
         displayH,
         still: settled,

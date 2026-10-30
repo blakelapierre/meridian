@@ -29,7 +29,7 @@ export function coverLevel(targetW, targetH, rays) {
 
 export function cameraSpeed(previous, next, dt) {
   if (!previous || !next || !(dt > 0)) return 0;
-  const travel = Math.hypot((next.x || 0) - (previous.x || 0), (next.y || 0) - (previous.y || 0)) / dt;
+  const travel = Math.hypot((next.x || 0) - (previous.x || 0), (next.y || 0) - (previous.y || 0), (next.z || 0) - (previous.z || 0)) / dt;
   const turn = Math.hypot((next.yaw || 0) - (previous.yaw || 0), (next.pitch || 0) - (previous.pitch || 0)) / dt;
   const dolly = Math.abs((next.distance || 0) - (previous.distance || 0)) / dt;
   const lift = Math.abs((next.height || 0) - (previous.height || 0)) / dt;
@@ -40,6 +40,7 @@ export function cameraSpeed(previous, next, dt) {
 export function traceInterval(still, accel, refreshMs) {
   const refresh = Math.min(Math.max(refreshMs || 16, 1000 / 120), 1000 / 20);
   if (still) return Math.max(refresh, 125);
+  if (accel >= 1) return refresh;
   return motionLimit(0, refresh, accel);
 }
 
@@ -89,9 +90,11 @@ export function createPicturePace() {
         return { scale, refresh, info, width: size.width, height: size.height };
       };
       if (!(gap > 0)) return pack(0);
-      const target = still ? Infinity : motionLimit(speed, refresh, accel);
+      const vsync = !still && accel >= 1;
+      const target = still ? Infinity : vsync ? refresh : motionLimit(speed, refresh, accel);
       const ease = (aim) => {
         const next = Math.max(0.08, Math.min(1, aim));
+        if (vsync) return next;
         return scale + (next - scale) * 0.5;
       };
       if (wasStill && !still && gap > target) {
@@ -166,6 +169,7 @@ export function viewStill(previous, next) {
   if (Math.abs((next.orbit || 0) - (previous.orbit || 0)) > 0.004) return false;
   if (Math.abs((next.height || 0) - (previous.height || 0)) > 0.015) return false;
   if (Math.abs((next.zoom || 0) - (previous.zoom || 0)) > 0.004) return false;
+  if (Math.abs((next.z || 0) - (previous.z || 0)) > 0.02) return false;
   return Math.hypot(next.x - previous.x, next.y - previous.y) <= 0.03;
 }
 

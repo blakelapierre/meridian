@@ -102,6 +102,20 @@ test("the trace rate follows acceleration, and the screen can still refresh", ()
   assert.ok(traceInterval(true, 0, 16) >= 125);
 });
 
+test("a jump's acceleration snaps a still picture to vsync", () => {
+  const box = { displayW: 1280, displayH: 720 };
+  const pace = createPicturePace();
+  let seen = pace.step({ gap: 16, ...box, still: true });
+  for (let i = 0; i < 8; i += 1) seen = pace.step({ gap: 125, ...box, still: true });
+  const parked = seen.scale;
+  seen = pace.step({ gap: 125, ...box, still: false, speed: 3, accel: 20 });
+  assert.ok(seen.scale < parked * 0.55);
+  assert.ok(traceInterval(false, 20, 16) <= 20);
+  const pose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+  assert.ok(cameraSpeed(pose, { ...pose, z: 0.3 }, 0.1) > 2);
+  assert.equal(viewStill(pose, { ...pose, z: 0.3 }), false);
+});
+
 test("a moving camera never keeps a frame slower than 12fps", () => {
   const box = { displayW: 1280, displayH: 720 };
   const pace = createPicturePace();
