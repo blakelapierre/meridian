@@ -1,3 +1,5 @@
+import { refuseSlump } from "./rules.js";
+
 function center(i, j, k) {
   return [i * 50 + 25, j * 50 + 25, k * 50 + 25];
 }
@@ -23,6 +25,7 @@ export function acceptEdit(crust, proposal, { certified = false, localEdits = fa
     const hash = crust.hash(proposal.chunk[0], proposal.chunk[1], proposal.chunk[2]);
     if (!sameBytes(hash, proposal.before)) return { ok: false, reason: "hash" };
   }
+  if (refuseSlump(proposal.mode)) return { ok: false, reason: "slump" };
   if (proposal.mode === "dig" && (proposal.spoilRoom ?? 0) < proposal.writes.length) {
     return { ok: false, reason: "spoil" };
   }

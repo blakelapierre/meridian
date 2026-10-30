@@ -52,7 +52,8 @@ export function authority(ids, tick) {
   return ids[Math.abs(Math.floor(tick)) % ids.length];
 }
 
-export function clockName(joined) {
+export function clockName(joined, seated = false) {
+  if (seated && !joined) return "dominion";
   return joined ? "strike" : "hands";
 }
 
@@ -61,7 +62,9 @@ export function resonanceWord(digs) {
 }
 
 export function socketOf(kind) {
-  return kind === "pose" ? "snap" : "ops";
+  if (kind === "pose") return "snap";
+  if (kind === "lore") return "lore";
+  return "ops";
 }
 
 export function dominionOpen() {
@@ -70,4 +73,20 @@ export function dominionOpen() {
 
 export function soldierTarget(still, native, play) {
   return still ? native : play;
+}
+
+export function windAt(x, y) {
+  return [0.6 + Math.sin(x / 30) * 0.4, 0.1 + Math.cos(y / 40) * 0.2, 0];
+}
+
+export function frontGain(dot) {
+  return dot < 0 ? 0.5 : 1;
+}
+
+export function refuseSlump(mode) {
+  return mode === "slump";
+}
+
+export function titheDue(patron) {
+  return patron ? 1 : 0;
 }

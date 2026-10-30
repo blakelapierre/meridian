@@ -24,7 +24,7 @@ export function listTargets({ dummy = null, others = [], pieces = [], props = []
     });
   }
   for (const piece of pieces) {
-    if (piece.id !== "wall" && piece.id !== "footing" && piece.id !== "hearth" && piece.id !== "fin" && piece.id !== "slip" && piece.id !== "road" && piece.id !== "door" && piece.id !== "post") continue;
+    if (piece.id !== "wall" && piece.id !== "footing" && piece.id !== "hearth" && piece.id !== "fin" && piece.id !== "slip" && piece.id !== "road" && piece.id !== "door" && piece.id !== "post" && piece.id !== "table" && piece.id !== "trainer" && piece.id !== "floor" && piece.id !== "cart" && piece.id !== "mission") continue;
     const subject = piece.id === "wall"
       ? SUBJECTS.wall
       : piece.id === "footing"

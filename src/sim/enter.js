@@ -1,4 +1,4 @@
-import { buyOffer, createMatch, joinMatch, rejoin, setInside, stepMatch } from "./strike.js";
+import { buyOffer, createMatch, joinMatch, rejoin, setChannel, setInside, stepMatch } from "./strike.js";
 import { roundMaterials } from "./clocks.js";
 
 export const SMOKE = { id: "smoke", scrip: 300 };
@@ -52,7 +52,7 @@ export function entryLine(state) {
   return `strike ${state.side} ${state.body} scrip ${state.scrip}${kit}${channel} ${state.phase} ${secs}s`;
 }
 
-export function stepEntry(entry, { position, use = false, buy = false, yard, offer = null }) {
+export function stepEntry(entry, { position, use = false, buy = false, yard, offer = null, still = false }) {
   const [x, y, z] = position.map((value) => value * 100);
   const inside = insideBox(entry.atoll.site.volume, x, y, z);
   if (!entry.joined) {
@@ -86,6 +86,14 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
     if (!notice) notice = "paid";
   }
   yard.metal = player.beach.metal;
+  if (entry.joined && inside && player.channel === "defuse" && !still) {
+    player.channel = null;
+    player.channelTicks = 0;
+    if (!notice) notice = "puzzle";
+  } else if (entry.joined && inside && use && still && entry.match.core && entry.match.core.side !== player.side) {
+    setChannel(entry.match, entry.id, "defuse");
+    if (!notice) notice = "defuse";
+  }
   if (player.abandoned && !notice) notice = "beach";
   return status(entry, inside, notice);
 }

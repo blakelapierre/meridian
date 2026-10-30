@@ -190,6 +190,52 @@ export function turnFin(yard, cell) {
   return { ok: true, yaw: fin.yaw };
 }
 
+export function breakFin(yard, cell) {
+  const fin = yard.pieces.find((piece) => piece.id === "fin" && sameCell(piece.at, cell));
+  if (!fin || fin.broken) return { ok: false, reason: fin ? "broken" : "none" };
+  fin.broken = true;
+  return { ok: true };
+}
+
+export function toggleGate(yard, cell) {
+  const road = yard.pieces.find((piece) => piece.id === "road" && sameCell(piece.at, cell));
+  if (!road) return { ok: false, reason: "none" };
+  road.gate = !road.gate;
+  return { ok: true, gate: road.gate };
+}
+
+export function tryPlaceFloor(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if ((yard.stone || 0) < 2) return { ok: false, reason: "stone" };
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "footing")) return { ok: false, reason: "occupied" };
+  yard.stone -= 2;
+  yard.pieces.push({ id: "floor", at: cell.slice(), anchors: true });
+  return { ok: true, stone: yard.stone };
+}
+
+export function tryPlaceCart(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if (yard.metal < 1) return { ok: false, reason: "metal" };
+  if (!yard.pieces.some((piece) => piece.id === "road" && sameCell(piece.at, cell))) return { ok: false, reason: "road" };
+  yard.metal -= 1;
+  yard.pieces.push({ id: "cart", at: cell.slice(), anchors: false, load: 1 });
+  return { ok: true, metal: yard.metal };
+}
+
+export function rollCart(yard) {
+  const cart = yard.pieces.find((piece) => piece.id === "cart" && piece.load > 0);
+  if (!cart) return false;
+  const next = [cart.at[0], cart.at[1] + 1];
+  const road = yard.pieces.find((piece) => piece.id === "road" && sameCell(piece.at, next));
+  if (!road) {
+    yard.metal += cart.load;
+    cart.load = 0;
+    return false;
+  }
+  cart.at = next;
+  return true;
+}
+
 export function pieceBoxes(pieces) {
   return pieces.map((piece) => {
     const x = piece.at[0] * 0.5;
@@ -264,6 +310,38 @@ export function pieceBoxes(pieces) {
         max: [x + 0.12, y + 0.08, 0.06],
         color: [0.86, 0.82, 0.7, 1],
         reflectivity: 0.05,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "floor") {
+      return {
+        type: "box",
+        min: [x - 0.5, y - 0.5, 0],
+        max: [x + 0.5, y + 0.5, 0.08],
+        color: STONE,
+        reflectivity: 0.05,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "cart") {
+      return {
+        type: "box",
+        min: [x - 0.25, y - 0.18, 0],
+        max: [x + 0.25, y + 0.18, 0.4],
+        color: WOOD,
+        reflectivity: 0.1,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "mission" || piece.id === "trainer" || piece.id === "table") {
+      const tall = piece.id === "table" ? 0.82 : 1.5;
+      const wide = piece.id === "table" ? 0.6 : 0.2;
+      return {
+        type: "box",
+        min: [x - wide, y - wide * 0.6, piece.id === "table" ? 0.7 : 0],
+        max: [x + wide, y + wide * 0.6, tall],
+        color: piece.id === "mission" ? [0.75, 0.2, 0.15, 1] : piece.id === "trainer" ? [0.35, 0.32, 0.48, 1] : WOOD,
+        reflectivity: 0.08,
         piece: piece.id,
       };
     }

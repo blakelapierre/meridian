@@ -19,13 +19,16 @@ import {
   resonanceWord,
   spoilCap,
   spendLogistics,
+  frontGain,
+  titheDue,
+  windAt,
 } from "../sim/rules.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, createYard, pieceIntegrity, placeTicks, toggleDoor, tryPlaceDoor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, breakFin, createYard, pieceIntegrity, placeTicks, rollCart, toggleDoor, toggleGate, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -60,14 +63,15 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { createIdentity, exportKey, importKey, keyPhrase } from "../net/identity.js";
+import { createIdentity, exportKey, importKey, keyPhrase, signBytes } from "../net/identity.js";
 import { firstCrate } from "../sim/culture.js";
 import { createPools, drainPool, flowOnce, notePool } from "../sim/pool.js";
 import { deedVolume, grantKey, mayEdit } from "../sim/deed.js";
 import { bondOpen, dragPace, hearBond, offerBond } from "../sim/fellowship.js";
 import { boltHit, penFactor, startBolt, stepBolt } from "../sim/bolt.js";
 import { noteHarm } from "../sim/identityharm.js";
-import { cellId, inInterest } from "../sim/cell.js";
+import { cellId, inInterest, quorum, sameCell } from "../sim/cell.js";
+import { maySit } from "../sim/command.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
 import { radialDown, shellDrop } from "../sim/shell.js";
@@ -144,6 +148,13 @@ const yard = createYard(atoll.placements.footing);
 yard.metal = culture.metal;
 yard.stone = culture.stone;
 yard.fiber = 2;
+yard.sticks = 1;
+yard.smokes = 1;
+const foot = yard.pieces[0].at;
+yard.pieces.push({ id: "table", at: [foot[0] + 2, foot[1]], anchors: true });
+yard.pieces.push({ id: "trainer", at: [foot[0] + 3, foot[1]], anchors: true });
+let seated = false;
+let smokeAt = null;
 let cultureName = culture.culture;
 const worldChain = createChain();
 const fromChain = new Set();
@@ -292,6 +303,21 @@ function pump(link) {
   }
 }
 
+function sendLore(frame) {
+  const open = openLinks().filter((link) => link.lore && link.lore.readyState === "open");
+  if (!open.length) {
+    sendOps(frame);
+    return;
+  }
+  for (const link of open) {
+    try {
+      link.lore.send(frame);
+    } catch {
+      sendOps(frame);
+    }
+  }
+}
+
 function sendOps(frame) {
   const open = openLinks();
   if (!open.length) {
@@ -304,6 +330,7 @@ const shotFrames = [];
 
 addEventListener("keydown", (event) => {
   keys.add(event.code);
+  if (event.code === "KeyW" || event.code === "KeyA" || event.code === "KeyS" || event.code === "KeyD") seated = false;
   if (event.code === "Tab" || event.code === "Backquote") event.preventDefault();
   if (event.repeat) return;
   playerPress(event.code);
@@ -342,12 +369,38 @@ addEventListener("keydown", (event) => {
     report = bonds.get(selection.id) === "both" ? "fellowship" : "offered";
   }
   if (event.code === "KeyO" && !event.repeat) report = keyPhrase(identity);
-  if (event.code === "KeyG" && !event.repeat && yard.stone > 0) {
-    yard.stone -= 1;
-    const eye = [player.position[0], player.position[1], player.position[2] + 1.4];
-    bolts.push(startBolt(eye, lookDirection(yaw, pitch), 18));
-    hear("shot", 0.4);
-    report = "thrown";
+  if (event.code === "KeyG" && !event.repeat) {
+    if (yard.stone > 0) {
+      yard.stone -= 1;
+      const eye = [player.position[0], player.position[1], player.position[2] + 1.4];
+      bolts.push(startBolt(eye, lookDirection(yaw, pitch), 18));
+      hear("shot", 0.4);
+      report = "thrown";
+    } else if (yard.smokes > 0) {
+      yard.smokes -= 1;
+      const dir = lookDirection(yaw, pitch);
+      smokeAt = [player.position[0] + dir[0] * 6, player.position[1] + dir[1] * 6, player.position[2]];
+      smokeTicks = 8 * 30;
+      hear("shot", 0.3);
+      report = "smoke";
+    }
+  }
+  if (event.code === "KeyF" && !event.repeat && slot === "hammer") {
+    const mark = refreshAim(input());
+    const placed = tryPlaceFloor(yard, mark.cell);
+    report = placed.ok ? "floor" : placed.reason;
+  }
+  if (event.code === "KeyJ" && !event.repeat && slot === "hammer") {
+    const mark = refreshAim(input());
+    const placed = tryPlaceCart(yard, mark.cell);
+    report = placed.ok ? "cart" : placed.reason;
+  }
+  if (event.code === "KeyT" && !event.repeat) {
+    const mark = refreshAim(input());
+    if (mark.cell) {
+      yard.pieces.push({ id: "mission", at: mark.cell.slice(), anchors: true });
+      report = "mission";
+    }
   }
   if (event.code === "KeyP" && !event.repeat && slot === "hammer") {
     const mark = refreshAim(input());
@@ -365,7 +418,12 @@ addEventListener("keydown", (event) => {
     report = placed.ok ? "door" : placed.reason;
   }
   if (event.code === "KeyB" && !event.repeat && !entryState.joined) {
-    if (bandage(vitals, yard.fiber)) {
+    const leg = vitals.left <= vitals.right ? "left" : "right";
+    if (vitals[leg] < 100 && yard.sticks > 0) {
+      vitals[leg] = Math.min(100, vitals[leg] + 20);
+      yard.sticks -= 1;
+      report = "splint";
+    } else if (bandage(vitals, yard.fiber)) {
       yard.fiber -= 1;
       report = "bandage";
     } else report = yard.fiber < 1 ? "fiber" : "whole";
@@ -482,7 +540,8 @@ function useRightClick() {
   const saved = trySalvage(yard, mark.cell);
   if (saved.ok) {
     hear("salvage");
-    noteHarm(harmLog, "self", "salvage");
+    const signed = signBytes(identity, new TextEncoder().encode(`${Math.floor(tick)}:salvage`));
+    noteHarm(harmLog, "self", "salvage", signed.sig[0] || 0);
   }
   report = saved.ok ? "salvage" : saved.reason;
   if (!saved.ok) return;
@@ -602,7 +661,7 @@ function sceneFor(sample, width, height) {
     cameraOrigin: cameraPos,
     cameraDir: cameraLook,
     fov: aim.fov,
-    smoke: smokeTicks > 0 ? player.position : null,
+    smoke: smokeTicks > 0 ? (smokeAt || player.position) : null,
     pools,
     bolts,
   });
@@ -821,6 +880,33 @@ function actOn(sample) {
     report = "no target";
     return;
   }
+  if (selection.kind === "table") {
+    const near = Math.hypot(player.position[0] - selection.point[0], player.position[1] - selection.point[1]) < 2.4;
+    if (maySit(near, entryState.joined)) {
+      seated = !seated;
+      report = seated ? "seated" : "stood";
+    } else report = "closed";
+    return;
+  }
+  if (selection.kind === "trainer") {
+    report = claimSpecialty(skills) || "refused";
+    return;
+  }
+  if (selection.kind === "fin" && selection.cell) {
+    const broken = breakFin(yard, selection.cell);
+    report = broken.ok ? "broken" : broken.reason;
+    return;
+  }
+  if (selection.kind === "wall" && selection.cell) {
+    const told = [...notes].reverse().find((note) => note.kind === "told");
+    const piece = told && yard.pieces.find((item) => item.id === "wall" && item.at[0] === selection.cell[0] && item.at[1] === selection.cell[1]);
+    if (piece) {
+      piece.line = told.line;
+      piece.by = told.by || "";
+      report = "pinned";
+      return;
+    }
+  }
   if (selection.kind === "slip" && selection.cell) {
     const slip = yard.pieces.find((piece) => piece.id === "slip" && piece.at[0] === selection.cell[0] && piece.at[1] === selection.cell[1]);
     if (slip) {
@@ -945,7 +1031,7 @@ function publish() {
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const fluxPiece = yard.pieces.find((piece) => piece.id === "fin");
-  const flux = fluxPiece ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0))}` : "";
+  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0))}` : "";
   const boundNote = yard.bound ? " · bound" : "";
   const legNote = (vitals.left < 100 || vitals.right < 100) ? ` · L${Math.ceil(vitals.left)} R${Math.ceil(vitals.right)}` : "";
   const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${legNote}`;
@@ -964,12 +1050,12 @@ function publish() {
   const dropNote = drop > 0.02 ? ` · drop ${drop.toFixed(2)}` : "";
   const reloadNote = shotLock > 0 ? ` · reload ${shotLock}` : "";
   const harmNote = harmLog.length ? ` · harm ${harmLog.length}` : "";
-  const clockNote = ` · ${clockName(entryState.joined)}`;
+  const clockNote = ` · ${clockName(entryState.joined, seated)}`;
   const cultureNote = ` · ${cultureName}`;
   const felt = resonanceWord(digs);
   const resonanceNote = felt ? ` · ${felt}` : "";
-  const charterNote = charterReady([...bonds.values()].filter((state) => state === "both").length, yard.bound)
-    ? ` · charter${spendLogistics(companyWallet(), 1) ? "" : " · no spend"}`
+  const charterNote = charterReady(withYou.length, yard.bound)
+    ? ` · charter${withYou[0] ? ` by ${withYou[0]}` : ""}${spendLogistics(companyWallet(), 1) ? "" : " · no spend"}`
     : "";
   const dragNote = dragging ? " · drag" : "";
   const fiberNote = yard.fiber ? ` · fiber ${yard.fiber}` : "";
@@ -1097,11 +1183,17 @@ function fire(sample) {
   if (!shot.hitbox) {
     report = "miss";
   } else {
-    const applied = applyDummyHit(dummy, shot.hitbox);
-    const scaled = Math.round(applied.damage * penFactor(0, 1));
-    grantUse(skills, "marksmanship", { tick });
-    if (dayWord(tick) === "night") grantUse(skills, "marksmanship", { tick });
-    report = `${applied.hitbox} ${scaled}`;
+    const voters = 1 + links.filter((link) => {
+      const pose = poses.get(link.to);
+      return pose && sameCell(cellId(player.position[1]), cellId(pose.y));
+    }).length;
+    if (quorum(voters, voters)) {
+      const applied = applyDummyHit(dummy, shot.hitbox);
+      const scaled = Math.round(applied.damage * penFactor(0, 1));
+      grantUse(skills, "marksmanship", { tick });
+      if (dayWord(tick) === "night") grantUse(skills, "marksmanship", { tick });
+      report = `${applied.hitbox} ${scaled} quorum`;
+    } else report = "provisional";
   }
   const frame = encodeShot(identity, {
     nonce,
@@ -1116,7 +1208,9 @@ function fire(sample) {
     bonds.delete(selection.id);
   }
   if (!shot.hitbox) bolts.push(startBolt(eye, shot.dir));
-  hear("shot", (shot.hitbox ? 1 : 0.35) * crackGain(Math.hypot(player.position[0] - atoll.placements.dummy.x / 100, player.position[1] - atoll.placements.dummy.y / 100)), Math.max(-1, Math.min(1, shot.dir[0])));
+  const look = lookDirection(sample.yaw, sample.pitch);
+  const facing = look[0] * shot.dir[0] + look[1] * shot.dir[1] + look[2] * shot.dir[2];
+  hear("shot", (shot.hitbox ? 1 : 0.35) * crackGain(Math.hypot(player.position[0] - atoll.placements.dummy.x / 100, player.position[1] - atoll.placements.dummy.y / 100)) * frontGain(facing), Math.max(-1, Math.min(1, shot.dir[0])));
 }
 
 function ownKeys() {
@@ -1146,7 +1240,7 @@ function exchangeLore() {
     const spoken = offerNotes(notes, bag, offer.tier);
     if (!offer.ground.length && !offer.places.length && !spoken.length) continue;
     const packed = packLore(offer);
-    sendOps(encodeLore(identity, { nonce: tick, friend: score, notes: spoken, ...packed }));
+    sendLore(encodeLore(identity, { nonce: tick, friend: score, notes: spoken, ...packed }));
     loreNote = `${offer.tier} ${other.id}`;
   }
 }
@@ -1278,17 +1372,18 @@ async function openLink(to, offer, role) {
   const room = await ensureRoom();
   const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
   const channels = {};
-  for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false]]) {
+  for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false], ["lore", 3, true]]) {
     const options = { negotiated: true, id: spec[1], ordered: spec[2] };
     if (!spec[2]) options.maxRetransmits = 0;
     const channel = pc.createDataChannel(spec[0], options);
     channel.binaryType = "arraybuffer";
     channels[spec[0]] = channel;
   }
-  const link = { to, role, ops: channels.ops, snap: channels.snap };
+  const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore };
   links.push(link);
   if (!ops) ops = channels.ops;
   channels.ops.onopen = () => shareWalls(link);
+  channels.lore.onmessage = (event) => onOps(new Uint8Array(event.data), to);
   channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data), to);
   channels.snap.onmessage = (event) => {
     const pose = acceptPosition(poses.get(to) || null, new Uint8Array(event.data));
@@ -1433,6 +1528,11 @@ if (params.get("still") !== "1") {
       }));
     }
     const sample = input();
+    if (seated) {
+      sample.forward = 0;
+      sample.strafe = 0;
+      sample.sprint = false;
+    }
     const selectOnce = selectEdge;
     const actOnce = actEdge;
     const cycleOnce = cycleEdge;
@@ -1480,7 +1580,14 @@ if (params.get("still") !== "1") {
         if (wreck >= 0) yard.pieces.splice(wreck, 1);
       }
       for (let bolt = bolts.length - 1; bolt >= 0; bolt -= 1) {
-        stepBolt(bolts[bolt], 1 / 30, 9.81, WIND);
+        const wind = windAt(player.position[0], player.position[1]);
+        const blown = dayWord(tick) === "night" ? wind.map((part) => part * 1.5) : wind;
+        stepBolt(bolts[bolt], 1 / 30, 9.81, blown);
+        const mission = yard.pieces.find((piece) => piece.id === "mission");
+        if (mission) {
+          bolts[bolt].velocity[0] += (mission.at[0] * 0.5 - bolts[bolt].position[0]) * 0.04;
+          bolts[bolt].velocity[1] += (mission.at[1] * 0.5 - bolts[bolt].position[1]) * 0.04;
+        }
         const hit = boltHit(bolts[bolt], wreckAt);
         if (hit && dummy.health > 0) applyDummyHit(dummy, "chest");
         const flying = bolts[bolt];
@@ -1501,6 +1608,16 @@ if (params.get("still") !== "1") {
           report = "lapse";
         }
       } else awayTicks = 0;
+      if (tick > 0 && tick % 1800 === 0 && yard.bound) {
+        if (yard.metal >= 1) {
+          yard.metal -= 1;
+          report = "upkeep";
+        } else {
+          yard.bound = null;
+          report = "lapse";
+        }
+      }
+      if (tick % 30 === 0) rollCart(yard);
       const holder = pubkeyHex(identity.pubkey);
       terrain.setDeed(yard.bound ? {
         allow(x, y, proposer) {
@@ -1514,6 +1631,7 @@ if (params.get("still") !== "1") {
         use: useOnce,
         buy: buyOnce,
         yard,
+        still: Math.hypot(player.velocity[0], player.velocity[1]) < 0.08,
         offer: buyOnce ? (entryState.joined ? SMOKE : null) : null,
       });
       if (entryState.notice) report = entryState.notice;
@@ -1527,6 +1645,9 @@ if (params.get("still") !== "1") {
           for (const pool of pools) {
             const here = columnFloor(terrain.log.crust, pool.x, pool.y);
             const there = columnFloor(terrain.log.crust, pool.x, pool.y + 0.5);
+            const dest = [Math.round(pool.x / 0.5), Math.round((pool.y + 0.5) / 0.5)];
+            const dam = yard.pieces.some((piece) => piece.id === "road" && !piece.gate && piece.at[0] === dest[0] && piece.at[1] === dest[1]);
+            if (dam) continue;
             const next = flowOnce(pool, here, there);
             if (next !== pool) {
               pool.y = next.y;
@@ -1642,7 +1763,15 @@ if (params.get("still") !== "1") {
               digs += 1;
               notePool(pools, { x: player.position[0], y: player.position[1], floor });
               const found = tapVein(vein, player.position[0], player.position[1]);
-              if (found) yard.metal += found;
+              if (found) {
+                yard.metal += found;
+                const patron = [...bonds.entries()].find(([, state]) => state === "both")?.[0];
+                const due = titheDue(patron);
+                if (due && yard.metal >= due) {
+                  yard.metal -= due;
+                  yard.tithed = (yard.tithed || 0) + due;
+                }
+              }
             }
             hear(brush === "fill" ? "fill" : "dig");
             grantUse(skills, "mining", { tick, gap: 30 });
@@ -1764,7 +1893,10 @@ if (params.get("still") !== "1") {
     if (objectOnce) cycle(objectOnce, "object");
     if (turnEdge && slot === "hammer") {
       const mark = refreshAim(sample);
-      if (mark.inRange && mark.kind === "door") {
+      if (mark.inRange && mark.kind === "road") {
+        const gate = toggleGate(yard, mark.cell);
+        report = gate.ok ? (gate.gate ? "gate" : "shut") : gate.reason;
+      } else if (mark.inRange && mark.kind === "door") {
         const door = toggleDoor(yard, mark.cell);
         report = door.ok ? (door.open ? "open" : "shut") : door.reason;
       } else if (mark.inRange && (mark.kind === "wall" || mark.kind === "fin")) {

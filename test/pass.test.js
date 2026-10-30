@@ -14,6 +14,10 @@ import {
   resonanceWord,
   soldierTarget,
   socketOf,
+  frontGain,
+  refuseSlump,
+  titheDue,
+  windAt,
   dominionOpen,
   spendLogistics,
   spoilCap,
@@ -48,7 +52,13 @@ test("the third pass of the notes is a set of small rules", () => {
   assert.equal(bandage(vitals, 1), true);
   assert.equal(vitals.left, 60);
   assert.equal(socketOf("pose"), "snap");
+  assert.equal(socketOf("lore"), "lore");
   assert.equal(socketOf("edit"), "ops");
+  assert.equal(clockName(false, true), "dominion");
+  assert.equal(frontGain(-1), 0.5);
+  assert.equal(refuseSlump("slump"), true);
+  assert.equal(titheDue("ada"), 1);
+  assert.equal(titheDue(""), 0);
   assert.equal(dominionOpen(), false);
   const yard = createYard({ x: 0, y: 0 }, 10);
   assert.equal(tryPlaceRoad(yard, [1, 0]).ok, true);
