@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=68";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=83";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=84";
 import {
   authority,
   bandage,
@@ -320,6 +320,7 @@ const poses = new Map();
 let cameraSpring = null;
 let cameraPos = null;
 let cameraLook = null;
+let frameHold = false;
 
 function windowFocused() {
   if (document.hidden) return false;
@@ -468,9 +469,12 @@ addEventListener("keydown", (event) => {
     mapMode = mapMode === "small" ? "full" : mapMode === "full" ? "none" : "small";
     showChart();
   }
-  if (event.code === "Escape" && mapMode !== "none") {
-    mapMode = "none";
-    showChart();
+  if (event.code === "Escape") {
+    if (selection) selection = null;
+    if (mapMode !== "none") {
+      mapMode = "none";
+      showChart();
+    }
   }
   if (event.code === "KeyV" && !followId) {
     if (view === "third") {
@@ -791,6 +795,35 @@ function aimCamera(sample, dt) {
     cameraSpring.vel[2] = Math.max(0, cameraSpring.vel[2]);
   }
   cameraLook = stepLook(cameraSpring, idealLook, dt);
+}
+
+function frameSlide(sample) {
+  if (!cameraPos) return [0, 0, 0];
+  const aim = cameraAim(sample);
+  const feet = followId && followed && followed.yaw !== undefined
+    ? [followed.x, followed.y, followed.z]
+    : player.position;
+  const behind = chaseOrigin(
+    feet,
+    aim.yaw,
+    aim.pitch,
+    followId ? false : !!sample.crouch,
+    aim.third ? aim.distance : CLOSE,
+  );
+  behind[2] += follow.height;
+  liftCamera(behind, standHeight(behind[0], behind[1], columnFloor(terrain.log.crust, behind[0], behind[1])));
+  const slip = [cameraPos[0] - behind[0], cameraPos[1] - behind[1], cameraPos[2] - behind[2]];
+  const pulling = Boolean(selection?.point) && aim.third && zoom.blend < 0.45 && !rightDown;
+  if (pulling) {
+    frameHold = true;
+    return slip;
+  }
+  if (!frameHold) return [0, 0, 0];
+  if (Math.hypot(slip[0], slip[1], slip[2]) < 0.08) {
+    frameHold = false;
+    return [0, 0, 0];
+  }
+  return slip;
 }
 
 function sceneFor(sample, width, height) {
@@ -2375,6 +2408,7 @@ if (params.get("still") !== "1") {
       work = { x: selection.point[0], y: selection.point[1], height: 1.6, mode: 4 };
     }
     const active = windowFocused();
+    const slide = frameSlide(sample);
     const stillSample = {
       x: player.position[0],
       y: player.position[1],
@@ -2386,6 +2420,9 @@ if (params.get("still") !== "1") {
       orbit: orbitYaw,
       zoom: (zoom.level || 0) + (zoom.blend || 0),
       busy: rightDown || keys.has("KeyW") || keys.has("KeyA") || keys.has("KeyS") || keys.has("KeyD") || keys.has("KeyZ") || keys.has("KeyC"),
+      sx: slide[0],
+      sy: slide[1],
+      sz: slide[2],
     };
     const speed = cameraSpeed(stillPose, stillSample, dt);
     const accel = cameraAccel(lastCameraSpeed, speed, dt);

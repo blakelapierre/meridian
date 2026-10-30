@@ -114,6 +114,11 @@ test("a jump's acceleration snaps a still picture to vsync", () => {
   const pose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
   assert.ok(cameraSpeed(pose, { ...pose, z: 0.3 }, 0.1) > 2);
   assert.equal(viewStill(pose, { ...pose, z: 0.3 }), false);
+  const framed = { ...pose, sx: 0.4, sy: 0.1, sz: 0 };
+  assert.ok(cameraSpeed(pose, framed, 0.1) > 3);
+  assert.equal(viewStill(pose, framed), false);
+  assert.equal(viewStill({ ...pose, sx: 1, sy: 2, sz: 3 }, { ...pose, sx: 1, sy: 2, sz: 3 }), true);
+  assert.ok(cameraAccel(0, cameraSpeed(pose, framed, 1 / 60), 1 / 60) >= 1);
 });
 
 test("a moving camera never keeps a frame slower than 12fps", () => {
