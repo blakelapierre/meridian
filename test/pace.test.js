@@ -72,7 +72,20 @@ test("throughput is pixels times the frames you can see", () => {
   assert.ok(visualThroughput(200 * 100, 33, refresh) > visualThroughput(200 * 100, 16, refresh) * 0.99);
 });
 
-test("the picture walks a few percent at a time toward higher throughput", () => {
+test("movement snaps toward vsync and will not stay under 12fps", () => {
+  const box = { displayW: 1280, displayH: 720 };
+  const pace = createPicturePace();
+  let seen = pace.step({ gap: 33, ...box, still: true });
+  for (let i = 0; i < 6; i += 1) seen = pace.step({ gap: 200, ...box, still: true });
+  const before = seen.scale;
+  seen = pace.step({ gap: 200, ...box, still: false });
+  assert.ok(seen.scale < before * 0.7);
+  let slow = seen.scale;
+  for (let i = 0; i < 8; i += 1) slow = pace.step({ gap: 120, ...box, still: false }).scale;
+  assert.ok(slow < seen.scale);
+});
+
+test("a still camera can keep walking toward higher throughput", () => {
   const box = { displayW: 1600, displayH: 900 };
   const pace = createPicturePace();
   const cost = (level) => {
@@ -83,7 +96,7 @@ test("the picture walks a few percent at a time toward higher throughput", () =>
   let seen = pace.step({ gap: cost(0.4), ...box });
   let prev = seen.scale;
   for (let i = 0; i < 80; i += 1) {
-    seen = pace.step({ gap: cost(seen.scale), ...box });
+    seen = pace.step({ gap: cost(seen.scale), ...box, still: true });
     assert.ok(Math.abs(seen.scale - prev) / prev <= 0.05);
     prev = seen.scale;
   }

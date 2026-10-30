@@ -42,11 +42,12 @@ export function createPicturePace() {
   let skip = true;
   let direction = 1;
   let lastScore = 0;
+  let wasStill = false;
   return {
     get scale() {
       return scale;
     },
-    step({ gap = 0, displayW = 960, displayH = 540 } = {}) {
+    step({ gap = 0, displayW = 960, displayH = 540, still = false } = {}) {
       if (gap >= 8 && gap <= 50) {
         period = periodSamples ? period * 0.85 + gap * 0.15 : gap;
         periodSamples += 1;
@@ -58,6 +59,16 @@ export function createPicturePace() {
         return { scale, refresh, info, width: size.width, height: size.height };
       };
       if (!(gap > 0)) return pack(0);
+      if (wasStill && !still && gap > refresh) {
+        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(refresh / gap)));
+        bucket = [];
+        skip = true;
+        direction = 1;
+        lastScore = 0;
+        wasStill = false;
+        return pack(0);
+      }
+      wasStill = still;
       if (skip) {
         skip = false;
         return pack(0);
@@ -69,9 +80,18 @@ export function createPicturePace() {
       bucket = [];
       const size = sized();
       const score = visualThroughput(size.width * size.height, ms, refresh);
-      if (lastScore > 0 && score < lastScore * 0.98) direction = -direction;
-      lastScore = score;
-      scale = Math.max(0.08, Math.min(1, scale * (direction > 0 ? 1.04 : 0.96)));
+      const floor = 1000 / 12;
+      if (!still && ms > floor) {
+        scale = Math.max(0.08, scale * Math.max(0.86, Math.sqrt(floor / ms)));
+        direction = 1;
+        lastScore = 0;
+      } else {
+        if (!still && ms > floor * 0.85) direction = 0;
+        else if (lastScore > 0 && score < lastScore * 0.98) direction = -direction;
+        else if (!still) direction = 1;
+        lastScore = score;
+        if (direction !== 0) scale = Math.max(0.08, Math.min(1, scale * (direction > 0 ? 1.04 : 0.96)));
+      }
       skip = true;
       const next = pictureSize(scale, displayW, displayH);
       return { scale, refresh, info: score, width: next.width, height: next.height };
