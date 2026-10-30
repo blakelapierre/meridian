@@ -74,7 +74,7 @@ import { boltHit, penFactor, startBolt, stepBolt } from "../sim/bolt.js";
 import { noteHarm } from "../sim/identityharm.js";
 import { cellId, inInterest, quorum, sameCell } from "../sim/cell.js";
 import { maySit } from "../sim/command.js";
-import { standHeight } from "../sim/life.js?v=56";
+import { groundLook, standHeight } from "../sim/life.js?v=65";
 import { swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -199,7 +199,7 @@ let cycleEdge = 0;
 let objectEdge = 0;
 let rightEdge = false;
 let autoRun = false;
-let mapOpen = params.get("quiet") !== "1" || params.has("ai");
+let mapMode = "small";
 const trail = [];
 const selfPath = [];
 const tracks = new Map();
@@ -356,11 +356,11 @@ addEventListener("keydown", (event) => {
   if (event.code === "Backquote") objectEdge = event.shiftKey ? -1 : 1;
   if (event.code === "KeyQ" && !followId) autoRun = !autoRun;
   if (event.code === "KeyM") {
-    mapOpen = !mapOpen;
+    mapMode = mapMode === "small" ? "full" : mapMode === "full" ? "none" : "small";
     showChart();
   }
-  if (event.code === "Escape" && mapOpen) {
-    mapOpen = false;
+  if (event.code === "Escape" && mapMode !== "none") {
+    mapMode = "none";
     showChart();
   }
   if (event.code === "KeyV" && !followId) {
@@ -759,16 +759,17 @@ function geographyAt(x, y) {
   for (const prop of atoll.props) {
     const box = prop.box;
     if (cmx < box.min.x || cmx > box.max.x || cmy < box.min.y || cmy > box.max.y) continue;
-    return { kind: prop.material === "stone" ? "stone" : "wood", depth };
+    return { kind: prop.material === "stone" ? "stone" : "wood", depth, color: prop.material === "stone" ? GEO_COLOR.stone : GEO_COLOR.wood };
   }
   for (const piece of yard.pieces) {
     const px = piece.at[0] * 0.5;
     const py = piece.at[1] * 0.5;
     if (Math.abs(px - x) > 0.35 || Math.abs(py - y) > 0.35) continue;
-    return { kind: piece.id === "footing" ? "stone" : "wood", depth };
+    return { kind: piece.id === "footing" ? "stone" : "wood", depth, color: piece.id === "footing" ? GEO_COLOR.stone : GEO_COLOR.wood };
   }
-  if (depth < -0.05) return { kind: "pit", depth };
-  return { kind: "sand", depth };
+  if (depth < -0.05) return { kind: "pit", depth, color: GEO_COLOR.pit };
+  const look = groundLook(x, y);
+  return { kind: look.kind, depth, color: look.color };
 }
 
 function revealMap() {
@@ -782,7 +783,7 @@ function revealMap() {
   const brush = Math.max(1.6, cellSize(skills.mapping.value));
   for (const point of points) {
     const geo = geographyAt(point.x, point.y);
-    stamp(plate, point.x, point.y, GEO_COLOR[geo.kind] || GEO_COLOR.sand, brush);
+    stamp(plate, point.x, point.y, geo.color || GEO_COLOR[geo.kind] || GEO_COLOR.sand, brush);
   }
 }
 
@@ -822,8 +823,22 @@ function bindChart() {
 
 function showChart() {
   const chart = document.querySelector("#chart");
-  if (chart) chart.classList.toggle("open", mapOpen);
-  document.documentElement.classList.toggle("mapped", mapOpen);
+  const surface = document.querySelector("#map");
+  const open = mapMode !== "none";
+  if (chart) {
+    chart.classList.toggle("open", open);
+    chart.classList.toggle("full", mapMode === "full");
+  }
+  document.documentElement.classList.toggle("mapped", mapMode === "small");
+  if (!surface) return;
+  const quiet = document.documentElement.classList.contains("quiet");
+  const side = mapMode === "full"
+    ? Math.max(256, Math.min(window.innerWidth, window.innerHeight) - 36)
+    : quiet ? 112 : 220;
+  if (surface.width !== side) {
+    surface.width = side;
+    surface.height = side;
+  }
 }
 
 function sensedPeople() {
@@ -844,12 +859,8 @@ function sensedPeople() {
 }
 
 function drawChart() {
-  const chart = document.querySelector("#chart");
-  if (!mapOpen) {
-    if (chart) chart.classList.remove("open");
-    return;
-  }
-  if (chart) chart.classList.add("open");
+  showChart();
+  if (mapMode === "none") return;
   bindChart();
   if (mapFollow) mapCenter = [player.position[0], player.position[1]];
   const ability = mapAbilities(skills.mapping.value);
@@ -1928,7 +1939,7 @@ if (params.get("still") !== "1") {
           notePath(line, [other.feet[0], other.feet[1]], skills.tracking.value - 16);
         }
       }
-      if (mapOpen) grantUse(skills, "mapping", { tick, gap: 15 });
+      if (mapMode !== "none") grantUse(skills, "mapping", { tick, gap: 15 });
       const step = player.position;
       const lastFix = trail[trail.length - 1];
       if (!lastFix || (step[0] - lastFix[0]) ** 2 + (step[1] - lastFix[1]) ** 2 > 2.25) {

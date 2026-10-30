@@ -12,6 +12,31 @@ export function standHeight(x, y, dug = 0) {
   return duneHeight(x, y);
 }
 
+function smoothstep(edge0, edge1, value) {
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+export function groundLook(x, y) {
+  const h = duneHeight(x, y);
+  const e = 0.75;
+  const nx = h - duneHeight(x + e, y);
+  const ny = h - duneHeight(x, y + e);
+  const nz = e;
+  const slope = 1 - Math.max(0, Math.min(1, nz / Math.hypot(nx, ny, nz)));
+  const crest = Math.max(0, Math.min(1, h / HILL));
+  const rockW = Math.max(0, Math.min(1, smoothstep(0.2, 0.5, slope) + smoothstep(0.62, 0.92, crest) * 0.8));
+  let grassW = (1 - rockW) * smoothstep(0.1, 0.34, crest) * (1 - smoothstep(0.58, 0.86, crest));
+  grassW *= 1 - smoothstep(0.16, 0.46, slope);
+  const sand = [196, 168, 112];
+  const grass = [72, 132, 54];
+  const rock = [142, 136, 124];
+  const mix = (a, b, t) => a.map((channel, i) => Math.round(channel + (b[i] - channel) * t));
+  const color = [...mix(mix(sand, grass, grassW), rock, rockW), 255];
+  const kind = rockW > 0.45 ? "rock" : grassW > 0.35 ? "grass" : "sand";
+  return { kind, color, crest, grassW, rockW };
+}
+
 function shy(at, from, sense, push) {
   if (!from) return at;
   let dx = at[0] - from[0];
