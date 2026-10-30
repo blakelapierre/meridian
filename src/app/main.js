@@ -66,7 +66,7 @@ import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
 import { paintChart } from "../render/chart.js?v=70";
-import { blendDir, blendOrigin, CLOSE, easeFollow, OPTICS, rangeRead, relaxOrbit, stepFollow, zoomFov } from "../sim/sight.js?v=8";
+import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, OPTICS, rangeRead, relaxOrbit, stepFollow, zoomFov } from "../sim/sight.js?v=8";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
@@ -887,24 +887,19 @@ function geographyAt(x, y) {
 }
 
 function revealMap() {
-  const aim = cameraAim();
-  const eye = cameraPos || [
-    player.position[0],
-    player.position[1],
-    player.position[2] + 1.65,
-  ];
-  const boxW = canvas.clientWidth || canvas.width || 16;
-  const boxH = canvas.clientHeight || canvas.height || 9;
+  const eye = eyeOf({ crouch: keys.has("ControlLeft") || keys.has("ControlRight") });
+  const sight = view === "first"
+    ? zoomFov(zoom.level, skills.eyesight.value + skills.focus.value * 0.5, optics)
+    : BASE_FOV;
   const points = revealLook({
     x: player.position[0],
     y: player.position[1],
     yaw,
     pitch,
     origin: eye,
-    dir: cameraLook || lookDirection(yaw, pitch),
+    dir: lookDirection(yaw, pitch),
     skills: skillBag(),
-    fov: aim.fov,
-    aspect: boxW / Math.max(1, boxH),
+    fov: sight,
     heightAt: (px, py) => standHeight(px, py, columnFloor(terrain.log.crust, px, py)),
   });
   const brush = Math.max(1.6, cellSize(skills.mapping.value));
