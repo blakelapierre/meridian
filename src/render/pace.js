@@ -40,7 +40,7 @@ export function cameraSpeed(previous, next, dt) {
 export function traceInterval(still, accel, refreshMs) {
   const refresh = Math.min(Math.max(refreshMs || 16, 1000 / 120), 1000 / 20);
   if (still) return Math.max(refresh, 125);
-  if (accel >= 2) return refresh;
+  if (accel >= 1.5) return refresh;
   return Math.max(refresh, 1000 / 12);
 }
 
@@ -89,77 +89,28 @@ export function createPicturePace() {
       };
       if (!(gap > 0)) return pack(0);
       const floorMs = 1000 / 12;
-      const surge = Math.min(1, Math.max(0, accel) / 3);
-      if (!still && gap > floorMs) {
-        const limit = Math.min(floorMs, motionLimit(speed, refresh, accel));
-        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(limit / gap)));
-        bucket = [];
-        skip = true;
-        direction = 0;
-        lastScore = 0;
-        surged = accel >= 2;
+      const accelerating = accel >= 1.5;
+      const target = still ? Infinity : accelerating ? refresh : floorMs;
+      if (wasStill && !still && gap > target) {
+        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(target / gap)));
         wasStill = false;
-        return pack(0);
-      }
-      if (!still && accel >= 2 && !surged && gap > refresh) {
-        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(refresh / gap)));
         bucket = [];
-        skip = true;
-        direction = 0;
-        lastScore = 0;
-        surged = true;
-        wasStill = false;
-        return pack(0);
-      }
-      if (surge < 1) surged = false;
-      if (wasStill && !still && gap > refresh) {
-        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(refresh / gap)));
-        bucket = [];
-        skip = true;
-        direction = 1;
-        lastScore = 0;
-        wasStill = false;
         return pack(0);
       }
       if (still) {
         scale = Math.min(1, scale * 1.12);
         wasStill = true;
         bucket = [];
-        skip = true;
-        direction = 1;
         const size = pictureSize(scale, displayW, displayH);
         const info = visualThroughput(size.width * size.height, gap, refresh, speed, accel);
         return { scale, refresh, info, width: size.width, height: size.height };
       }
       wasStill = false;
-      if (skip) {
-        skip = false;
-        return pack(0);
-      }
-      bucket.push(gap);
-      const moving = still ? 1 : Math.max(speed, 0.05);
-      if (bucket.length < 4) return pack(visualThroughput(sized().width * sized().height, gap, refresh, moving, accel));
-      const ordered = [...bucket].sort((a, b) => a - b);
-      const ms = ordered[ordered.length >> 1];
       bucket = [];
       const size = sized();
-      const score = visualThroughput(size.width * size.height, ms, refresh, moving, 0);
-      const shown = visualThroughput(size.width * size.height, ms, refresh, moving, accel);
-      const limit = still ? Infinity : motionLimit(speed, refresh, accel);
-      const growBy = still ? 1.18 : 1.04 + (1 - surge) * 0.04;
-      if (!still && ms > limit) {
-        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(limit / ms)));
-        direction = 0;
-        lastScore = 0;
-      } else {
-        if (!still && ms > limit * 0.85) direction = 0;
-        else if (lastScore > 0 && score < lastScore * 0.98) direction = -direction;
-        else if (!still) direction = 1;
-        lastScore = score;
-        if (direction > 0) scale = Math.max(0.08, Math.min(1, scale * growBy));
-        else if (direction < 0) scale = Math.max(0.08, Math.min(1, scale * 0.96));
-      }
-      skip = true;
+      const shown = visualThroughput(size.width * size.height, gap, refresh, Math.max(speed, 0.05), accel);
+      if (gap > target) scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(target / gap)));
+      else if (gap < target * 0.85) scale = Math.min(1, scale * (accelerating ? 1.04 : 1.1));
       const next = pictureSize(scale, displayW, displayH);
       return { scale, refresh, info: shown, width: next.width, height: next.height };
     },

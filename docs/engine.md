@@ -32,7 +32,7 @@ The demo only intersects spheres. Meridian's `cast` keeps that loop and adds two
 
 Bodies, the dummy, and projectiles stay spheres. A standing character is drawn as a sphere of radius **0.35 m** until a capsule intersection exists. That sphere is the picture. It is not the merge collider.
 
-The trace is drawn into one of three offscreen buffers. Every refresh copies the latest buffers to the canvas. The score is pixels times the displayed frame rate times camera speed times camera acceleration. Speed and acceleration include the follow rig and the zoom, so a zoom pulls the buffer the same way a turn does. Acceleration aims the buffer at the display refresh. Any camera movement stays at or above 12 fps. Only a completely still camera may go slower, and that is when the picture climbs to native. A resolution change crossfades. Orbit trails from that pen are not drawn.
+The trace is drawn into one of three offscreen buffers. Every refresh copies the latest buffers to the canvas. The score is pixels times the displayed frame rate times camera speed times camera acceleration. Speed and acceleration include the follow rig and the zoom. The buffer aims at the display refresh only while the camera is accelerating. With no acceleration it may use 12 fps in order to raise the resolution, and it does not go below 12 while the camera is moving. Only a completely still camera may go slower, and that is when the picture climbs to native. A resolution change crossfades. Orbit trails from that pen are not drawn.
 
 ### Physics
 
