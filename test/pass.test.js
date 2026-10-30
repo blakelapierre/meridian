@@ -22,6 +22,8 @@ import {
   spendLogistics,
   spoilCap,
 } from "../src/sim/rules.js";
+import { shellTilt } from "../src/sim/shell.js";
+import { swarmPoint } from "../src/sim/litho.js";
 
 test("the third pass of the notes is a set of small rules", () => {
   const vitals = createVitals();
@@ -59,6 +61,11 @@ test("the third pass of the notes is a set of small rules", () => {
   assert.equal(refuseSlump("slump"), true);
   assert.equal(titheDue("ada"), 1);
   assert.equal(titheDue(""), 0);
+  assert.equal(shellTilt(0), 0);
+  assert.ok(shellTilt(2) > 0 && shellTilt(2) <= 0.12);
+  assert.equal(swarmPoint(0, -150, 20), null);
+  assert.deepEqual(swarmPoint(0, -200, 20), [1.6, -200, 1.1]);
+  assert.equal(swarmPoint(0, -200, 3), null);
   assert.equal(dominionOpen(), false);
   const yard = createYard({ x: 0, y: 0 }, 10);
   assert.equal(tryPlaceRoad(yard, [1, 0]).ok, true);

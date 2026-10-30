@@ -107,17 +107,28 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plat
   const you = placeOnView(here, self, across, size);
   if (radius > 0 && across > 0) {
     const ring = (radius / across) * size;
+    const inner = ring * 0.5;
     ctx.strokeStyle = "rgba(180, 210, 190, 0.45)";
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.arc(you.x, you.y, ring, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(you.x, you.y, inner, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.setLineDash([]);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(you.x, you.y, ring, 0, Math.PI * 2);
+    ctx.arc(you.x, you.y, inner, 0, Math.PI * 2, true);
+    ctx.fillStyle = "rgba(64, 82, 42, 0.32)";
+    ctx.fill("evenodd");
+    ctx.restore();
     ctx.save();
     ctx.beginPath();
     ctx.arc(half, half, half - 1, 0, Math.PI * 2);
     ctx.arc(you.x, you.y, ring, 0, Math.PI * 2, true);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
     ctx.fill("evenodd");
     ctx.restore();
   }

@@ -3,8 +3,8 @@ import { hearStep } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js";
+import { buildScene } from "../render/scene.js?v=50";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=50";
 import { createFps } from "../render/fps.js";
 import { createPacer, easePixels, nativePixels, paceWord, playPixels, soldierTarget, viewStill } from "../render/pace.js";
 import {
@@ -56,7 +56,7 @@ import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, no
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
-import { paintChart } from "../render/chart.js";
+import { paintChart } from "../render/chart.js?v=50";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -72,9 +72,10 @@ import { boltHit, penFactor, startBolt, stepBolt } from "../sim/bolt.js";
 import { noteHarm } from "../sim/identityharm.js";
 import { cellId, inInterest, quorum, sameCell } from "../sim/cell.js";
 import { maySit } from "../sim/command.js";
+import { swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
-import { radialDown, shellDrop } from "../sim/shell.js";
+import { radialDown, shellDrop, shellTilt } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom } from "../net/room.js";
 import { acceptShot, encodeShot } from "../net/shots.js";
@@ -588,6 +589,15 @@ function otherActors() {
   return list;
 }
 
+function drawnOthers() {
+  const list = otherActors();
+  if (!dragging || selection?.kind !== "player") return list;
+  const dir = lookDirection(yaw, 0);
+  return list.map((actor) => actor.id === selection.id
+    ? { ...actor, feet: [actor.feet[0] + dir[0] * 0.9, actor.feet[1] + dir[1] * 0.9, actor.feet[2]] }
+    : actor);
+}
+
 function cameraAim(sample = {}) {
   const bodyYaw = sample.yaw ?? yaw;
   const bodyPitch = sample.pitch ?? pitch;
@@ -637,6 +647,12 @@ function aimCamera(sample, dt) {
     ideal = blendOrigin(framing.origin, eyes, blend);
     idealLook = blendDir(framing.dir, lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch), blend);
   }
+  const tilt = shellTilt(shellDrop(feet[0], feet[1]));
+  if (tilt) {
+    idealLook = [idealLook[0], idealLook[1], idealLook[2] - tilt];
+    const len = Math.hypot(idealLook[0], idealLook[1], idealLook[2]) || 1;
+    idealLook = [idealLook[0] / len, idealLook[1] / len, idealLook[2] / len];
+  }
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
   cameraLook = stepLook(cameraSpring, idealLook, dt);
@@ -657,11 +673,12 @@ function sceneFor(sample, width, height) {
     height,
     view: followId ? "third" : view,
     self: !followId && zoom.blend < 0.65 && view !== "first",
-    others: otherActors(),
+    others: drawnOthers(),
     cameraOrigin: cameraPos,
     cameraDir: cameraLook,
     fov: aim.fov,
     smoke: smokeTicks > 0 ? (smokeAt || player.position) : null,
+    swarm: swarmPoint(player.position[0], player.position[1], digs),
     pools,
     bolts,
   });

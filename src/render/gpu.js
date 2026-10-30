@@ -212,6 +212,7 @@ void main() {
   vec3 ro = uOrigin;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
+  float edge = length(vec2(uu, vv) - vec2(0.5));
   for (int bounce = 0; bounce < 2; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
@@ -341,6 +342,7 @@ void main() {
       }
     }
     float mirror = bounce == 1 ? 0.0 : clamp(bestRef, 0.0, 1.0);
+    if (edge > 0.34) mirror = 0.0;
     accum += thru * bestRgb * (1.0 - mirror);
     thru *= mirror;
     if (thru <= 0.001) break;
