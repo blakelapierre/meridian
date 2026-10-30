@@ -1,4 +1,5 @@
 import { paintFrame } from "../engine/frame.js";
+import { mountTouch } from "./touch.js";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
@@ -653,6 +654,19 @@ addEventListener("mousemove", (event) => {
   if (followId) return;
   yaw += event.movementX * 0.0022;
   pitch = Math.max(-1.2, Math.min(1.2, pitch - event.movementY * 0.0022));
+});
+
+mountTouch({
+  keys,
+  look(dx, dy) {
+    if (followId) return;
+    yaw += dx * 0.006;
+    pitch = Math.max(-1.2, Math.min(1.2, pitch - dy * 0.006));
+  },
+  fire(down) {
+    trigger = down;
+    if (down && slot === "line") shotQueued = true;
+  },
 });
 
 function input() {
