@@ -3,13 +3,34 @@ import { WebSocketServer } from "ws";
 const MAX_BLOB = 64 * 1024;
 const TTL_MS = 15_000;
 
-export function createLighthouse(port = 0) {
+// Limits for a lighthouse that faces the public internet. Defaults are generous for local play.
+export const LIMITS = { maxSockets: 512, maxPeers: 1024, perSecond: 40, maxPayload: 1024 * 1024 };
+
+export function createLighthouse(port = 0, { host, limits = {}, origins = null } = {}) {
+  const limit = { ...LIMITS, ...limits };
   const peers = new Map();
-  const wss = new WebSocketServer({ port });
+  const wss = new WebSocketServer({
+    port,
+    host,
+    maxPayload: limit.maxPayload,
+    verifyClient: ({ origin }) => wss.clients.size < limit.maxSockets && (!origins || origins.includes(origin)),
+  });
 
   wss.on("connection", (socket) => {
     let pubkey = null;
+    let window = Date.now();
+    let count = 0;
     socket.on("message", (raw) => {
+      const now = Date.now();
+      if (now - window >= 1000) {
+        window = now;
+        count = 0;
+      }
+      count += 1;
+      if (count > limit.perSecond) {
+        if (count > limit.perSecond * 5) socket.terminate();
+        return;
+      }
       let message;
       try {
         message = JSON.parse(raw.toString());
@@ -18,7 +39,8 @@ export function createLighthouse(port = 0) {
       }
       if (message.type === "announce") {
         pubkey = String(message.pubkey || "");
-        if (!pubkey) return;
+        if (!pubkey || pubkey.length > 128) return;
+        if (!peers.has(pubkey) && peers.size >= limit.maxPeers) return;
         peers.set(pubkey, {
           socket,
           cell: String(message.cell || ""),
@@ -69,6 +91,8 @@ export function createLighthouse(port = 0) {
       resolve({
         port: address.port,
         url: `ws://127.0.0.1:${address.port}`,
+        clients: () => wss.clients.size,
+        peers: () => peers.size,
         close() {
           for (const peer of peers.values()) peer.socket.terminate();
           return new Promise((done) => wss.close(done));

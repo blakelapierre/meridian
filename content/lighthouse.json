@@ -1,0 +1,5 @@
+{
+  "url": "wss://aluminium-approve-permit-spray.trycloudflare.com",
+  "local": "ws://127.0.0.1:8787",
+  "note": "Public lighthouse for the github.io build. Set url to a wss:// address (for example a Cloudflare named tunnel). null plays solo. ?lighthouse=wss://... overrides it, ?lighthouse=off forces solo."
+}
