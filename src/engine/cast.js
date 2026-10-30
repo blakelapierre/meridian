@@ -163,6 +163,80 @@ export function cast(origin, direction, objects, miss = [0, 0, 0, 1]) {
   return best;
 }
 
+export const REFLECTION_STEPS = 4;
+const REFLECT_BIAS = 0.05;
+
+function hitNormal(hit) {
+  const object = hit.object;
+  if (!object || !hit.point) return [0, 0, 1];
+  if (object.type === "sphere") {
+    return normalize([
+      hit.point[0] - object.origin[0],
+      hit.point[1] - object.origin[1],
+      hit.point[2] - object.origin[2],
+    ]);
+  }
+  if (object.type === "box") {
+    const center = [
+      (object.min[0] + object.max[0]) * 0.5,
+      (object.min[1] + object.max[1]) * 0.5,
+      (object.min[2] + object.max[2]) * 0.5,
+    ];
+    const extent = [
+      Math.max(object.max[0] - object.min[0], 0.001) * 0.5,
+      Math.max(object.max[1] - object.min[1], 0.001) * 0.5,
+      Math.max(object.max[2] - object.min[2], 0.001) * 0.5,
+    ];
+    const q = [
+      (hit.point[0] - center[0]) / extent[0],
+      (hit.point[1] - center[1]) / extent[1],
+      (hit.point[2] - center[2]) / extent[2],
+    ];
+    const ax = Math.abs(q[0]);
+    const ay = Math.abs(q[1]);
+    const az = Math.abs(q[2]);
+    if (ax > ay && ax > az) return [Math.sign(q[0]) || 1, 0, 0];
+    if (ay > az) return [0, Math.sign(q[1]) || 1, 0];
+    return [0, 0, Math.sign(q[2]) || 1];
+  }
+  return [0, 0, 1];
+}
+
+function reflectDirection(direction, normal) {
+  const along = dot(direction, normal);
+  return normalize([
+    direction[0] - 2 * along * normal[0],
+    direction[1] - 2 * along * normal[1],
+    direction[2] - 2 * along * normal[2],
+  ]);
+}
+
+export function traceColor(origin, direction, objects, miss = [0, 0, 0, 1], stepsLeft = REFLECTION_STEPS) {
+  const hit = cast(origin, direction, objects, miss);
+  const color = hit.color || miss;
+  const reflectivity = stepsLeft > 0 ? Math.min(1, Math.max(0, hit.object?.reflectivity || 0)) : 0;
+  if (!hit.object || reflectivity <= 0) return color;
+  const normal = hitNormal(hit);
+  const bounced = traceColor(
+    [
+      hit.point[0] + normal[0] * REFLECT_BIAS,
+      hit.point[1] + normal[1] * REFLECT_BIAS,
+      hit.point[2] + normal[2] * REFLECT_BIAS,
+    ],
+    reflectDirection(direction, normal),
+    objects,
+    miss,
+    stepsLeft - 1,
+  );
+  const keep = 1 - reflectivity;
+  return [
+    color[0] * keep + bounced[0] * reflectivity,
+    color[1] * keep + bounced[1] * reflectivity,
+    color[2] * keep + bounced[2] * reflectivity,
+    color[3] ?? 1,
+  ];
+}
+
 export function bodiesToObjects(bodies) {
   return bodies.map((body) => ({
     type: "sphere",
@@ -174,6 +248,7 @@ export function bodiesToObjects(bodies) {
       body.color[2] / 255,
       body.color[3] > 1 ? body.color[3] / 255 : body.color[3],
     ],
+    reflectivity: body.reflectivity || 0,
     body,
   }));
 }

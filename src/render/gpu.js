@@ -282,7 +282,7 @@ void main() {
   vec3 ro = uOrigin;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
-  for (int bounce = 0; bounce < 2; bounce++) {
+  for (int bounce = 0; bounce < 5; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
     vec3 bestN = vec3(0.0, 0.0, 1.0);
@@ -293,10 +293,19 @@ void main() {
     vec3 p;
     float sandT = 1.0e30;
     vec3 sandP = ro;
-    bool sand = sandPlane(ro, rd, sandT, sandP);
+    bool sand = false;
+    if (bounce == 0) sand = sandPlane(ro, rd, sandT, sandP);
+    else if (rd.z < -1.0e-4) {
+      sandT = -ro.z / rd.z;
+      if (sandT > 0.02 && sandT < 800.0) {
+        sandP = ro + rd * sandT;
+        sandP.z = duneHeight(sandP.xy);
+        sand = dot(sandP.xy, sandP.xy) <= 65536.0;
+      }
+    }
     bool openMouth = false;
     float mouthFloor = 0.0;
-    if (uDigs > 0) {
+    if (bounce == 0 && uDigs > 0) {
       ivec2 mouth = ivec2(floor(sandP.xy * 2.0));
       for (int n = 0; n < 32; n++) {
         if (n >= uDigs) break;
@@ -411,7 +420,7 @@ void main() {
         bestRgb += tint * (mark * 0.95 + pad * 0.35 * scan);
       }
     }
-    float mirror = bounce == 1 ? 0.0 : clamp(bestRef, 0.0, 1.0);
+    float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
     accum += thru * bestRgb * (1.0 - mirror);
     thru *= mirror;
     if (thru <= 0.001) break;
