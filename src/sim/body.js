@@ -44,6 +44,12 @@ export function chaseOrigin(feet, yaw, pitch, crouch = false, distance = CHASE) 
   ];
 }
 
+export function liftCamera(point, floor, clearance = 0.45) {
+  const z = floor + clearance;
+  if (point[2] < z) point[2] = z;
+  return point;
+}
+
 export function createCameraSpring(origin) {
   return { pos: origin.slice(), vel: [0, 0, 0] };
 }
