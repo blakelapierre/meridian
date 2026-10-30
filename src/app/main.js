@@ -4,7 +4,7 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=60";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=62";
 import { createFps } from "../render/fps.js";
 import { createPacer, coverLevel, nativePixels, paceWord, sizeAt, stepOctave, tuneRays, viewStill } from "../render/pace.js?v=60";
 import {

@@ -1,5 +1,5 @@
 import { cameraBasis } from "../engine/cast.js";
-import { ATLAS, SAND_TILE, WOOD_TILE, blitTexture, rectFor, sandTexture, woodTexture } from "./texture.js";
+import { ATLAS, GRASS_TILE, ROCK_TILE, SAND_TILE, WOOD_TILE, blitTexture, grassTexture, rectFor, rockTexture, sandTexture, woodTexture } from "./texture.js?v=62";
 
 const MAX_SPHERES = 24;
 const MAX_BOXES = 32;
@@ -130,6 +130,38 @@ vec3 sphereAlbedo(vec3 n, int i, vec3 fallback) {
   return tiled(i, vec2(u, v), fallback);
 }
 
+float hash21(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float cloudShade(vec3 rd) {
+  if (rd.z <= 0.02) return 0.0;
+  float t0 = clamp((34.0 - uOrigin.z) / rd.z, 0.0, 2400.0);
+  float t1 = clamp((62.0 - uOrigin.z) / rd.z, 0.0, 2400.0);
+  float span = max(t1 - t0, 0.0);
+  float sum = 0.0;
+  for (int i = 0; i < 5; i++) {
+    float t = t0 + span * ((float(i) + 0.5) / 5.0);
+    vec3 q = uOrigin + rd * t;
+    float n = valueNoise(q.xy * 0.018 + vec2(uTime * 0.004, 0.2));
+    float puff = smoothstep(0.5, 0.78, n);
+    float band = smoothstep(34.0, 42.0, q.z) * smoothstep(62.0, 50.0, q.z);
+    sum += puff * band * step(1.0, span);
+  }
+  return clamp(sum * 0.22, 0.0, 0.8);
+}
+
 float duneHeight(vec2 p) {
   float roll = 0.5 * sin(p.x * 0.15) + 0.5 * cos(p.y * 0.13);
   float wash = 0.5 * sin((p.x + p.y) * 0.17 + 1.3) + 0.5;
@@ -143,6 +175,21 @@ vec3 duneNormal(vec2 p) {
   float hx = duneHeight(p + vec2(e, 0.0));
   float hy = duneHeight(p + vec2(0.0, e));
   return normalize(vec3(h - hx, h - hy, e));
+}
+
+vec3 groundAlbedo(vec2 p, vec3 n) {
+  float crest = clamp(duneHeight(p) / 5.4, 0.0, 1.0);
+  float slope = 1.0 - clamp(n.z, 0.0, 1.0);
+  float rockW = clamp(smoothstep(0.2, 0.5, slope) + smoothstep(0.62, 0.92, crest) * 0.8, 0.0, 1.0);
+  float grassW = (1.0 - rockW) * smoothstep(0.1, 0.34, crest) * (1.0 - smoothstep(0.58, 0.86, crest));
+  grassW *= 1.0 - smoothstep(0.16, 0.46, slope);
+  vec3 sandC = tiled(${SAND_TILE}, p * 0.16, vec3(0.55, 0.48, 0.32));
+  vec3 grassC = tiled(${GRASS_TILE}, p * 0.14, vec3(0.22, 0.4, 0.16));
+  vec3 rockC = tiled(${ROCK_TILE}, p * 0.12, vec3(0.4, 0.38, 0.34));
+  sandC *= 0.88 + valueNoise(p * 0.23) * 0.22;
+  grassC *= 0.86 + valueNoise(p * 0.31 + 4.0) * 0.26;
+  rockC *= 0.84 + valueNoise(p * 0.19 + 9.0) * 0.28;
+  return mix(mix(sandC, grassC, grassW), rockC, rockW);
 }
 
 float islandExit(vec3 ro, vec3 rd) {
@@ -268,7 +315,10 @@ vec3 skyColor(vec3 rd) {
   float d = dot(rd, sun);
   float disc = smoothstep(0.99915, 0.99955, d);
   float glow = pow(max(d, 0.0), 220.0);
-  return sky + vec3(1.0, 0.94, 0.72) * (disc * 3.0 + glow * 0.7) * day;
+  vec3 color = sky + vec3(1.0, 0.94, 0.72) * (disc * 3.0 + glow * 0.7) * day;
+  float puff = cloudShade(rd);
+  vec3 cloud = mix(vec3(0.45, 0.48, 0.52), vec3(0.96, 0.97, 0.95), day);
+  return mix(color, cloud, puff);
 }
 
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
@@ -353,8 +403,7 @@ void main() {
       bestT = sandT;
       bestP = sandP;
       bestN = duneNormal(sandP.xy);
-      float crest = clamp(sandP.z / 5.4, 0.0, 1.0);
-      bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.55, 0.48, 0.32)) * mix(0.84, 1.06, crest);
+      bestRgb = groundAlbedo(sandP.xy, bestN);
       bestRef = 0.02;
       found = true;
     }
@@ -405,6 +454,13 @@ void main() {
     else {
       float nd = max(dot(bestN, normalize(uSun)), 0.0);
       bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;
+    }
+    if (bounce == 0) {
+      float low = exp(-max(bestP.z, 0.0) * 0.11);
+      float fog = (1.0 - exp(-bestT * 0.0011)) * mix(0.35, 1.0, low);
+      fog = clamp(fog, 0.0, 0.62);
+      vec3 haze = mix(vec3(0.42, 0.48, 0.54), vec3(0.74, 0.8, 0.86), smoothstep(-0.05, 0.25, normalize(uSun).z));
+      bestRgb = mix(bestRgb, haze, fog);
     }
     if (bounce == 0 && uWork.w > 0.5) {
       vec2 cell = uWork.xy;
@@ -480,8 +536,12 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     blitTexture(atlasData, SAND_TILE, sandTexture());
     blitTexture(atlasData, WOOD_TILE, woodTexture());
+    blitTexture(atlasData, GRASS_TILE, grassTexture());
+    blitTexture(atlasData, ROCK_TILE, rockTexture());
     rectData.set(rectFor(SAND_TILE), SAND_TILE * 4);
     rectData.set(rectFor(WOOD_TILE), WOOD_TILE * 4);
+    rectData.set(rectFor(GRASS_TILE), GRASS_TILE * 4);
+    rectData.set(rectFor(ROCK_TILE), ROCK_TILE * 4);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ATLAS, ATLAS, 0, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
   } catch {
     return null;
