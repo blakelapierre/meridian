@@ -49,10 +49,10 @@ import {
 } from "../sim/hearth.js";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=57";
 import { createJump } from "../sim/jump.js";
-import { createSkills, claimSpecialty, grantUse, SKILL_NAMES } from "../sim/skills.js";
+import { createSkills, claimSpecialty, grantUse, skillRows } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
-import { cellSize, contourLines, contourStep, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp } from "../sim/map.js";
+import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, samplePlate, stamp } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
@@ -785,6 +785,7 @@ function revealMap() {
     const geo = geographyAt(point.x, point.y);
     stamp(plate, point.x, point.y, geo.color || GEO_COLOR[geo.kind] || GEO_COLOR.sand, brush);
   }
+  if (mapMode !== "none") grantUse(skills, "topography", { tick, gap: 40 });
 }
 
 function bindChart() {
@@ -892,15 +893,16 @@ function drawChart() {
   }
   const span = mapSpan(skills.mapping.value, mapZoom);
   const rise = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
-  const contours = contourLines({
+  const detail = contourDetail(skills.topography.value);
+  const contours = detail.step > 0 ? contourLines({
     x: mapCenter[0],
     y: mapCenter[1],
     span,
-    step: contourStep(skills.mapping.value),
-    cells: mapMode === "full" ? 28 : 18,
+    step: detail.step,
+    cells: mapMode === "full" ? detail.cells + 8 : detail.cells,
     heightAt: (x, y) => standHeight(x, y, columnFloor(terrain.log.crust, x, y)),
     knownAt: (x, y) => samplePlate(plate, x, y)[3] > 0,
-  });
+  }) : [];
   paintChart(document.querySelector("#map"), document.querySelector("#fix"), {
     self: player.position,
     yaw,
@@ -1058,10 +1060,10 @@ function showSight(mark) {
 function paintSkills() {
   const list = document.querySelector("#skills");
   if (!list) return;
-  list.replaceChildren(...SKILL_NAMES.map((name) => {
-    const skill = skills[name];
+  list.replaceChildren(...skillRows().map((row) => {
+    const skill = skills[row.name];
     const label = document.createElement("span");
-    label.textContent = skill.specialized ? `${name}*` : name;
+    label.textContent = skill.specialized ? `${row.name}*` : row.name;
     const track = document.createElement("span");
     track.className = "bar";
     const fill = document.createElement("i");
@@ -1069,9 +1071,10 @@ function paintSkills() {
     track.append(fill);
     const value = document.createElement("b");
     value.textContent = String(Math.floor(skill.value));
-    const row = document.createElement("li");
-    row.append(label, track, value);
-    return row;
+    const item = document.createElement("li");
+    if (row.child) item.className = "child";
+    item.append(label, track, value);
+    return item;
   }));
 }
 

@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints the color of that ground: sand, 
 
 ## This pass
 
-Looked-at ground keeps its color, darker in the lows and lighter on the crests. Contour lines follow the hills on that surveyed ground. They start two meters apart. Mapping draws them closer. The chart line includes the height under your feet.
+Topography is a subskill of mapping. It is listed under mapping. It rises only while the chart is surveying, and it cannot pass mapping. No contour lines until it reaches 4. Then the interval falls from 4 m to 2 m, 1 m, and 0.5 m, and the hill is sampled on a finer grid.
 
 ## Proves
 

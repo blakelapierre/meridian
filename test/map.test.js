@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abilityLine, contourLines, contourStep, createSurvey, formatFix, headingDegrees, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathKeep, pathStamp, placeMark } from "../src/sim/map.js";
+import { abilityLine, contourDetail, contourLines, contourStep, createSurvey, formatFix, headingDegrees, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathKeep, pathStamp, placeMark } from "../src/sim/map.js";
+import { createSkills, grantUse } from "../src/sim/skills.js";
 
-test("contours follow the slope and tighten as mapping rises", () => {
-  assert.equal(contourStep(0), 2);
+test("topography is a subskill and it refines the contours", () => {
+  assert.equal(contourStep(0), 0);
+  assert.equal(contourStep(10), 4);
   assert.equal(contourStep(40), 1);
   assert.equal(contourStep(90), 0.5);
+  assert.equal(contourDetail(0).cells, 0);
+  assert.ok(contourDetail(90).cells > contourDetail(20).cells);
+  const skills = createSkills();
+  assert.equal(skills.topography.parent, "mapping");
+  assert.equal(grantUse(skills, "topography", { tick: 1 }), 0);
+  grantUse(skills, "mapping", { tick: 1 });
+  assert.ok(grantUse(skills, "topography", { tick: 1 }) > 0);
+  assert.ok(skills.topography.value <= skills.mapping.value);
   const lines = contourLines({
     x: 3,
     y: 0,
