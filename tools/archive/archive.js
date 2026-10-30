@@ -59,8 +59,21 @@ const room = createRoom({
   role: "archive",
 });
 
+let signal = "connecting";
+
+function showFail(error) {
+  signal = "failed";
+  const text = String(error && error.message || error);
+  const status = document.querySelector("#status");
+  const perf = document.querySelector("#perf");
+  if (status) status.textContent = text;
+  if (perf) perf.textContent = `${text}\n\nThe archive did not finish starting.`;
+}
+
 function $(id) {
-  return document.querySelector(id);
+  const node = document.querySelector(id);
+  if (!node) throw new Error(`missing ${id}`);
+  return node;
 }
 
 function persist() {
@@ -212,6 +225,7 @@ function paint() {
       `buffered ${buffered}    keep ${keepOf(ledger)}`,
       crate ? `crate ${crate.metal} metal ${crate.fiber} fiber` : "crate not ready",
       `bounty $${(cents / 100).toFixed(2)}`,
+      `signal ${signal}`,
       roomId,
     ].join("\n");
   }
@@ -326,16 +340,25 @@ $("receipt").addEventListener("click", async () => {
   }
 });
 
-paint();
+try {
+  paint();
+} catch (error) {
+  showFail(error);
+}
 room.start().then(() => {
-  for (const text of world.frames) {
-    const bytes = hexBytes(text);
-    if (bytes[0] !== 11) continue;
-    const decoded = decodeBlock(bytes);
-    if (decoded.ok) consider(decoded.block);
+  signal = "open";
+  try {
+    for (const text of world.frames || []) {
+      const bytes = hexBytes(text);
+      if (bytes[0] !== 11) continue;
+      const decoded = decodeBlock(bytes);
+      if (decoded.ok) consider(decoded.block);
+    }
+  } catch (error) {
+    showFail(error);
   }
   paint();
-  seek();
+  seek().catch((error) => showFail(error));
   setInterval(seek, 3000);
   setInterval(hunt, 40);
   setInterval(() => {
@@ -345,5 +368,5 @@ room.start().then(() => {
     outgoing();
   }, 1000);
 }).catch((error) => {
-  $("status").textContent = String(error);
+  showFail(error);
 });
