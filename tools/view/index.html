@@ -76,6 +76,13 @@
       html.demo aside p { margin: 0 0 2px; }
       #hint { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 7; max-width: min(36rem, calc(100vw - 200px)); padding: 6px 12px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; font: 14px/1.35 sans-serif; text-align: center; pointer-events: none; }
       #hint[hidden] { display: none; }
+      #hint { font-size: 15px; padding: 8px 14px; background: rgba(0,0,0,.72); box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+      #tourskip { margin-left: 8px; padding: 2px 10px; border: 1px solid #fd8; border-radius: 6px; background: transparent; color: #fd8; font: 12px/1.4 sans-serif; cursor: pointer; pointer-events: auto; }
+      #goal { position: fixed; z-index: 6; transform: translate(-50%, -100%); pointer-events: none; display: flex; flex-direction: column; align-items: center; color: #fd3; font: bold 14px/1.1 sans-serif; text-shadow: 0 1px 3px #000, 0 0 2px #000; }
+      #goal[hidden] { display: none; }
+      #goal b { font-size: 26px; line-height: 1; }
+      #goal[data-on="0"] { transform: translate(-50%, -50%); }
+      #goal[data-on="0"] b { order: 2; }
       #shotfx { position: fixed; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); z-index: 6; font: bold 13px/1 sans-serif; color: #fff; text-shadow: 0 1px 2px #000; opacity: 0; pointer-events: none; transition: opacity .25s; }
       #shotfx.on { opacity: 1; transition: none; }
       #shotfx.on.miss { color: #ccc; }
@@ -143,10 +150,11 @@
     </div>
     <div id="fps">0 fps</div>
     <div id="hint" hidden></div>
+    <div id="goal" hidden></div>
     <div id="shotfx"></div>
     <pre id="net">alone</pre>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=109"></script>
+    <script type="module" src="../../src/app/main.js?v=110"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {
