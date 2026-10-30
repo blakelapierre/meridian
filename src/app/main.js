@@ -80,6 +80,7 @@ import {
   bytesHex,
   characterBody,
   encodeSheet,
+  forgetKept,
   hexBytes,
   keepFrame,
   loadIdentity,
@@ -137,6 +138,16 @@ if (painter) {
 const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
+let holdKeep = false;
+const freshBoot = params.get("fresh") === "1";
+const bootBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-boot");
+if (bootBus) {
+  bootBus.onmessage = (event) => {
+    if (event.data?.role !== "fresh" || freshBoot) return;
+    holdKeep = true;
+    location.reload();
+  };
+}
 const quiet = params.get("quiet") === "1";
 const followId = params.get("follow");
 const agendaName = params.get("ai");
@@ -169,6 +180,13 @@ world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
 const keepSlot = followId || params.get("look") || params.get("gate") || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
 const keptStore = browserStore();
+if (freshBoot) {
+  forgetKept(keptStore);
+  if (bootBus) bootBus.postMessage({ role: "fresh" });
+  const clean = new URL(location.href);
+  clean.searchParams.delete("fresh");
+  history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
+}
 const identity = importKey(params.get("key") || "") || (keepSlot && loadIdentity(keptStore, keepSlot)) || createIdentity();
 if (keepSlot && !params.get("key")) saveIdentity(keptStore, identity, keepSlot);
 const culture = firstCrate(params.get("culture") || "holds");
@@ -387,14 +405,14 @@ function sendLore(frame) {
 }
 
 function rememberKept(frame) {
-  if (!keepSlot || !keptWorld || !frame) return;
+  if (holdKeep || !keepSlot || !keptWorld || !frame) return;
   const kind = frame[0];
   if (kind !== 9 && kind !== 10 && kind !== 11 && kind !== 13) return;
   if (keepFrame(keptWorld, frame)) saveWorld(keptStore, keptWorld, `meridian-world-${keepSlot}`);
 }
 
 function pushSheet() {
-  if (!keepSlot) return;
+  if (holdKeep || !keepSlot) return;
   sheetSeq += 1;
   const body = characterBody({
     at: player.position,
@@ -869,11 +887,14 @@ function geographyAt(x, y) {
 }
 
 function revealMap() {
+  const aim = cameraAim();
   const eye = cameraPos || [
     player.position[0],
     player.position[1],
     player.position[2] + 1.65,
   ];
+  const boxW = canvas.clientWidth || canvas.width || 16;
+  const boxH = canvas.clientHeight || canvas.height || 9;
   const points = revealLook({
     x: player.position[0],
     y: player.position[1],
@@ -882,6 +903,8 @@ function revealMap() {
     origin: eye,
     dir: cameraLook || lookDirection(yaw, pitch),
     skills: skillBag(),
+    fov: aim.fov,
+    aspect: boxW / Math.max(1, boxH),
     heightAt: (px, py) => standHeight(px, py, columnFloor(terrain.log.crust, px, py)),
   });
   const brush = Math.max(1.6, cellSize(skills.mapping.value));
@@ -1502,7 +1525,7 @@ function exchangeLore() {
 function onOps(bytes, from) {
   if (bytes[0] === 15) {
     const accepted = acceptSheet(bytes);
-    if (!accepted.ok || !keepSlot) return;
+    if (!accepted.ok || holdKeep || !keepSlot) return;
     if (bytesHex(accepted.pubkey) !== bytesHex(identity.pubkey)) return;
     if ((accepted.seq || 0) <= sheetSeq) return;
     const pose = applyCharacter(accepted.body, { player, skills, yard, survey, notes });
@@ -2253,7 +2276,7 @@ if (params.get("still") !== "1") {
       }
       if (tick % 150 === 0) {
         pushSheet();
-        if (keptWorld) {
+        if (keptWorld && !holdKeep) {
           keptWorld.crust = [...terrain.log.crust.overrides.entries()];
           saveWorld(keptStore, keptWorld, `meridian-world-${keepSlot}`);
         }
@@ -2464,7 +2487,7 @@ if (params.get("still") !== "1") {
     }
   }
   addEventListener("pagehide", () => {
-    if (keepSlot) pushSheet();
+    if (keepSlot && !holdKeep) pushSheet();
   });
   requestAnimationFrame(frame);
 }

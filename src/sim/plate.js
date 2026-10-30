@@ -1,3 +1,4 @@
+import { project } from "../engine/cast.js";
 import { lookDirection } from "./hands.js";
 
 export const GEO_COLOR = {
@@ -78,22 +79,12 @@ export function revealRange(skills = {}) {
   return 8 + skillValue(skills, "mapping") / 140 * 28 + skillValue(skills, "eyesight") / 140 * 16;
 }
 
-export function revealHalfFov(skills = {}) {
-  return 0.22 + skillValue(skills, "mapping") / 140 * 0.7;
-}
-
 export function revealCount(skills = {}) {
-  return 5 + Math.round(skillValue(skills, "mapping") / 140 * 16);
+  return 5 + Math.round(skillValue(skills, "mapping") / 140 * 8);
 }
 
-function yawTurn(forward, turn) {
-  const c = Math.cos(turn);
-  const s = Math.sin(turn);
-  return [
-    forward[0] * c + forward[1] * s,
-    forward[1] * c - forward[0] * s,
-    forward[2],
-  ];
+export function revealRows(skills = {}) {
+  return 3 + Math.round(skillValue(skills, "mapping") / 140 * 2);
 }
 
 export function hitGround(origin, dir, heightAt = () => 0, maxDist = 48) {
@@ -132,18 +123,39 @@ export function hitGround(origin, dir, heightAt = () => 0, maxDist = 48) {
   };
 }
 
-export function revealLook({ x, y, yaw = 0, pitch = 0, skills = {}, origin = null, dir = null, heightAt = () => 0 }) {
+export function revealLook({
+  x,
+  y,
+  yaw = 0,
+  pitch = 0,
+  skills = {},
+  origin = null,
+  dir = null,
+  heightAt = () => 0,
+  fov = 70,
+  aspect = 16 / 9,
+} = {}) {
   const range = revealRange(skills);
-  const half = revealHalfFov(skills);
-  const count = revealCount(skills);
+  const cols = revealCount(skills);
+  const rows = revealRows(skills);
   const points = [{ x, y }];
   const eye = origin || [x, y, 1.65];
   const forward = dir || lookDirection(yaw, pitch);
-  for (let i = 0; i < count; i += 1) {
-    const turn = count === 1 ? 0 : (i / (count - 1) - 0.5) * 2 * half;
-    const ray = Math.abs(turn) < 1e-6 ? forward : yawTurn(forward, turn);
-    const hit = hitGround(eye, ray, heightAt, range);
-    if (hit) points.push(hit);
+  const camera = {
+    dir: forward,
+    fov,
+    aspect: aspect > 0.2 ? aspect : 16 / 9,
+    planeDistance: 1,
+  };
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const sx = cols === 1 ? 0.5 : col / (cols - 1);
+      const sy = rows === 1 ? 0.5 : row / (rows - 1);
+      const ray = project(sx, sy, camera);
+      if (ray[2] > 0.35) continue;
+      const hit = hitGround(eye, ray, heightAt, range);
+      if (hit) points.push(hit);
+    }
   }
   return points;
 }

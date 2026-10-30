@@ -11,6 +11,10 @@ export function memoryStore(seed = {}) {
     set: (key, value) => {
       data[key] = value;
     },
+    keys: () => Object.keys(data),
+    drop: (key) => {
+      delete data[key];
+    },
   };
 }
 
@@ -36,7 +40,33 @@ export function browserStore() {
         // A full disk must not stop the keeper from linking.
       }
     },
+    keys: () => {
+      const out = [];
+      try {
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const key = localStorage.key(i);
+          if (key) out.push(key);
+        }
+      } catch {
+        return out;
+      }
+      return out;
+    },
+    drop: (key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // A locked store still lets this boot run.
+      }
+    },
   };
+}
+
+export function forgetKept(store) {
+  if (!store?.keys || !store?.drop) return 0;
+  const keys = store.keys().filter((key) => String(key).startsWith("meridian-"));
+  for (const key of keys) store.drop(key);
+  return keys.length;
 }
 
 function round(value, scale = 100) {
