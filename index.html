@@ -8,11 +8,14 @@
       a { color: #9cf; }
       code { color: #fd8; }
       h1 { font-size: 1.4rem; }
+    a.play { display: inline-block; margin: 4px 0 6px; padding: 12px 22px; border-radius: 10px; background: #fd3; color: #111; font-weight: bold; font-size: 1.2rem; text-decoration: none; }
+    .sub { display: block; color: #aaa; font-size: .9rem; }
       h2 { font-size: 1.05rem; margin-top: 1.6rem; }
     </style>
   </head>
   <body>
-    <h1>Meridian — what this build shows</h1>
+    <p><a class="play" href="tools/view/index.html">▶ Play Meridian</a> <span class="sub">Works on desktop and phones. A one-minute tour starts by itself. The checks below are for testers.</span></p>
+  <h1>Meridian — what this build shows</h1>
     <p>Newest check first. <code>npm start</code> only serves these files and introduces browsers. It does not decide a hit, a dig, or a death. Press <code>q</code> in that server console to stop it. Q in a browser window does nothing.</p>
     <p>A check opens one window with three labeled frames. The wide green frame is the primary test, and it keeps the instructions. The amber frame is the other client. The violet frame follows 3.5 m behind. Those two hide the instructions and keep the status line. Pits, walls, and shots reach the follow frame on the same channels as any other client.</p>
     <p id="windows"></p>
