@@ -65,31 +65,33 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
 });
 
-test("vsync outranks a much larger slower picture", () => {
+test("a small picture may spend down toward 12fps for a much larger image", () => {
   const refresh = 33;
-  const atVsync = visualThroughput(320 * 180, 33, refresh);
-  const bigger = visualThroughput(640 * 360, 66, refresh);
+  const speck = visualThroughput(96 * 68, 33, refresh);
+  const playable = visualThroughput(480 * 270, 80, refresh);
   const slideshow = visualThroughput(1280 * 720, 500, refresh);
-  assert.ok(atVsync > bigger);
-  assert.ok(atVsync > slideshow);
+  assert.ok(playable > speck);
+  assert.ok(playable > slideshow);
+  assert.ok(visualThroughput(640 * 360, 33, refresh) > visualThroughput(800 * 450, 80, refresh));
 });
 
-test("resolution approaches vsync in small steps", () => {
-  const box = { displayW: 1280, displayH: 720 };
-  const picture = createPicturePace();
-  let last = picture.step({ gap: 33, ...box });
-  let prev = last.scale;
-  for (let i = 0; i < 40; i += 1) {
-    const size = pictureSize(last.scale, box.displayW, box.displayH);
-    const ms = 12 + size.width * size.height * 0.00005;
-    last = picture.step({ gap: ms, ...box });
-    assert.ok(Math.abs(last.scale - prev) / prev <= 0.11);
-    prev = last.scale;
+test("a tiny fast picture grows toward 12fps without jumping", () => {
+  const box = { displayW: 1600, displayH: 900 };
+  const pace = createPicturePace();
+  let seen = pace.step({ gap: 33, ...box });
+  let prev = seen.scale;
+  for (let i = 0; i < 90; i += 1) {
+    const size = pictureSize(seen.scale, box.displayW, box.displayH);
+    const ms = 22 + size.width * size.height * 0.0015;
+    seen = pace.step({ gap: ms, ...box });
+    assert.ok(Math.abs(seen.scale - prev) / Math.max(prev, 0.05) <= 0.12);
+    prev = seen.scale;
   }
-  const size = pictureSize(last.scale, box.displayW, box.displayH);
-  const ms = 12 + size.width * size.height * 0.00005;
-  assert.ok(ms < 55);
-  assert.ok(ms > 15);
+  const size = pictureSize(seen.scale, box.displayW, box.displayH);
+  const ms = 22 + size.width * size.height * 0.0015;
+  assert.ok(Math.max(size.width, size.height) > 140);
+  assert.ok(ms < 110);
+  assert.ok(ms > 28);
 });
 
 test("resolution climbs one octave toward the window and steps back when a frame misses", () => {
