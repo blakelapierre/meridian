@@ -32,7 +32,7 @@ The demo only intersects spheres. Meridian's `cast` keeps that loop and adds two
 
 Bodies, the dummy, and projectiles stay spheres. A standing character is drawn as a sphere of radius **0.35 m** until a capsule intersection exists. That sphere is the picture. It is not the merge collider.
 
-One extra ray toward the sun is allowed, using `cast`, and only to darken a hit. It is not a path tracer. Reflections, ReSTIR, and a GPU backend are later implementations of this same `cast` interface. They are not a second renderer beside it.
+One extra ray toward the sun is allowed, using `cast`, and only to darken a hit. The pinned pen's picture is four reflection steps, and sphere color read from the hit normal. The GPU path does those five hits. Later steps test spheres, boxes, and the sea. Only the first step marches the hills. Shots still use the first hit from `cast`.
 
 ### Physics
 
