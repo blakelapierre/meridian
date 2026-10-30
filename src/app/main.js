@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=68";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=80";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=81";
 import {
   authority,
   bandage,
@@ -2248,13 +2248,15 @@ if (params.get("still") !== "1") {
     viewScale = decision.scale;
     const displayW = Math.max(2, Math.floor(boxW));
     const displayH = Math.max(2, Math.floor(boxH));
+    const settled = still && speed < 0.08 && accel < 0.5;
+    const traceCost = Math.max(lastPaintMs || 0, decision.gap || 0);
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
       : picture.step({
-        gap: still || issued ? Math.max(decision.gap, still ? 1 : 0) : 0,
+        gap: settled ? Math.max(decision.gap, 1) : issued ? Math.max(traceCost, 1) : 0,
         displayW,
         displayH,
-        still,
+        still: settled,
         speed,
         accel,
       });
@@ -2280,7 +2282,7 @@ if (params.get("still") !== "1") {
     const late = !extra && active && decision.gap > (paced.refresh || decision.refresh) * 1.35;
     const paceLabel = late ? "behind" : paceWord(decision.mode, { still, arrived, holding: decision.holding });
     canvas.dataset.pace = paceLabel;
-    const interval = extra ? Math.max(decision.interval || 1000, 250) : traceInterval(still, accel, paced.refresh || decision.refresh);
+    const interval = extra ? Math.max(decision.interval || 1000, 250) : traceInterval(settled, accel, paced.refresh || decision.refresh);
     canvas.dataset.traceMs = String(Math.round(interval));
     const due = extra ? decision.paint : active ? now - lastTrace >= interval * 0.85 : decision.paint;
     if (params.get("nopaint") !== "1" && due) {
