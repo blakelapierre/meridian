@@ -37,12 +37,24 @@ export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, role =
   }
   function list() {
     return new Promise((resolve) => {
+      let settled = false;
+      const finish = (peers) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        stop();
+        resolve(peers);
+      };
       const stop = onMessage((message) => {
         if (message.type !== "present") return;
-        stop();
-        resolve(message.peers);
+        finish(message.peers || []);
       });
-      socket.send(JSON.stringify({ type: "list", cell }));
+      const timer = setTimeout(() => finish([]), 2000);
+      try {
+        socket.send(JSON.stringify({ type: "list", cell }));
+      } catch {
+        finish([]);
+      }
     });
   }
   return { start, send, onMessage, list, close: () => socket.close() };

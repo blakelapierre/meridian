@@ -4,11 +4,11 @@
     <meta charset="utf-8" />
     <title>Meridian archive</title>
     <style>
-      body { margin: 32px auto; max-width: 40rem; background: #111; color: #eee; font: 16px/1.45 sans-serif; }
+      body { margin: 32px auto; max-width: 46rem; background: #111; color: #eee; font: 16px/1.45 sans-serif; }
       button { margin: 0 8px 8px 0; }
       code, pre { color: #fd8; }
       pre { white-space: pre-wrap; word-break: break-all; }
-      #perf { color: #9cf; }
+      #perf { color: #fff; background: #102018; padding: 12px 14px; font: 16px/1.45 ui-monospace, monospace; }
     </style>
     <script type="importmap">
       {
@@ -22,10 +22,10 @@
   </head>
   <body>
     <h1>Archive</h1>
-    <pre id="perf">starting</pre>
+    <pre id="perf">loading keeper</pre>
     <p>This process has no body and draws no world. Leave it open. It mines the chain that makes a hole official. A block has to show 16 leading zero bits. The heaviest chain wins, and an orphaned block pays nothing.</p>
     <p>Keep is 10 per block that is still on that chain. Thirty keep, three blocks, offers one crate: 2 metal and 1 fiber. The suggested bounty is $0.20 a canonical block, capped at $40 a quarter. This page does not pay it and does not mint the metal. The rules are in <a href="/docs/keepers.md">the keeper note</a>.</p>
-    <p id="status">starting</p>
+    <p id="status">loading keeper</p>
     <p>
       <button id="claim" type="button">Claim crate</button>
       <button id="receipt" type="button">Copy receipt</button>
@@ -33,6 +33,21 @@
     </p>
     <p id="note"></p>
     <pre id="out"></pre>
-    <script type="module" src="/tools/archive/archive.js?v=3"></script>
+    <script>
+      const perf = document.querySelector("#perf");
+      const status = document.querySelector("#status");
+      const say = (text) => {
+        if (perf && !perf.dataset.live) perf.textContent = text;
+        if (status && !status.dataset.live) status.textContent = String(text).split("\n")[0];
+      };
+      window.addEventListener("error", (event) => {
+        say(`${event.message || "script error"}\n${event.filename || ""}:${event.lineno || ""}`);
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        const reason = event.reason;
+        say(String(reason && reason.stack || reason || "rejected"));
+      });
+    </script>
+    <script type="module" src="/tools/archive/archive.js?v=4"></script>
   </body>
 </html>
