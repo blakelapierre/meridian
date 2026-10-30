@@ -123,11 +123,20 @@ export function noteNearby(survey, self, landmarks, skills = {}) {
   return survey;
 }
 
-export function contourStep(mapping = 0) {
-  const trained = Math.max(0, mapping);
-  if (trained >= 80) return 0.5;
-  if (trained >= 30) return 1;
-  return 2;
+export function contourStep(topography = 0) {
+  const trained = Math.max(0, topography);
+  if (trained < 4) return 0;
+  if (trained < 15) return 4;
+  if (trained < 35) return 2;
+  if (trained < 65) return 1;
+  return 0.5;
+}
+
+export function contourDetail(topography = 0) {
+  const trained = Math.max(0, topography);
+  const step = contourStep(trained);
+  const cells = trained < 4 ? 0 : trained < 20 ? 10 : trained < 50 ? 16 : trained < 80 ? 24 : 32;
+  return { step, cells };
 }
 
 export function contourLines({ x = 0, y = 0, span = 32, step = 2, heightAt, knownAt, cells = 20 } = {}) {
