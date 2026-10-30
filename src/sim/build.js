@@ -32,6 +32,7 @@ function sameCell(a, b) {
 export function grounded(pieces, index) {
   const origin = pieces[index];
   if (!origin) return false;
+  if (pieces.some((other) => other !== origin && other.id === "floor" && sameCell(other.at, origin.at))) return true;
   const seen = new Set([index]);
   let edge = [index];
   for (let step = 0; step < 8 && edge.length; step++) {
@@ -105,8 +106,12 @@ export function trySalvage(yard, cell) {
   if (!cell) return { ok: false, reason: "aim" };
   const index = yard.pieces.findIndex((piece) => piece.id === "wall" && sameCell(piece.at, cell));
   if (index >= 0) {
+    const wall = yard.pieces[index];
+    const line = wall.line || "";
+    const by = wall.by || "";
     yard.pieces.splice(index, 1);
     yard.metal += 6;
+    if (line) yard.pieces.push({ id: "slip", at: cell.slice(), anchors: true, text: line, by, sig: wall.sig || 0 });
     const fallen = collapse(yard);
     return { ok: true, metal: yard.metal, fallen };
   }
@@ -147,10 +152,23 @@ export function adoptWall(yard, cell, integrity = 80, yaw = 0) {
 export function tryPlacePost(yard, cell) {
   if (!cell) return { ok: false, reason: "aim" };
   if (yard.metal < 2) return { ok: false, reason: "metal" };
-  if (yard.pieces.some((piece) => sameCell(piece.at, cell))) return { ok: false, reason: "occupied" };
-  if (!support(yard.pieces, cell)) return { ok: false, reason: "support" };
+  const floored = yard.pieces.some((piece) => piece.id === "floor" && sameCell(piece.at, cell));
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "floor")) return { ok: false, reason: "occupied" };
+  if (!floored && !support(yard.pieces, cell)) return { ok: false, reason: "support" };
   yard.metal -= 2;
   yard.pieces.push({ id: "post", at: cell.slice(), anchors: false });
+  return { ok: true, metal: yard.metal };
+}
+
+export function tryPlaceBeam(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if (yard.metal < 2) return { ok: false, reason: "metal" };
+  const west = yard.pieces.find((piece) => piece.id === "post" && piece.at[0] === cell[0] - 1 && piece.at[1] === cell[1]);
+  const east = yard.pieces.find((piece) => piece.id === "post" && piece.at[0] === cell[0] + 1 && piece.at[1] === cell[1]);
+  if (!west || !east) return { ok: false, reason: "posts" };
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "floor")) return { ok: false, reason: "occupied" };
+  yard.metal -= 2;
+  yard.pieces.push({ id: "beam", at: cell.slice(), anchors: false, span: [west.at.slice(), east.at.slice()] });
   return { ok: true, metal: yard.metal };
 }
 
@@ -194,6 +212,24 @@ export function turnFin(yard, cell) {
   return { ok: true, yaw: fin.yaw };
 }
 
+export function repairFin(yard, cell) {
+  const fin = yard.pieces.find((piece) => piece.id === "fin" && sameCell(piece.at, cell));
+  if (!fin || !fin.broken) return { ok: false, reason: fin ? "whole" : "none" };
+  if (yard.metal < 4) return { ok: false, reason: "metal" };
+  yard.metal -= 4;
+  fin.broken = false;
+  return { ok: true, metal: yard.metal };
+}
+
+export function addFire(yard, cell, who) {
+  const mark = yard.pieces.find((piece) => piece.id === "mission" && sameCell(piece.at, cell));
+  if (!mark || !who) return false;
+  mark.fires = mark.fires || [];
+  if (mark.fires.includes(who)) return false;
+  mark.fires.push(who);
+  return true;
+}
+
 export function breakFin(yard, cell) {
   const fin = yard.pieces.find((piece) => piece.id === "fin" && sameCell(piece.at, cell));
   if (!fin || fin.broken) return { ok: false, reason: fin ? "broken" : "none" };
@@ -232,10 +268,21 @@ export function rollCart(yard) {
   const next = [cart.at[0], cart.at[1] + 1];
   const road = yard.pieces.find((piece) => piece.id === "road" && sameCell(piece.at, next));
   if (!road) {
+    cart.wait = (cart.wait || 0) + 1;
+    if (cart.wait < 3) return false;
+    const side = [cart.at[0] + 1, cart.at[1]];
+    const other = yard.pieces.find((piece) => piece.id === "road" && sameCell(piece.at, side));
+    if (other) {
+      cart.at = side.slice();
+      cart.wait = 0;
+      return true;
+    }
     yard.metal += cart.load;
     cart.load = 0;
+    cart.wait = 0;
     return false;
   }
+  cart.wait = 0;
   cart.at = next;
   return true;
 }
@@ -281,6 +328,16 @@ export function pieceBoxes(pieces) {
         type: "box",
         min: [x - 0.08, y - 0.08, 0],
         max: [x + 0.08, y + 0.08, 1.2],
+        color: WOOD,
+        reflectivity: 0.1,
+        piece: piece.id,
+      };
+    }
+    if (piece.id === "beam") {
+      return {
+        type: "box",
+        min: [x - 0.55, y - 0.08, 1.05],
+        max: [x + 0.55, y + 0.08, 1.2],
         color: WOOD,
         reflectivity: 0.1,
         piece: piece.id,

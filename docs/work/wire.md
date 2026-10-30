@@ -14,17 +14,19 @@ Peers meet through the lighthouse and a WebRTC data channel. Positions are unrel
 | 12 | Lore |
 | 13 | Hearth or fin |
 
+A harm note can be packed as a lore record with the harm byte beside the text.
+
 ## This pass
 
-Lore has its own channel. If that channel is not open, the same packet falls back to ops.
+The lore frame the live socket sends includes the harm byte.
 
 ## Proves
 
-`test/fill.test.js` for the edit. The frame is the existing terrain proposal.
+`test/slice.test.js` covers the byte on the frame.
 
 ## Next
 
-The harm byte is not sent on the lore channel. Not in this build.
+A peer does not read that byte into the harm log. Not in this build.
 
 ## Later
 

@@ -7,6 +7,11 @@ export function duneHeight(x, y) {
   return n * n * HILL;
 }
 
+export function graze(patch) {
+  const stock = Math.max(0, (patch?.stock || 0) - 1);
+  return { stock, track: (patch?.stock || 0) > 0, dead: stock <= 0 };
+}
+
 export function standHeight(x, y, dug = 0) {
   if (dug < -0.01) return dug;
   return duneHeight(x, y);

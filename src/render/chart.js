@@ -144,6 +144,15 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plat
       ctx.beginPath();
       ctx.arc(at.x, at.y, at.inside ? 6 : 4, 0, Math.PI * 2);
       ctx.stroke();
+    } else if (mark.kind === "order" || mark.kind === "graze") {
+      if (!at.inside) continue;
+      ctx.fillStyle = mark.kind === "graze" ? "#8c6" : "#fd8";
+      ctx.font = "11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(mark.name || mark.kind, at.x, at.y - 6);
+    } else if (mark.kind === "overhead") {
+      ctx.strokeStyle = "#adf";
+      ctx.strokeRect(at.x - 5, at.y - 5, 10, 10);
     }
   }
   const you = placeOnView(here, self, across, size);

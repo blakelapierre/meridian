@@ -6,18 +6,20 @@ From the concept. The chair is a place, and it is vulnerable.
 
 There is no war table, no overhead, and no company wallet. The AI clients are people, not orders.
 
+Using the table while you are beside it and not in a strike sits you down. Walking stands you up. Sitting at the table gives the order `hold`. It is a word, not a company.
+
 ## This pass
 
-Using the table while you are beside it and not in a strike sits you down. Walking stands you up. There is still no order to give.
+Sitting draws the order `hold` on the chart. It is a word on the map, not a company.
 
 ## Proves
 
-Nothing to run.
+`test/slice.test.js` covers the order word. The chart draws it.
 
 ## Next
 
-Sitting gives no order. The table is a chair and not a company. Not in this build.
+The order is not given to anyone else. Not in this build.
 
 ## Later
 
-The seat, the spend, and the rule that breaking the table drops you on your feet.
+A company that can refuse. A chair that can be broken.

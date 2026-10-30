@@ -138,6 +138,29 @@ function sampleStep(sample) {
   return sample;
 }
 
+export function offBeachSlump(beach, here, neighbor) {
+  if (beach) return null;
+  return slumpChoice(here, neighbor);
+}
+
+export function bitMode(beach, brush) {
+  if (beach || brush !== "smooth") return brush;
+  return "slump";
+}
+
+export function applySlump(crust, aim) {
+  if (!crust || !aim) return null;
+  const i = voxelIndex(aim[0]);
+  const j = voxelIndex(aim[1]);
+  const k = voxelIndex(aim[2]);
+  const here = crust.sampleIndex(i, j, k);
+  const neighbor = crust.sampleIndex(i, j + 1, k);
+  const next = offBeachSlump(false, here, neighbor);
+  if (next == null) return null;
+  crust.write(i, j, k, next);
+  return next;
+}
+
 export function slumpChoice(here, neighbor) {
   if (here - neighbor < 500) return null;
   return here - 250;

@@ -6,18 +6,20 @@ From the concept. The globe is tiled. Your machine simulates the bubble around y
 
 The beach is two cells split at y = −40 m. South of that line is `atoll-0`. North of it is `atoll-1`. A certified dig is stamped with the cell you were standing in. A dig from the other cell is not applied to the crust you are standing on. Poses still cross the line.
 
+A hit waits for a quorum of your cell. Everyone in your cell counts as a yes. The other cell can store a no, and that no is not a yes.
+
 ## This pass
 
-A hit waits for a quorum of your cell. Everyone in the cell counts as a yes, so the shot still lands. The other cell does not vote.
+A stored no from the other cell is counted in the quorum. One local yes and one outside no is not a pass.
 
 ## Proves
 
-`test/concept.test.js`.
+`test/slice.test.js` covers the tally.
 
 ## Next
 
-The other cell cannot vote no. Not in this build.
+A stored yes from the other cell is not counted. Not in this build.
 
 ## Later
 
-Quorum hits, rotating authority, sensor interest, dormant logs on a lighthouse that still cannot decide a fight.
+A vote you can see. An archive that is not this browser.

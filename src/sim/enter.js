@@ -1,5 +1,5 @@
 import { buyOffer, createMatch, joinMatch, rejoin, setChannel, setInside, stepMatch } from "./strike.js";
-import { roundMaterials } from "./clocks.js";
+import { defusePay, roundMaterials } from "./clocks.js";
 
 export const SMOKE = { id: "smoke", scrip: 300 };
 
@@ -52,7 +52,7 @@ export function entryLine(state) {
   return `strike ${state.side} ${state.body} scrip ${state.scrip}${kit}${channel} ${state.phase} ${secs}s`;
 }
 
-export function stepEntry(entry, { position, use = false, buy = false, yard, offer = null, still = false }) {
+export function stepEntry(entry, { position, use = false, buy = false, yard, offer = null, still = false, fired = false }) {
   const [x, y, z] = position.map((value) => value * 100);
   const inside = insideBox(entry.atoll.site.volume, x, y, z);
   if (!entry.joined) {
@@ -78,18 +78,23 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
     else notice = entry.match.phase === "buy" || entry.match.phase === "gap" ? "short" : "closed";
     yard.metal = player.beach.metal;
   }
+  const wasDefuse = player.channel === "defuse";
+  const hadCore = Boolean(entry.match.core);
   const previous = entry.match.phase;
   stepMatch(entry.match, 1);
-  const paid = roundMaterials({ abandoned: player.abandoned, phase: entry.match.phase, previous });
+  const defused = wasDefuse && hadCore && !entry.match.core;
+  const paid = defused
+    ? defusePay({ defused: true, abandoned: player.abandoned })
+    : roundMaterials({ abandoned: player.abandoned, phase: entry.match.phase, previous });
   if (paid) {
     player.beach.metal += paid;
-    if (!notice) notice = "paid";
+    if (!notice) notice = defused ? "defused" : "paid";
   }
   yard.metal = player.beach.metal;
-  if (entry.joined && inside && player.channel === "defuse" && !still) {
+  if (entry.joined && inside && player.channel === "defuse" && (fired || !still)) {
     player.channel = null;
     player.channelTicks = 0;
-    if (!notice) notice = "puzzle";
+    if (!notice) notice = fired ? "shot" : "puzzle";
   } else if (entry.joined && inside && use && still && entry.match.core && entry.match.core.side !== player.side) {
     setChannel(entry.match, entry.id, "defuse");
     if (!notice) notice = "defuse";

@@ -1,3 +1,8 @@
+export function graceMark(deed, grace) {
+  if (!deed) return null;
+  return { ...deed, grace: Boolean(grace) };
+}
+
 export function deedVolume(cell, holder, radius = 6) {
   if (!cell || !holder) return null;
   return { cell: cell.slice(), holder, radius };

@@ -53,6 +53,22 @@ export function grantUse(skills, name, { success = true, tick = 0, gap = 0 } = {
   return applied;
 }
 
+export function teachEmpty(skills) {
+  const name = SKILL_NAMES.find((item) => skills[item] && skills[item].value <= 0);
+  if (!name) return null;
+  skills[name].value = 8;
+  skills[name].xp = 8;
+  return name;
+}
+
+export function teachMore(skills) {
+  const name = SKILL_NAMES.find((item) => skills[item] && skills[item].value > 0 && skills[item].value < 40);
+  if (!name) return null;
+  skills[name].value = Math.min(40, skills[name].value + 4);
+  skills[name].xp = skills[name].value;
+  return name;
+}
+
 export function claimSpecialty(skills, cap = 2) {
   const marked = SKILL_NAMES.filter((name) => skills[name]?.specialized).length;
   if (marked >= cap) return null;

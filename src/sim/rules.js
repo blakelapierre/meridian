@@ -75,8 +75,19 @@ export function soldierTarget(still, native, play) {
   return still ? native : play;
 }
 
+export function storeWind(cells, id, x, y) {
+  const wind = windAt(x, y);
+  cells.set(id, wind);
+  return wind;
+}
+
 export function windAt(x, y) {
   return [0.6 + Math.sin(x / 30) * 0.4, 0.1 + Math.cos(y / 40) * 0.2, 0];
+}
+
+export function windPush(wind) {
+  if (!wind) return [0, 0, 0];
+  return [wind[0] * 0.004, (wind[1] || 0) * 0.004, 0];
 }
 
 export function frontGain(dot) {

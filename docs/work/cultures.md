@@ -6,18 +6,20 @@ From the concept. Creation is a body and a key, not a role. Three starting cultu
 
 Everyone wakes in a culture. The default is Holds. `?culture=hosts` starts with more metal and less stone. `?culture=veil` starts with less of both. Skills do not change. You can still walk away with what you are carrying.
 
+A trainer stands by the table. Using them can mark a specialty, and a third is refused. The trainer raises the first empty skill to 8 when nothing is high enough to specialize.
+
 ## This pass
 
-A trainer stands by the table. Using them can mark a specialty, and a third is refused.
+When every skill already has a point, the trainer adds 4 to the first one still under 40.
 
 ## Proves
 
-`test/concept.test.js`.
+`test/slice.test.js` covers the raise.
 
 ## Next
 
-The trainer does not raise a skill from nothing. Not in this build.
+The trainer will not raise a skill that is already at 40. Not in this build.
 
 ## Later
 
-Specialization caps. A monarch who is also the best sniper and the best smith is a myth the numbers prevent.
+A culture you can leave without the kit you woke with.

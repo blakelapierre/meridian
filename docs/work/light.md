@@ -4,18 +4,20 @@
 
 The sun is a direction on a 72-minute day. The picture brightens when the sun is above the horizon. A placed fin reports flux from the dot of its up-axis and the sun. Noon is higher than a sun on the horizon.
 
+Using a fin breaks it. A broken fin gives no flux. Four metal repairs a broken fin. Breaking it is still the act when it is whole.
+
 ## This pass
 
-Using a fin breaks it. A broken fin gives no flux.
+Once a minute a whole fin adds metal from its flux. A fin turned away from a high sun adds none. A fin facing that sun adds one.
 
 ## Proves
 
-`test/hearth.test.js` for noon against the horizon.
+`test/slice.test.js` covers the turned fin against the facing one.
 
 ## Next
 
-Metal does not repair a broken fin. Not in this build.
+That metal is not shown as its own credit. Not in this build.
 
 ## Later
 
-Dawn and dusk as different words. A fin that can be turned. Night as a weapon.
+A fin that tracks the sun. Night with no flux at all.

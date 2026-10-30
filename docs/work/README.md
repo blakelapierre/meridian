@@ -6,6 +6,8 @@ Beach notes and concept notes are both live. The cycle is two steps. First imple
 
 **This pass** and **In the build** say only what the code does. **Next** is not in the build.
 
+The last slice landed the sim rules that were still only named: noon sea, the landing counter, a reload beat, a beam, a signed slip, defuse pay, the harm byte, a graze mark, wind on a moving body, fin metal, off-beach slump, a raised skill, a spilled pool, a cart that turns, grace on the deed, a purse that pays upkeep, a recovery phrase, a spore, the hold order and the overhead point on the chart, a dragged step, a second name on the pull, a voucher written by sitting, and a no that changes quorum. The ray trace was not touched. `test/slice.test.js` covers that slice.
+
 The prose for the world is in [docs/lore](../lore/README.md). The errands are in [docs/quests](../quests/README.md).
 
 ## Beach
