@@ -8,7 +8,7 @@ Design-first, now early implementation. The specs below are the contract; the fi
 
 ## Status
 
-Pre-alpha. Not a playable game yet.
+Pre-alpha. The Atoll slice is playable solo in the browser; multiplayer, progression, and most systems are still in progress.
 
 | Area | State |
 |---|---|
