@@ -98,6 +98,11 @@ function replay(channel) {
 }
 
 let candidate = null;
+let hashes = 0;
+let hashRate = 0;
+let hashTotal = 0;
+let lastMineMs = 0;
+const booted = Date.now();
 
 function editsAfterTip() {
   const sealed = terrain.log.ops.map((op) => {
@@ -143,8 +148,14 @@ function hunt() {
     if (!prepared.ok) return;
     candidate = prepared.block;
   }
+  const before = candidate.nonce;
+  const started = Date.now();
   const found = mine(candidate, { limit: 4000 });
+  const tried = Math.max(0, candidate.nonce - before);
+  hashes += tried;
+  hashTotal += tried;
   if (found) {
+    lastMineMs = Date.now() - started;
     consider(found.block);
     const frame = encodeBlock(identity, found.block);
     rememberBytes(frame);
@@ -162,21 +173,34 @@ function hunt() {
 }
 
 function paint() {
-  const open = links.filter((link) => link.ops.readyState === "open").map((link) => link.to);
+  const open = links.filter((link) => link.ops.readyState === "open");
+  const names = open.map((link) => link.to);
   const crate = crateFor(ledger);
   const cents = bountyCents(ledger);
+  const minutes = Math.floor((Date.now() - booted) / 60000);
+  const seconds = Math.floor((Date.now() - booted) / 1000) % 60;
   $("status").textContent = [
     roomId,
-    open.length ? `linked ${open.join(" ")}` : "waiting for a player",
+    names.length ? `linked ${names.join(" ")}` : "waiting for a player",
     `block ${tipOf(chain).block.height}`,
     candidate ? `mining ${candidate.nonce}` : "idle",
     `ops ${terrain.log.ops.length}`,
     `keep ${keepOf(ledger)}`,
     crate ? `crate ready ${crate.metal} metal ${crate.fiber} fiber` : "crate not ready",
     `bounty $${(cents / 100).toFixed(2)}`,
-    `kept ${Object.keys(world.sheets).length}`,
-    `world ${world.frames.length}`,
   ].join(" · ");
+  const perf = $("perf");
+  if (perf) {
+    perf.textContent = [
+      `hash ${hashRate.toLocaleString("en-US")} / s`,
+      `tried ${hashTotal.toLocaleString("en-US")}`,
+      lastMineMs ? `last block ${lastMineMs} ms` : "no block yet",
+      `uptime ${minutes}m ${seconds}s`,
+      `clients ${names.length}`,
+      `sheets ${Object.keys(world.sheets).length}`,
+      `frames ${world.frames.length}`,
+    ].join("\n");
+  }
 }
 
 function outgoing() {
@@ -291,6 +315,8 @@ room.start().then(() => {
   setInterval(seek, 3000);
   setInterval(hunt, 40);
   setInterval(() => {
+    hashRate = hashes;
+    hashes = 0;
     if (links.some((link) => link.ops.readyState === "open")) notePresence(ledger, 1000);
     outgoing();
   }, 1000);

@@ -146,6 +146,113 @@ export function applyCharacter(sheet, { player, skills, yard, survey, notes } = 
   return { yaw: (sheet.yaw || 0) / 1000, pitch: (sheet.pitch || 0) / 1000 };
 }
 
+const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+export function bytesToBase64(bytes) {
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i];
+    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    const n = (a << 16) | (b << 8) | c;
+    out += ABC[(n >> 18) & 63];
+    out += ABC[(n >> 12) & 63];
+    out += i + 1 < bytes.length ? ABC[(n >> 6) & 63] : "=";
+    out += i + 2 < bytes.length ? ABC[n & 63] : "=";
+  }
+  return out;
+}
+
+export function base64ToBytes(text) {
+  const clean = String(text || "").replace(/=+$/, "");
+  const at = (char) => {
+    const n = ABC.indexOf(char);
+    return n < 0 ? 0 : n;
+  };
+  const out = [];
+  for (let i = 0; i < clean.length; i += 4) {
+    const n = (at(clean[i]) << 18) | (at(clean[i + 1]) << 12) | (at(clean[i + 2]) << 6) | at(clean[i + 3]);
+    out.push((n >> 16) & 255);
+    if (i + 2 < clean.length) out.push((n >> 8) & 255);
+    if (i + 3 < clean.length) out.push(n & 255);
+  }
+  return Uint8Array.from(out);
+}
+
+function writeVar(bytes, value) {
+  let n = value;
+  while (n >= 128) {
+    bytes.push((n & 127) | 128);
+    n >>= 7;
+  }
+  bytes.push(n);
+}
+
+function readVar(bytes, offset) {
+  let n = 0;
+  let shift = 0;
+  while (offset.index < bytes.length) {
+    const byte = bytes[offset.index];
+    offset.index += 1;
+    n |= (byte & 127) << shift;
+    if ((byte & 128) === 0) return n;
+    shift += 7;
+  }
+  return n;
+}
+
+export function packPlate(plate) {
+  const data = plate?.data;
+  if (!data) return "";
+  const bytes = [];
+  let skip = 0;
+  const pixels = data.length / 4;
+  for (let pixel = 0; pixel < pixels; pixel += 1) {
+    const i = pixel * 4;
+    if (data[i + 3] === 0) {
+      skip += 1;
+      continue;
+    }
+    writeVar(bytes, skip);
+    skip = 0;
+    bytes.push(data[i], data[i + 1], data[i + 2]);
+  }
+  writeVar(bytes, skip);
+  return bytesToBase64(Uint8Array.from(bytes));
+}
+
+export function unpackPlate(plate, packed) {
+  if (!plate || !packed) return false;
+  const bytes = base64ToBytes(packed);
+  if (!bytes.length) return false;
+  plate.data.fill(0);
+  const offset = { index: 0 };
+  let pixel = 0;
+  const pixels = plate.data.length / 4;
+  while (offset.index < bytes.length && pixel < pixels) {
+    const skip = readVar(bytes, offset);
+    pixel += skip;
+    if (offset.index >= bytes.length || pixel >= pixels) break;
+    const i = pixel * 4;
+    plate.data[i] = bytes[offset.index];
+    plate.data[i + 1] = bytes[offset.index + 1];
+    plate.data[i + 2] = bytes[offset.index + 2];
+    plate.data[i + 3] = 255;
+    offset.index += 3;
+    pixel += 1;
+  }
+  plate.dirty = true;
+  return true;
+}
+
+export function savePlate(store, plate, slot = "self") {
+  store.set(`meridian-plate-${slot}`, packPlate(plate));
+}
+
+export function loadPlate(store, slot = "self") {
+  return store.get(`meridian-plate-${slot}`);
+}
+
 export function emptyWorld() {
   return { blocks: [], frames: [], sheets: {} };
 }
