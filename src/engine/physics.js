@@ -1,4 +1,4 @@
-// N-body step from blakelapierre/nbody-raycaster@e4c14f7.
+// N-body step from blakelapierre/nbody-raycaster@4698794.
 // Velocities are units per second. One tick advances 1/ticksPerStep seconds.
 // Game frames at 30 Hz use ticksPerStep 30. The toy solar system keeps 60.
 

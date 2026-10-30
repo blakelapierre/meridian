@@ -4,7 +4,7 @@ import { paintFrame } from "../src/engine/frame.js";
 import { project } from "../src/engine/cast.js";
 import { buildScene } from "../src/render/scene.js";
 import { loadCatalog } from "../src/sim/catalog.js";
-import { stepHands } from "../src/sim/hands.js";
+import { moveIntent, stepHands } from "../src/sim/hands.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../src/sim/player.js";
 
 const { atoll } = loadCatalog();
@@ -80,4 +80,12 @@ test("the center pixel on the pad is the dummy", () => {
   const up = paintFrame(sky, 5, 5);
   const mid = (2 * 5 + 2) * 4;
   assert.ok(up[mid + 2] > up[mid], up.slice(mid, mid + 3).join(","));
+});
+
+test("auto run holds forward and sprint until you back up", () => {
+  assert.equal(moveIntent({ auto: true }).forward, 1);
+  assert.equal(moveIntent({ auto: true }).sprint, true);
+  assert.equal(moveIntent({ auto: true, back: 1 }).forward, -1);
+  assert.equal(moveIntent({ auto: true, back: 1 }).sprint, false);
+  assert.equal(moveIntent({ forward: 1 }).sprint, false);
 });

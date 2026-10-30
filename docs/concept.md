@@ -10,7 +10,7 @@ Meridian is a single planet with no shards, no session reset, and no one standin
 
 ## Pillars
 
-1. **One body.** Marksman, mason, and commander are zoom levels, not character slots.
+1. **One body.** Marksman, builder, and commander are zoom levels, not character slots.
 2. **The crust is the only map.** Deeds, roads, caves, floods, and slag are the content. Quests are not.
 3. **The globe is doing strategic work.** Curvature is cover. The moving day/night line decides who has power. Gravity is radial, so artillery, aircraft, and falls all agree about “down.”
 4. **People are the best units; machines are the rest.** A fabber never outskills a human in the same doorway. A commander never possesses anyone’s hands.
@@ -77,7 +77,7 @@ Creation is a body and a key, not a role. Three **starting cultures** are equipm
 - **Hosts** — crawlers, field factories, wreck doctrine. They win by arriving with industry.
 - **Veil** — sensors, breaches, strike contracts, forged papers. They win by knowing which door matters.
 
-Skills rise by use. You may **train** widely and **specialize** only a few (marksmanship, close combat, breach, fieldcraft, surgery, masonry, mining, smithing, fabrication, survey, command, logistics, signals, husbandry). Specialization is public to your allegiance and slow to undo. A monarch who is also the best sniper and the best smith is a myth the system is built to prevent.
+Skills rise by use. You may **train** widely and **specialize** only a few (marksmanship, close combat, breach, fieldcraft, surgery, building, mining, smithing, fabrication, survey, mapping, command, logistics, signals, husbandry, run). Specialization is public to your allegiance and slow to undo. A monarch who is also the best sniper and the best smith is a myth the system is built to prevent.
 
 There is no spellbook. Asheron’s schools survive as **practices**: war-magic becomes fire missions and guided munitions; life-magic becomes surgery, stims, and crops; item-magic becomes alloys and temper; creature-magic becomes lures and husbandry. All of them are devices or trained hands, with energy cost, windup, and a visible tell.
 

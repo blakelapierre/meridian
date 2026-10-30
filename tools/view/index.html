@@ -5,9 +5,52 @@
     <title>Meridian</title>
     <style>
       html, body { margin: 0; background: #111; height: 100%; color: #eee; }
-      canvas { width: 100vw; height: 100vh; display: block; background: #123; cursor: crosshair; }
-      #sight { display: none; position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; margin: -6px 0 0 -6px; border: 1px solid #fff; border-radius: 50%; z-index: 3; pointer-events: none; }
-      aside { position: fixed; top: 12px; left: 12px; width: min(28rem, calc(100vw - 24px)); background: rgba(0,0,0,.78); padding: 12px 14px; font: 14px/1.4 sans-serif; z-index: 2; }
+      body > canvas { width: 100vw; height: 100vh; display: block; background: #123; cursor: crosshair; }
+      #fps { position: fixed; top: 12px; right: 14px; z-index: 6; font: 16px/1 sans-serif; color: #9f9; text-shadow: 0 1px 2px #000; }
+      #net { position: fixed; top: 12px; left: 12px; z-index: 6; margin: 0; padding: 8px 10px; max-width: 22rem; background: rgba(0,0,0,.78); color: #9cf; font: 12px/1.45 ui-monospace, monospace; white-space: pre; pointer-events: none; }
+      html.quiet #net { font-size: 10px; padding: 4px 6px; max-width: 16rem; }
+      #notes { position: fixed; top: 36px; right: 14px; z-index: 3; margin: 0; padding: 0; list-style: none; max-width: 16rem; font: 12px/1.35 sans-serif; color: #ddc; text-align: right; text-shadow: 0 1px 2px #000; }
+      html.quiet #notes { max-width: 11rem; font-size: 10px; }
+      #chart { position: fixed; left: 12px; bottom: 12px; z-index: 5; display: none; width: 220px; }
+      #chart.open { display: block; }
+      #chart.full { left: 0; top: 0; right: 0; bottom: 0; width: auto; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(4, 8, 10, 0.72); }
+      #chart.full.open { display: flex; }
+      #chart.full #map { width: min(92vh, 92vw); height: min(92vh, 92vw); }
+      html.quiet #chart.full { width: auto; }
+      html.quiet #chart.full #map { width: min(92vh, 92vw); height: min(92vh, 92vw); }
+      #map { display: block; width: 220px; height: 220px; background: #081218; cursor: grab; touch-action: none; }
+      #fix { margin: 4px 0 0; font: 12px/1.3 ui-monospace, monospace; color: #9cf; text-align: center; text-shadow: 0 1px 2px #000; }
+      #skills { position: fixed; right: 14px; bottom: 12px; z-index: 3; margin: 0; padding: 8px 10px; list-style: none; background: rgba(0,0,0,.72); font: 12px/1.4 sans-serif; min-width: 11rem; }
+      #skills li { display: flex; gap: 8px; align-items: center; }
+      #skills span:first-child { width: 6.2rem; }
+      #skills li.child span:first-child { width: 5.5rem; padding-left: 0.7rem; }
+      #skills .bar { flex: 1; height: 6px; background: #222; }
+      #skills .bar i { display: block; height: 100%; background: #9f9; }
+      #skills b { width: 1.6rem; text-align: right; }
+      #target { display: none; position: fixed; z-index: 4; width: 34px; height: 34px; margin: -17px 0 0 -17px; pointer-events: none; }
+      #target::before, #target::after { content: ""; position: absolute; inset: 0; border: 2px solid #9f9; border-radius: 50%; box-shadow: 0 0 8px #9f9; }
+      #target::after { inset: 7px; border-color: #fff; box-shadow: none; }
+      #target[data-edge="edge"] { border-radius: 0; }
+      #target[data-edge="edge"]::before { border-radius: 0; }
+      #range { position: fixed; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); z-index: 4; font: 13px/1 sans-serif; color: #efe; text-shadow: 0 1px 2px #000; pointer-events: none; }
+      #sight { display: none; position: fixed; left: 50%; top: 50%; z-index: 3; pointer-events: none; }
+      #sight[data-tool="line"] { width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 1px solid #fff; border-radius: 50%; }
+      #sight[data-tool="bit"] { width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+      #sight[data-tool="bit"]::before, #sight[data-tool="bit"]::after { content: ""; position: absolute; background: #7ef; }
+      #sight[data-tool="bit"]::before { left: 8px; top: 0; width: 2px; height: 18px; }
+      #sight[data-tool="bit"]::after { left: 0; top: 8px; width: 18px; height: 2px; }
+      #sight[data-tool="hammer"] { width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 2px solid #fc8; }
+      #sight.hot { filter: drop-shadow(0 0 5px #fff); }
+      #sight.cold { opacity: 0.35; }
+      aside { position: fixed; top: 12px; left: 12px; width: min(28rem, calc(100vw - 24px)); max-height: calc(100vh - 24px); display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; background: rgba(0,0,0,.78); padding: 12px 14px; font: 14px/1.4 sans-serif; z-index: 2; }
+      #help { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+      html.mapped aside { max-height: calc(100vh - 292px); }
+      html.quiet aside > :not(#bit):not(#link):not(#agenda) { display: none; }
+      html.quiet aside { width: auto; max-width: calc(100% - 16px); padding: 6px 8px; max-height: calc(100vh - 24px); }
+      html.quiet.mapped aside { max-height: calc(100vh - 176px); }
+      html.quiet #chart { width: 112px; }
+      html.quiet #map { width: 112px; height: 112px; }
+      html.quiet #fix { font-size: 9px; }
       a { color: #9cf; }
       h1 { font-size: 1rem; margin: 0 0 8px; }
       p { margin: 0 0 8px; }
@@ -21,20 +64,57 @@
         }
       }
     </script>
+    <script>
+      if (new URLSearchParams(location.search).get("quiet") === "1") document.documentElement.classList.add("quiet");
+    </script>
   </head>
   <body>
     <aside>
+      <div id="help">
       <h1>Walk check</h1>
-      <p>You should see sand, a blue sky, and, if you walk north, a wooden compound. With WebGL2 the picture is sharp, up to 1920×1080, not a 160×90 mosaic. Without it, the page stays on the coarse picture.</p>
-      <p>Click the picture to look. W A S D move. A and D strafe. Shift sprints. Space jumps and lands.</p>
-      <p>Press 3 for the bit. Look down and hold the left mouse. A darker pit opens, and the line reads <code>voxel 500</code>.</p>
+      <p>The camera sits directly behind your body and eases toward wherever it needs to be. It does not jump, and it will not go under the ground. The wheel sets how far behind you it follows, and how high it sits, and that move eases instead of jumping. It does not zoom. Press V for the eyes, and V again to come back out. From the eyes, R cycles none, glasses, binoculars, and a telescope. A zoom still counts in the picture score: its speed and its acceleration pull the buffer the same way a camera move does. The range under the crosshair appears only once you are in first person. Hold the right mouse and move to orbit. Let go and the camera swings back behind the body. A quick right-click, without moving, still salvages a wall.</p>
+      <p>The second column is four AI clients. Each one is the same view as the primary, including the map. The controller only presses the keys and mouse buttons a player can press. The surveyor names things and does not dig. The miner opens pits. The builder raises a wall and then salvages it. The marksman shoots the dummy. Their line starts with the agenda. Building skill shortens the raise and the finished wall starts stronger than 80.</p>
+      <p>Press E to identify what the crosshair is on. That becomes your action target. While a target is active and you are in third person, the camera slides out and to the side so your body and the target both stay in view. Tab cycles people and the other clients. Shift+Tab goes backward. Backtick cycles interesting objects: the dummy, walls, and props, not the sand or the people. A ring marks the current target. At appraisal 0 you can name sand. A dummy is harder until the skill rises. When the line includes an action, press U to do it. Q toggles auto run. Running, with Shift or with Q, trains the run skill and that skill makes the sprint faster. The panel at the lower right is the skill list.</p>
+      <p>Press M to cycle the map: small, then full screen, then hidden. It starts small, at the lower left, and keeps a picture of the ground. The color is the ground your eyes are looking at, from your head, not the camera behind you: sand in the lows, grass on the slope, rock on the crest, and a pit where the floor is open. Lows are darker and crests are lighter. Topography sits under mapping in the skill list. It rises only while you survey, and it cannot pass mapping. Until it does, the chart has no contour lines. As it rises, the lines draw closer and the hill is sampled more finely. The line under the chart includes the height where you stand. Turn and look and that color stays when you look away. A later finding, such as a new pit, updates that spot. Stand near another player and the ground you have both mapped passes across. A stranger receives a little of it. Staying close raises friendliness, and then more of the picture passes, including pits and named places, limited by mapping, prospect, building, and appraisal. Grass, rock, and the hill shape travel with that ground, tinted so you can tell it was told. The line says the tier and who you are near, then <code>heard</code> when something new arrives. The arrow is you. The line under the chart is your world position and heading, with 000 due north. Click the picture to look. Left-click again to give the cursor back. With the cursor over the map, the wheel zooms the chart and holding the left button drags it. A green ring is the current target. Esc hides the map.</p>
+      <p>Walking leaves a pair of footprints on the ground. Every client draws them, whether or not they have the skill. Tracking only changes your own map. It rises slowly from those steps. At first the map shows only the last few steps. As tracking rises, the line grows longer. From tracking 8 the steps also stay on the chart picture. Trailing, under tracking, is what draws the other bodies on your map.</p>
+      <p>Subskills sit under their parent in the skill list. Each one rises only from that practice, and none of them can pass the parent. Topography refines the contours. Prospect is what lets a pit be recorded. Bracing adds to a new wall. Focus extends the zoom. Measure makes the range finer. Trailing draws other bodies on your map. Landing softens a hard fall. Wind slows how fast a sprint spends stamina.</p>
+      <p>Hills rise to about three bodies, 5.4 m. The lows stay sand. Grass covers the middle of a slope, and rock covers the steep crests. A light haze sits in the hollows and thickens with distance. Clouds drift overhead. The old sand grid was the grain tile repeating every few meters; the grain now meets at its edges, and the broad color does not follow that tile. Scrub and one small tree sit on the ground. A crab and a skink wander and move away if you come close. A gull circles overhead. None of them are targets.</p>
+      <p>Click the picture to look. W and S walk. A turns left and D turns right. Z strafes left and C strafes right. Shift sprints. Tap Space for a short hop. Hold Space to rise higher, up to the jump skill. [ on the bit switches between dig and fill.</p>
+      <p>The world is traced into offscreen buffers, then copied to the canvas every refresh. <code>info</code> is pixels times the frame rate you can see times speed squared times acceleration squared. The frame target follows an inverse-square of acceleration, so it leaves 12 fps gently and only nears the display refresh under a hard acceleration. A jump is vertical speed. While the camera was still, that acceleration cuts the picture to the display refresh on the same frame instead of waiting for the next slow trace. A squared or cubed step was jumpier, and folding velocity into that curve either missed the refresh at the start of a flick or blew up at rest. With no acceleration the spare time down to 12 fps raises the resolution. The frame rate does not go below 12 while the camera is moving, including up. Only a completely still camera may go slower, and that is when the picture climbs to the native size. Picture size eases toward the new target, except for that acceleration cut. The other frames stay near one picture a second until this view is cheap.</p>
+      <p>Press 3 until the line says <code>hammer</code>. The amber square is the hammer sight. Press 3 again for the bit. The cyan cross is the bit sight. A bright sight means the target is in reach and it lights up. A dim sight means it is too far, and nothing lights.</p>
+      <p>With the hammer, look at the foundation stone and hold the left mouse. That crafts the hearth: 20 metal and 8 stone, about 20 seconds. The line says <code>hearth</code>. Target it and press E. The line says <code>bound</code>. Walk onto the practice dummy and stay there. It clubs you. At <code>body 0</code> you are <code>down</code>, and eight seconds later you wake beside the hearth at <code>body 40</code>, <code>bruised</code>. Look at the hearth with the hammer and hold again to set the solar fin. The line gains <code>flux</code>, higher when the sun is up. A wall is still the hammer on open ground beside the stone.</p>
+      <p>[ on the bit cycles dig, fill, and smooth. Smooth pulls a voxel toward the surface and will not jump more than half a meter. ] turns a wall, a fin, a door, or a gate you are looking at. It is not R. R is still the optic. A wall that loses its footing falls into a crate. Right-click the crate to take 3 metal back. The line names <code>dawn</code> and <code>dusk</code> as well as day and night, and the tones get quieter after dark. Buying smoke raises a gray volume for eight seconds. Look at the pale paper by the crate and press E. Appraisal has to be high enough before that sentence is kept. Shooting while a person is targeted makes them hostile, and the trade stops until you have stood with them again. A client with a different catalog is refused. The line says <code>catalog</code>. A still picture that misses vsync says <code>recover</code>.</p>
+      <p>Concept slices are on as well as the beach. Two bodies will not stand in the same spot. A deep pit holds a still pool. The dummy's wreck can be right-clicked for 12 metal while it is down. A bound hearth refuses a stranger's dig within 6 m. Y offers fellowship to the person you have targeted. O prints your key. A miss flies and drops. North of the line y = −40 the cell is <code>atoll-1</code> and the other cell's digs are not applied here. <code>?culture=hosts</code> or <code>veil</code> changes the crate, not the skills. The war table is still closed.</p>
+      <p>With the bit, look down at the sand. The cross goes bright and the voxel lights up when it is in reach. Hold the left mouse. A pit opens under you, the line reads <code>voxel 500</code>, and you drop to the floor. The hole is only a lower floor. It does not grow a wall.</p>
+      <p>From the south gate, walk north a step. The line says <code>atoll-skirmish</code>. Press E. Pass: <code>strike south</code>, <code>scrip 800</code>, and <code>metal 30</code>. Press B while it says <code>buy</code>. Pass: <code>smoke</code> and <code>scrip 500</code>. Metal stays <code>30</code>. The line rifle is too expensive. Digging or raising a wall now says <code>frozen</code>. <a href="/tools/view/index.html?gate=1">Start at the gate</a>.</p>
+      <p>An <a href="/tools/archive/">archive</a> is a client with no body. Leave it open in another tab. This line gains <code>with</code> once anyone links: how many players and how many archives are in the simulation. Alone means none are. A dig says <code>provisional</code> until that archive mines a block, then it says <code>official</code>. The other two frames draw that hole from the block, even if they never voted. Close the tabs and open them again. The archive comes back as the same keeper and still has the chain. Your key, skills, place, pack, notes, and the map picture come back with you. That save is in this browser. Restarting the lighthouse, or standing here with no archive and no other clients, does not clear it. The line says <code>kept</code> when the archive had a newer sheet than this browser. The archive page shows its hash rate, how long it has been up, and how many clients are linked.</p>
       <p>Press 1 for the line. The white dot is the sight. Click the red dummy. Pass: <code>chest 28</code> and <code>dummy 72</code>. Four standing hits kill it. It stands back up after 5 seconds. A wall in the way is a miss. <a href="/tools/view/index.html?look=dummy">Start on the pad, already aimed</a>.</p>
+      </div>
+      <p id="agenda"></p>
       <p id="bit">sand is intact</p>
       <p id="link"></p>
-      <p><a href="/tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
+      <p><a href="/tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?id=b&to=a">Tab B</a> · <a id="fresh" href="?fresh=1">Start over</a> · <a href="/">All checks</a></p>
     </aside>
     <canvas width="160" height="90"></canvas>
+    <div id="target"></div>
+    <div id="range"></div>
+    <ul id="skills"></ul>
     <div id="sight"></div>
-    <script type="module" src="/src/app/main.js"></script>
+    <div id="chart">
+      <canvas id="map" width="220" height="220"></canvas>
+      <p id="fix"></p>
+    </div>
+    <div id="fps">0 fps</div>
+    <pre id="net">alone</pre>
+    <ul id="notes"></ul>
+    <script type="module" src="/src/app/main.js?v=102"></script>
+    <script>
+      const fresh = document.querySelector("#fresh");
+      if (fresh) {
+        const next = new URL(location.href);
+        next.searchParams.set("fresh", "1");
+        fresh.href = next.pathname + next.search;
+      }
+    </script>
   </body>
 </html>

@@ -1,8 +1,10 @@
 import { cameraBasis } from "../engine/cast.js";
+import { ATLAS, GRASS_TILE, ROCK_TILE, SAND_TILE, WOOD_TILE, blitTexture, grassTexture, rectFor, rockTexture, sandTexture, woodTexture } from "./texture.js?v=62";
 
-const MAX_SPHERES = 8;
+const MAX_SPHERES = 24;
 const MAX_BOXES = 32;
 const MAX_DIGS = 128;
+const MAX_PRINTS = 48;
 
 const sphereData = new Float32Array(MAX_SPHERES * 4);
 const sphereColor = new Float32Array(MAX_SPHERES * 4);
@@ -10,6 +12,10 @@ const boxMin = new Float32Array(MAX_BOXES * 4);
 const boxMax = new Float32Array(MAX_BOXES * 4);
 const boxColor = new Float32Array(MAX_BOXES * 4);
 const digData = new Float32Array(MAX_DIGS * 4);
+const printData = new Float32Array(MAX_PRINTS * 4);
+const RECT_SLOTS = 40;
+const rectData = new Float32Array(RECT_SLOTS * 4);
+const atlasData = new Uint8Array(ATLAS * ATLAS * 4);
 
 function fail(canvas, reason) {
   canvas.dataset.gpuError = reason;
@@ -40,10 +46,15 @@ function texture(gl, width) {
   return tex;
 }
 
-export function fitCanvas(canvas) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const width = Math.max(640, Math.min(1920, Math.floor((canvas.clientWidth || window.innerWidth) * dpr)));
-  const height = Math.max(360, Math.min(1080, Math.floor((canvas.clientHeight || window.innerHeight) * dpr)));
+export const SPHERE_BUDGET = MAX_SPHERES;
+
+export function fitCanvas(canvas, scale = 1, pixels = null) {
+  const boxW = canvas.clientWidth || window.innerWidth || 960;
+  const boxH = canvas.clientHeight || window.innerHeight || 540;
+  const fullW = pixels?.width || Math.min(960, Math.max(1, Math.floor(boxW)));
+  const fullH = pixels?.height || Math.min(540, Math.max(1, Math.floor(boxH)));
+  const width = Math.max(160, Math.min(fullW, Math.floor(fullW * scale)));
+  const height = Math.max(90, Math.min(fullH, Math.floor(fullH * scale)));
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
 }
@@ -65,7 +76,20 @@ export function createGpuPainter(canvas) {
   gl.getExtension("EXT_color_buffer_float");
   const vert = `#version 300 es
 in vec2 aPos;
-void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+out vec2 vRay;
+void main() {
+  vec2 uv = aPos * 0.5 + 0.5;
+  vRay = vec2(uv.x, 1.0 - uv.y);
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+  const pointVert = `#version 300 es
+in vec2 aRay;
+out vec2 vRay;
+void main() {
+  vRay = aRay;
+  gl_Position = vec4(aRay.x * 2.0 - 1.0, (1.0 - aRay.y) * 2.0 - 1.0, 0.0, 1.0);
+  gl_PointSize = 1.0;
+}`;
   const frag = `#version 300 es
 precision highp float;
 uniform vec3 uOrigin;
@@ -81,51 +105,176 @@ uniform vec2 uRes;
 uniform int uSpheres;
 uniform int uBoxes;
 uniform int uDigs;
+uniform int uPrints;
+uniform vec4 uWork;
+uniform float uTime;
+in vec2 vRay;
 uniform sampler2D uSphereTex;
 uniform sampler2D uSphereColor;
 uniform sampler2D uBoxMin;
 uniform sampler2D uBoxMax;
 uniform sampler2D uBoxColor;
 uniform sampler2D uDigTex;
+uniform sampler2D uPrintTex;
+uniform sampler2D uTexRects;
+uniform sampler2D uAtlas;
 out vec4 fragColor;
 
-float digSample(ivec3 i, float seeded) {
-  for (int n = 0; n < ${MAX_DIGS}; n++) {
-    if (n >= uDigs) break;
-    vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
-    if (abs(dig.x - float(i.x)) < 0.1 && abs(dig.y - float(i.y)) < 0.1 && abs(dig.z - float(i.z)) < 0.1) return dig.w;
-  }
-  return seeded;
+vec3 tiled(int tile, vec2 uv, vec3 fallback) {
+  vec4 rect = texelFetch(uTexRects, ivec2(tile, 0), 0);
+  if (rect.w < 0.5) return fallback;
+  float pad = 0.5 / ${ATLAS}.0;
+  vec2 st = rect.xy + vec2(pad) + fract(uv) * (rect.z - pad * 2.0);
+  return texture(uAtlas, st).rgb;
 }
 
-float sampleMeters(vec3 p) {
-  vec3 cm = p * 100.0;
-  ivec3 i = ivec3(floor(cm / 50.0));
-  float cx = float(i.x) * 50.0 + 25.0;
-  float cy = float(i.y) * 50.0 + 25.0;
-  float cz = float(i.z) * 50.0 + 25.0;
-  float h2 = cx * cx + cy * cy;
-  float plane = cz * 10.0;
-  float seeded;
-  if (h2 > 25600.0 * 25600.0) {
-    float coast = (sqrt(h2) - 25600.0) * 10.0;
-    seeded = clamp(max(coast, 1.0), 1.0, 2000.0);
-  } else {
-    seeded = clamp(plane, -2000.0, 2000.0);
-  }
-  return digSample(i, seeded) / 1000.0;
+vec3 sphereAlbedo(vec3 n, int i, vec3 fallback) {
+  float u = atan(n.z, n.x) * 0.15915494309189535 + 0.5;
+  float v = asin(clamp(n.y, -1.0, 1.0)) * 0.3183098861837907 + 0.5;
+  return tiled(i, vec2(u, v), fallback);
 }
 
-bool crustHit(vec3 ro, vec3 rd, out float t, out vec3 p) {
-  t = 0.0;
-  for (int i = 0; i < 64; i++) {
+float hash21(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float cloudShade(vec3 rd) {
+  if (rd.z <= 0.02) return 0.0;
+  float t0 = clamp((34.0 - uOrigin.z) / rd.z, 0.0, 2400.0);
+  float t1 = clamp((62.0 - uOrigin.z) / rd.z, 0.0, 2400.0);
+  float span = max(t1 - t0, 0.0);
+  float sum = 0.0;
+  for (int i = 0; i < 5; i++) {
+    float t = t0 + span * ((float(i) + 0.5) / 5.0);
+    vec3 q = uOrigin + rd * t;
+    float n = valueNoise(q.xy * 0.018 + vec2(uTime * 0.004, 0.2));
+    float puff = smoothstep(0.5, 0.78, n);
+    float band = smoothstep(34.0, 42.0, q.z) * smoothstep(62.0, 50.0, q.z);
+    sum += puff * band * step(1.0, span);
+  }
+  return clamp(sum * 0.22, 0.0, 0.8);
+}
+
+float duneHeight(vec2 p) {
+  float roll = 0.5 * sin(p.x * 0.15) + 0.5 * cos(p.y * 0.13);
+  float wash = 0.5 * sin((p.x + p.y) * 0.17 + 1.3) + 0.5;
+  float n = clamp(0.55 * roll + 0.45 * wash, 0.0, 1.0);
+  return n * n * 5.4;
+}
+
+vec3 duneNormal(vec2 p) {
+  float e = 0.75;
+  float h = duneHeight(p);
+  float hx = duneHeight(p + vec2(e, 0.0));
+  float hy = duneHeight(p + vec2(0.0, e));
+  return normalize(vec3(h - hx, h - hy, e));
+}
+
+vec3 groundAlbedo(vec2 p, vec3 n) {
+  float crest = clamp(duneHeight(p) / 5.4, 0.0, 1.0);
+  float slope = 1.0 - clamp(n.z, 0.0, 1.0);
+  float rockW = clamp(smoothstep(0.2, 0.5, slope) + smoothstep(0.62, 0.92, crest) * 0.8, 0.0, 1.0);
+  float grassW = (1.0 - rockW) * smoothstep(0.1, 0.34, crest) * (1.0 - smoothstep(0.58, 0.86, crest));
+  grassW *= 1.0 - smoothstep(0.16, 0.46, slope);
+  vec3 sandC = tiled(${SAND_TILE}, p * 0.16, vec3(0.55, 0.48, 0.32));
+  vec3 grassC = tiled(${GRASS_TILE}, p * 0.14, vec3(0.22, 0.4, 0.16));
+  vec3 rockC = tiled(${ROCK_TILE}, p * 0.12, vec3(0.4, 0.38, 0.34));
+  sandC *= 0.88 + valueNoise(p * 0.23) * 0.22;
+  grassC *= 0.86 + valueNoise(p * 0.31 + 4.0) * 0.26;
+  rockC *= 0.84 + valueNoise(p * 0.19 + 9.0) * 0.28;
+  return mix(mix(sandC, grassC, grassW), rockC, rockW);
+}
+
+vec3 withPrints(vec3 rgb, vec2 p, int bounce) {
+  if (bounce > 0 || uPrints <= 0) return rgb;
+  float mark = 0.0;
+  for (int i = 0; i < ${MAX_PRINTS}; i++) {
+    if (i >= uPrints) break;
+    vec4 s = texelFetch(uPrintTex, ivec2(i, 0), 0);
+    vec2 d = p - s.xy;
+    float c = cos(s.z);
+    float sn = sin(s.z);
+    vec2 local = vec2(d.x * c + d.y * sn, -d.x * sn + d.y * c);
+    float left = length((local - vec2(-0.08, 0.02)) * vec2(9.0, 14.0));
+    float right = length((local - vec2(0.08, -0.02)) * vec2(9.0, 14.0));
+    mark = max(mark, smoothstep(1.05, 0.2, min(left, right)));
+  }
+  return rgb * (1.0 - 0.62 * mark);
+}
+
+float islandExit(vec3 ro, vec3 rd) {
+  vec2 o = ro.xy;
+  vec2 d = rd.xy;
+  float a = dot(d, d);
+  if (a < 1.0e-8) return 8000.0;
+  float b = dot(o, d);
+  float c = dot(o, o) - 65536.0;
+  float disc = b * b - a * c;
+  if (disc < 0.0) return 0.0;
+  return (-b + sqrt(disc)) / a;
+}
+
+bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
+  if (dot(ro.xy, ro.xy) <= 65536.0 && ro.z < duneHeight(ro.xy) + 0.02) {
+    t = 0.02;
     p = ro + rd * t;
-    float sdf = sampleMeters(p);
-    if (sdf <= 0.0) return true;
-    t += max(sdf, 0.05);
-    if (t > 400.0) return false;
+    p.z = duneHeight(p.xy);
+    return true;
   }
-  return false;
+  float tFar = islandExit(ro, rd);
+  float tNear = 0.02;
+  if (rd.z < -1.0e-4) {
+    if (ro.z > 5.6) tNear = max(tNear, (5.6 - ro.z) / rd.z);
+    float tGround = max(-ro.z / rd.z, tNear + 8.0);
+    tFar = min(tFar, tGround);
+  }
+  tFar = clamp(tFar, tNear, 8000.0);
+  float prevT = tNear;
+  vec3 prevQ = ro + rd * prevT;
+  float prevDist = prevQ.z - duneHeight(prevQ.xy);
+  bool hit = false;
+  float lo = prevT;
+  float hi = prevT;
+  float advance = max((tFar - prevT) / 80.0, 0.2);
+  t = prevT;
+  for (int i = 0; i < 80; i++) {
+    t += advance;
+    vec3 q = ro + rd * t;
+    float dist = q.z - duneHeight(q.xy);
+    bool cross = !hit && prevDist > 0.0 && dist <= 0.02;
+    if (cross) {
+      hit = true;
+      lo = prevT;
+      hi = t;
+    }
+    prevDist = dist;
+    prevT = t;
+  }
+  if (!hit) {
+    p = ro;
+    return false;
+  }
+  for (int k = 0; k < 10; k++) {
+    float mid = 0.5 * (lo + hi);
+    vec3 m = ro + rd * mid;
+    if (m.z - duneHeight(m.xy) > 0.0) lo = mid;
+    else hi = mid;
+  }
+  t = hi;
+  p = ro + rd * hi;
+  p.z = duneHeight(p.xy);
+  return dot(p.xy, p.xy) <= 65536.0;
 }
 
 bool boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t) {
@@ -178,42 +327,200 @@ bool blocked(vec3 from, vec3 rd) {
   return false;
 }
 
+vec3 skyColor(vec3 rd) {
+  vec3 sun = normalize(uSun);
+  float day = smoothstep(-0.02, 0.25, sun.z);
+  float up = clamp(rd.z * 0.85 + 0.2, 0.0, 1.0);
+  vec3 sky = mix(vec3(0.62, 0.68, 0.74), vec3(0.30, 0.50, 0.84), up);
+  sky = mix(sky * 0.12, sky, day);
+  float d = dot(rd, sun);
+  float disc = smoothstep(0.99915, 0.99955, d);
+  float glow = pow(max(d, 0.0), 220.0);
+  vec3 color = sky + vec3(1.0, 0.94, 0.72) * (disc * 3.0 + glow * 0.7) * day;
+  float puff = cloudShade(rd);
+  vec3 cloud = mix(vec3(0.45, 0.48, 0.52), vec3(0.96, 0.97, 0.95), day);
+  return mix(color, cloud, puff);
+}
+
+vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
+  vec3 sun = normalize(uSun);
+  float day = smoothstep(0.0, 0.2, sun.z);
+  float ndotl = max(dot(n, sun), 0.0);
+  float direct = ndotl * day;
+  if (direct > 0.0 && blocked(p + n * 0.06 + sun * 0.05, sun)) direct *= 0.28;
+  return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * direct);
+}
+
+vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
+  vec3 q = (p - (bmin + bmax) * 0.5) / max((bmax - bmin) * 0.5, vec3(0.001));
+  vec3 a = abs(q);
+  if (a.x > a.y && a.x > a.z) return vec3(sign(q.x), 0.0, 0.0);
+  if (a.y > a.z) return vec3(0.0, sign(q.y), 0.0);
+  return vec3(0.0, 0.0, sign(q.z));
+}
+
 void main() {
-  float uu = gl_FragCoord.x / uRes.x;
-  float vv = 1.0 - gl_FragCoord.y / uRes.y;
+  float uu = vRay.x;
+  float vv = vRay.y;
   float halfAngle = tan(uFov * 0.008726646259971648) * uPlane;
   float px = (uu * 2.0 - 1.0) * uAspect * halfAngle;
   float py = (1.0 - vv * 2.0) * halfAngle;
   vec3 rd = normalize(uRight * px + uUp * py + uForward * uPlane);
-  float bestT = 1.0e30;
-  vec3 bestP = vec3(0.0);
-  vec4 bestColor = uMiss;
-  float t;
-  vec3 p;
-  if (crustHit(uOrigin, rd, t, p) && t < bestT) {
-    bestT = t;
-    bestP = p;
-    bestColor = p.z < -0.3 ? vec4(0.16, 0.13, 0.10, 1.0) : vec4(0.55, 0.48, 0.32, 1.0);
+  vec3 ro = uOrigin;
+  vec3 accum = vec3(0.0);
+  float thru = 1.0;
+  for (int bounce = 0; bounce < 5; bounce++) {
+    float bestT = 1.0e30;
+    vec3 bestP = ro;
+    vec3 bestN = vec3(0.0, 0.0, 1.0);
+    vec3 bestRgb = uMiss.rgb;
+    float bestRef = 0.0;
+    bool found = false;
+    float t;
+    vec3 p;
+    float sandT = 1.0e30;
+    vec3 sandP = ro;
+    bool sand = false;
+    if (bounce == 0) sand = sandPlane(ro, rd, sandT, sandP);
+    else if (rd.z < -1.0e-4) {
+      sandT = -ro.z / rd.z;
+      if (sandT > 0.02 && sandT < 800.0) {
+        sandP = ro + rd * sandT;
+        sandP.z = duneHeight(sandP.xy);
+        sand = dot(sandP.xy, sandP.xy) <= 65536.0;
+      }
+    }
+    bool openMouth = false;
+    float mouthFloor = 0.0;
+    if (bounce == 0 && uDigs > 0) {
+      ivec2 mouth = ivec2(floor(sandP.xy * 2.0));
+      for (int n = 0; n < 32; n++) {
+        if (n >= uDigs) break;
+        vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
+        if (sand && abs(dig.x - float(mouth.x)) < 0.1 && abs(dig.y - float(mouth.y)) < 0.1) {
+          openMouth = true;
+          mouthFloor = dig.z;
+        }
+        if (rd.z >= -1.0e-4) continue;
+        t = (dig.z - ro.z) / rd.z;
+        if (t <= 0.02 || t >= bestT) continue;
+        p = ro + rd * t;
+        vec2 lo = dig.xy * 0.5;
+        if (p.x < lo.x - 0.02 || p.x >= lo.x + 0.52 || p.y < lo.y - 0.02 || p.y >= lo.y + 0.52) continue;
+        bestT = t;
+        bestP = p;
+        bestN = vec3(0.0, 0.0, 1.0);
+        bestRgb = withPrints(tiled(${SAND_TILE}, p.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, p.xy, bounce);
+        bestRef = 0.02;
+        found = true;
+      }
+    }
+    if (sand && openMouth && !found) {
+      bestT = sandT;
+      bestP = vec3(sandP.xy, mouthFloor);
+      bestN = vec3(0.0, 0.0, 1.0);
+      bestRgb = withPrints(tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, sandP.xy, bounce);
+      bestRef = 0.02;
+      found = true;
+    } else if (sand && !openMouth && sandT < bestT) {
+      bestT = sandT;
+      bestP = sandP;
+      bestN = duneNormal(sandP.xy);
+      bestRgb = withPrints(groundAlbedo(sandP.xy, bestN), sandP.xy, bounce);
+      bestRef = 0.02;
+      found = true;
+    }
+    for (int i = 0; i < ${MAX_BOXES}; i++) {
+      if (i >= uBoxes) break;
+      vec3 bmin = texelFetch(uBoxMin, ivec2(i, 0), 0).xyz;
+      vec3 bmax = texelFetch(uBoxMax, ivec2(i, 0), 0).xyz;
+      if (!boxHit(ro, rd, bmin, bmax, t) || t <= 0.02 || t >= bestT) continue;
+      bestT = t;
+      bestP = ro + rd * t;
+      bestN = boxNormal(bestP, bmin, bmax);
+      vec4 col = texelFetch(uBoxColor, ivec2(i, 0), 0);
+      vec2 woodUv = abs(bestN.z) > 0.5 ? bestP.xy : (abs(bestN.x) > 0.5 ? bestP.yz : bestP.xz);
+      bestRgb = tiled(${WOOD_TILE}, woodUv * 0.5, col.rgb);
+      bestRef = col.a;
+      found = true;
+    }
+    for (int i = 0; i < ${MAX_SPHERES}; i++) {
+      if (i >= uSpheres) break;
+      vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
+      if (!sphereHit(ro, rd, sphere, t) || t <= 0.02 || t >= bestT) continue;
+      bestT = t;
+      bestP = ro + rd * t;
+      bestN = normalize(bestP - sphere.xyz);
+      vec4 col = texelFetch(uSphereColor, ivec2(i, 0), 0);
+      bestRgb = sphereAlbedo(bestN, i, col.rgb);
+      bestRef = col.a;
+      found = true;
+    }
+    if (rd.z < -0.001) {
+      float waterT = (0.0 - ro.z) / rd.z;
+      vec3 waterP = ro + rd * waterT;
+      if (waterT > 0.02 && waterT < bestT && dot(waterP.xy, waterP.xy) > 256.0 * 256.0) {
+        bestT = waterT;
+        bestP = waterP;
+        bestN = vec3(0.0, 0.0, 1.0);
+        bestRgb = vec3(0.08, 0.22, 0.38);
+        bestRef = 0.45;
+        found = true;
+      }
+    }
+    if (!found) {
+      accum += thru * skyColor(rd);
+      break;
+    }
+    if (dot(bestN, rd) > 0.0) bestN = -bestN;
+    if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
+    else {
+      float nd = max(dot(bestN, normalize(uSun)), 0.0);
+      bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;
+    }
+    if (bounce == 0) {
+      float low = exp(-max(bestP.z, 0.0) * 0.11);
+      float fog = (1.0 - exp(-bestT * 0.0011)) * mix(0.35, 1.0, low);
+      fog = clamp(fog, 0.0, 0.62);
+      vec3 haze = mix(vec3(0.42, 0.48, 0.54), vec3(0.74, 0.8, 0.86), smoothstep(-0.05, 0.25, normalize(uSun).z));
+      bestRgb = mix(bestRgb, haze, fog);
+    }
+    if (bounce == 0 && uWork.w > 0.5) {
+      vec2 cell = uWork.xy;
+      float rise = max(uWork.z, 0.08);
+      float gt;
+      float wide = rise < 0.4 ? 0.42 : 0.24;
+      float deep = rise < 0.4 ? 0.42 : 0.08;
+      vec3 bmin = vec3(cell.x - wide, cell.y - deep, 0.0);
+      vec3 bmax = vec3(cell.x + wide, cell.y + deep, rise);
+      bool piece = uWork.w > 3.5;
+      bool rising = uWork.w < 1.5;
+      vec3 tint = piece ? vec3(1.0, 0.72, 0.28) : vec3(0.2, 0.9, 1.0);
+      if ((rising || piece) && boxHit(ro, rd, bmin, bmax, gt) && gt < bestT) {
+        bestT = gt;
+        bestP = ro + rd * gt;
+        bestN = vec3(0.0, 0.0, 1.0);
+        float band = 0.55 + 0.45 * sin(bestP.z * 16.0 - uTime * 8.0);
+        float lip = smoothstep(rise - 0.12, rise, bestP.z);
+        bestRgb = mix(tint * band, vec3(1.0, 0.95, 0.7), lip);
+        bestRef = 0.0;
+      } else {
+        float dist = length(bestP.xy - cell);
+        float ring = 0.28 + 0.05 * sin(uTime * 3.0);
+        float mark = smoothstep(0.07, 0.0, abs(dist - ring));
+        float pad = smoothstep(0.34, 0.08, dist);
+        float scan = 0.55 + 0.45 * sin(uTime * 6.0 + dist * 20.0);
+        bestRgb += tint * (mark * 0.95 + pad * 0.35 * scan);
+      }
+    }
+    float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
+    accum += thru * bestRgb * (1.0 - mirror);
+    thru *= mirror;
+    if (thru <= 0.001) break;
+    rd = normalize(reflect(rd, bestN));
+    ro = bestP + bestN * 0.05;
   }
-  for (int i = 0; i < ${MAX_BOXES}; i++) {
-    if (i >= uBoxes) break;
-    vec3 bmin = texelFetch(uBoxMin, ivec2(i, 0), 0).xyz;
-    vec3 bmax = texelFetch(uBoxMax, ivec2(i, 0), 0).xyz;
-    if (!boxHit(uOrigin, rd, bmin, bmax, t) || t >= bestT) continue;
-    bestT = t;
-    bestP = uOrigin + rd * t;
-    bestColor = texelFetch(uBoxColor, ivec2(i, 0), 0);
-  }
-  for (int i = 0; i < ${MAX_SPHERES}; i++) {
-    if (i >= uSpheres) break;
-    vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
-    if (!sphereHit(uOrigin, rd, sphere, t) || t >= bestT) continue;
-    bestT = t;
-    bestP = uOrigin + rd * t;
-    bestColor = texelFetch(uSphereColor, ivec2(i, 0), 0);
-  }
-  if (bestT < 1.0e20 && blocked(bestP + uSun * 0.08, uSun)) bestColor.rgb *= 0.45;
-  fragColor = bestColor;
+  fragColor = vec4(accum, 1.0);
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
   const fs = compile(gl, gl.FRAGMENT_SHADER, frag);
@@ -233,6 +540,9 @@ void main() {
   let boxMaxTex;
   let boxColorTex;
   let digTex;
+  let printTex;
+  let rectTex;
+  let atlasTex;
   try {
     sphereTex = texture(gl, MAX_SPHERES);
     sphereColorTex = texture(gl, MAX_SPHERES);
@@ -240,6 +550,24 @@ void main() {
     boxMaxTex = texture(gl, MAX_BOXES);
     boxColorTex = texture(gl, MAX_BOXES);
     digTex = texture(gl, MAX_DIGS);
+    printTex = texture(gl, MAX_PRINTS);
+    rectTex = texture(gl, RECT_SLOTS);
+    atlasTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    blitTexture(atlasData, SAND_TILE, sandTexture());
+    blitTexture(atlasData, WOOD_TILE, woodTexture());
+    blitTexture(atlasData, GRASS_TILE, grassTexture());
+    blitTexture(atlasData, ROCK_TILE, rockTexture());
+    rectData.set(rectFor(SAND_TILE), SAND_TILE * 4);
+    rectData.set(rectFor(WOOD_TILE), WOOD_TILE * 4);
+    rectData.set(rectFor(GRASS_TILE), GRASS_TILE * 4);
+    rectData.set(rectFor(ROCK_TILE), ROCK_TILE * 4);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ATLAS, ATLAS, 0, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
   } catch {
     return null;
   }
@@ -251,6 +579,9 @@ void main() {
   gl.uniform1i(loc("uBoxMax"), 3);
   gl.uniform1i(loc("uBoxColor"), 4);
   gl.uniform1i(loc("uDigTex"), 5);
+  gl.uniform1i(loc("uPrintTex"), 8);
+  gl.uniform1i(loc("uTexRects"), 6);
+  gl.uniform1i(loc("uAtlas"), 7);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   const upload = (unit, tex, width, data) => {
@@ -258,14 +589,93 @@ void main() {
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, 1, gl.RGBA, gl.FLOAT, data);
   };
-  return {
-    paint(scene) {
+  const boundTex = new Array(MAX_SPHERES);
+  let atlasDirty = false;
+  const pointVs = compile(gl, gl.VERTEX_SHADER, pointVert);
+  let pointProgram = null;
+  const rayUVs = new Float32Array(8000 * 2);
+  const rayBuffer = gl.createBuffer();
+  if (pointVs) {
+    pointProgram = gl.createProgram();
+    gl.attachShader(pointProgram, pointVs);
+    gl.attachShader(pointProgram, fs);
+    gl.bindAttribLocation(pointProgram, 0, "aRay");
+    gl.linkProgram(pointProgram);
+    if (!gl.getProgramParameter(pointProgram, gl.LINK_STATUS)) pointProgram = null;
+  }
+  let viewSize = null;
+  const hold = [0, 1, 2].map(() => {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
+  });
+  let newest = -1;
+  let prior = -1;
+  const fitHold = (slot, tw, th) => {
+    if (slot.w === tw && slot.h === th) return true;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, slot.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tw, th, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, slot.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, slot.tex, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) return false;
+    slot.w = tw;
+    slot.h = th;
+    return true;
+  };
+  const releaseHold = () => {
+    gl.activeTexture(gl.TEXTURE9);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE10);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+  };
+  const blitVs = compile(gl, gl.VERTEX_SHADER, `#version 300 es
+in vec2 aPos;
+out vec2 vUV;
+void main() {
+  vUV = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`);
+  const blitFs = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
+precision highp float;
+uniform sampler2D uOlder;
+uniform sampler2D uNewer;
+uniform float uMix;
+in vec2 vUV;
+out vec4 fragColor;
+void main() {
+  vec4 past = texture(uOlder, vUV);
+  vec4 next = texture(uNewer, vUV);
+  fragColor = mix(past, next, uMix);
+}`);
+  let blitProgram = null;
+  if (blitVs && blitFs) {
+    blitProgram = gl.createProgram();
+    gl.attachShader(blitProgram, blitVs);
+    gl.attachShader(blitProgram, blitFs);
+    gl.bindAttribLocation(blitProgram, 0, "aPos");
+    gl.linkProgram(blitProgram);
+    if (!gl.getProgramParameter(blitProgram, gl.LINK_STATUS)) blitProgram = null;
+  }
+  const blitOlder = blitProgram ? gl.getUniformLocation(blitProgram, "uOlder") : null;
+  const blitNewer = blitProgram ? gl.getUniformLocation(blitProgram, "uNewer") : null;
+  const blitMix = blitProgram ? gl.getUniformLocation(blitProgram, "uMix") : null;
+  const draw = (scene, mode, count) => {
       sphereData.fill(0);
       sphereColor.fill(0);
       boxMin.fill(0);
       boxMax.fill(0);
       boxColor.fill(0);
       digData.fill(0);
+      printData.fill(0);
       let spheres = 0;
       let boxes = 0;
       let digs = 0;
@@ -276,56 +686,189 @@ void main() {
           sphereData[at + 1] = object.origin[1];
           sphereData[at + 2] = object.origin[2];
           sphereData[at + 3] = object.radius;
-          sphereColor.set(object.color, at);
+          sphereColor[at] = object.color[0];
+          sphereColor[at + 1] = object.color[1];
+          sphereColor[at + 2] = object.color[2];
+          sphereColor[at + 3] = object.reflectivity || 0;
+          if (object.texture) {
+            if (spheres < SAND_TILE) {
+              rectData.set(rectFor(spheres), spheres * 4);
+              if (boundTex[spheres] !== object.texture) {
+                blitTexture(atlasData, spheres, object.texture);
+                boundTex[spheres] = object.texture;
+                atlasDirty = true;
+              }
+            }
+          } else if (spheres < SAND_TILE) {
+            rectData[spheres * 4 + 3] = 0;
+          }
           spheres += 1;
         } else if (object.type === "box" && boxes < MAX_BOXES) {
           const at = boxes * 4;
           boxMin.set(object.min, at);
           boxMax.set(object.max, at);
           boxColor.set(object.color, at);
+          boxColor[at + 3] = object.reflectivity || 0;
           boxes += 1;
         } else if (object.type === "crust" && object.field) {
+          const columns = new Map();
           for (const [key, sample] of object.field.overrides) {
-            if (digs >= MAX_DIGS) break;
+            if (sample <= 0) continue;
             const [i, j, k] = key.split(",").map(Number);
+            const bottom = k * 0.5;
+            const id = `${i},${j}`;
+            const prev = columns.get(id);
+            if (prev === undefined || bottom < prev) columns.set(id, bottom);
+          }
+          for (const [id, bottom] of columns) {
+            if (digs >= MAX_DIGS) break;
+            const [i, j] = id.split(",").map(Number);
             const at = digs * 4;
             digData[at] = i;
             digData[at + 1] = j;
-            digData[at + 2] = k;
-            digData[at + 3] = sample / 1000;
+            digData[at + 2] = bottom;
+            digData[at + 3] = 1;
             digs += 1;
           }
         }
       }
       const basis = cameraBasis(scene.camera);
+      const steps = scene.prints || [];
+      const shown = Math.min(steps.length, MAX_PRINTS);
+      for (let i = 0; i < shown; i += 1) {
+        const step = steps[steps.length - shown + i];
+        printData[i * 4] = step.x;
+        printData[i * 4 + 1] = step.y;
+        printData[i * 4 + 2] = step.yaw || 0;
+      }
       const miss = scene.miss || [0.45, 0.62, 0.85, 1];
       const sun = scene.sun || [0, 0, 1];
-      gl.useProgram(program);
-      gl.viewport(0, 0, canvas.width, canvas.height);
+      const prog = mode === "points" && pointProgram ? pointProgram : program;
+      const u = (name) => gl.getUniformLocation(prog, name);
+      gl.useProgram(prog);
+      gl.viewport(0, 0, viewSize ? viewSize.w : canvas.width, viewSize ? viewSize.h : canvas.height);
       upload(0, sphereTex, MAX_SPHERES, sphereData);
       upload(1, sphereColorTex, MAX_SPHERES, sphereColor);
       upload(2, boxMinTex, MAX_BOXES, boxMin);
       upload(3, boxMaxTex, MAX_BOXES, boxMax);
       upload(4, boxColorTex, MAX_BOXES, boxColor);
       upload(5, digTex, MAX_DIGS, digData);
-      gl.uniform3f(loc("uOrigin"), scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
-      gl.uniform3f(loc("uForward"), basis.forward[0], basis.forward[1], basis.forward[2]);
-      gl.uniform3f(loc("uRight"), basis.right[0], basis.right[1], basis.right[2]);
-      gl.uniform3f(loc("uUp"), basis.up[0], basis.up[1], basis.up[2]);
-      gl.uniform3f(loc("uSun"), sun[0], sun[1], sun[2]);
-      gl.uniform4f(loc("uMiss"), miss[0], miss[1], miss[2], miss[3]);
-      gl.uniform1f(loc("uFov"), scene.camera.fov);
-      gl.uniform1f(loc("uAspect"), scene.camera.aspect);
-      gl.uniform1f(loc("uPlane"), scene.camera.planeDistance);
-      gl.uniform2f(loc("uRes"), canvas.width, canvas.height);
-      gl.uniform1i(loc("uSpheres"), spheres);
-      gl.uniform1i(loc("uBoxes"), boxes);
-      gl.uniform1i(loc("uDigs"), digs);
+      upload(8, printTex, MAX_PRINTS, printData);
+      upload(6, rectTex, RECT_SLOTS, rectData);
+      if (atlasDirty) {
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ATLAS, ATLAS, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
+        atlasDirty = false;
+      }
+      gl.uniform1i(u("uSphereTex"), 0);
+      gl.uniform1i(u("uSphereColor"), 1);
+      gl.uniform1i(u("uBoxMin"), 2);
+      gl.uniform1i(u("uBoxMax"), 3);
+      gl.uniform1i(u("uBoxColor"), 4);
+      gl.uniform1i(u("uDigTex"), 5);
+      gl.uniform1i(u("uPrintTex"), 8);
+      gl.uniform1i(u("uTexRects"), 6);
+      gl.uniform1i(u("uAtlas"), 7);
+      gl.uniform3f(u("uOrigin"), scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
+      gl.uniform3f(u("uForward"), basis.forward[0], basis.forward[1], basis.forward[2]);
+      gl.uniform3f(u("uRight"), basis.right[0], basis.right[1], basis.right[2]);
+      gl.uniform3f(u("uUp"), basis.up[0], basis.up[1], basis.up[2]);
+      gl.uniform3f(u("uSun"), sun[0], sun[1], sun[2]);
+      gl.uniform4f(u("uMiss"), miss[0], miss[1], miss[2], miss[3]);
+      gl.uniform1f(u("uFov"), scene.camera.fov);
+      gl.uniform1f(u("uAspect"), scene.camera.aspect);
+      gl.uniform1f(u("uPlane"), scene.camera.planeDistance);
+      const rw = viewSize ? viewSize.w : canvas.width;
+      const rh = viewSize ? viewSize.h : canvas.height;
+      gl.uniform2f(u("uRes"), rw, rh);
+      gl.uniform1i(u("uSpheres"), spheres);
+      gl.uniform1i(u("uBoxes"), boxes);
+      gl.uniform1i(u("uDigs"), digs);
+      gl.uniform1i(u("uPrints"), shown);
+      const work = scene.work;
+      gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
+      gl.uniform1f(u("uTime"), scene.time || 0);
+      if (prog === pointProgram) {
+        const n = Math.max(0, Math.min(count | 0, rayUVs.length / 2));
+        const w = Math.max(1, canvas.width);
+        const h = Math.max(1, canvas.height);
+        for (let i = 0; i < n; i += 1) {
+          rayUVs[i * 2] = (Math.random() * (w - 1) + 0.5) / w;
+          rayUVs[i * 2 + 1] = (Math.random() * (h - 1) + 0.5) / h;
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, rayBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, rayUVs.subarray(0, n * 2), gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.POINTS, 0, n);
+        return true;
+      }
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      return gl.getError() === gl.NO_ERROR;
+      return true;
+  };
+  return {
+    paint(scene, width, height) {
+      const tw = Math.max(2, width | 0 || canvas.width);
+      const th = Math.max(2, height | 0 || canvas.height);
+      if (!blitProgram) {
+        viewSize = null;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return draw(scene, "full", 0);
+      }
+      let index = 0;
+      for (let i = 0; i < hold.length; i += 1) {
+        if (i !== newest && i !== prior) {
+          index = i;
+          break;
+        }
+      }
+      const slot = hold[index];
+      if (!fitHold(slot, tw, th)) {
+        viewSize = null;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return draw(scene, "full", 0);
+      }
+      releaseHold();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, slot.fbo);
+      gl.viewport(0, 0, tw, th);
+      viewSize = { w: tw, h: th };
+      const traced = draw(scene, "full", 0);
+      viewSize = null;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      if (!traced) return false;
+      if (newest >= 0) prior = newest;
+      newest = index;
+      return true;
+    },
+    present(amount = 1) {
+      if (!blitProgram || newest < 0) return false;
+      const older = hold[prior >= 0 ? prior : newest];
+      const next = hold[newest];
+      const mix = prior < 0 ? 1 : Math.max(0, Math.min(1, amount));
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(blitProgram);
+      gl.activeTexture(gl.TEXTURE9);
+      gl.bindTexture(gl.TEXTURE_2D, older.tex);
+      gl.uniform1i(blitOlder, 9);
+      gl.activeTexture(gl.TEXTURE10);
+      gl.bindTexture(gl.TEXTURE_2D, next.tex);
+      gl.uniform1i(blitNewer, 10);
+      gl.uniform1f(blitMix, mix);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      releaseHold();
+      return true;
+    },
+    paintRandom(scene, count) {
+      if (!pointProgram) return draw(scene, "full", 0);
+      return draw(scene, "points", count);
     },
   };
 }

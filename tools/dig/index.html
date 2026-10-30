@@ -8,6 +8,7 @@
       a { color: #9cf; }
       code { color: #fd8; }
       pre { white-space: pre-wrap; }
+      html.quiet .help { display: none; }
     </style>
     <script type="importmap">
       {
@@ -18,12 +19,17 @@
         }
       }
     </script>
+    <script>
+      if (new URLSearchParams(location.search).get("quiet") === "1") document.documentElement.classList.add("quiet");
+    </script>
   </head>
   <body>
+    <div class="help">
     <h1>Dig check</h1>
     <p>Open either tab first. The log leaves <code>waiting</code> before <code>applied</code>. <code>lighthouse failed</code> means <code>npm start</code> is not running.</p>
     <p>Pass: both pages log <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. The line <code>voxel before</code> is negative. Two different hashes, or <code>bad signature</code>, is a fail.</p>
     <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a> · <a href="/">All checks</a></p>
+    </div>
     <pre></pre>
     <script type="module" src="./dig.js"></script>
   </body>

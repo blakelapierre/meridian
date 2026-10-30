@@ -21,14 +21,16 @@ export function createPlayerWorld(player) {
   });
 }
 
-export function stepPlayer(state, player, acceleration, jump = false) {
-  const gravity = state.tangentGravity || 0;
-  player.acceleration[0] = acceleration[0];
-  player.acceleration[1] = acceleration[1];
-  player.acceleration[2] = acceleration[2] + gravity + (jump ? JUMP_ACCEL : 0);
+export function stepPlayer(state, player, acceleration, jump = false, impulse = null) {
+  const gravity = state.gravity || [0, 0, state.tangentGravity || 0];
+  const lift = impulse == null ? (jump ? JUMP_ACCEL : 0) : impulse;
+  player.acceleration[0] = acceleration[0] + gravity[0];
+  player.acceleration[1] = acceleration[1] + gravity[1];
+  player.acceleration[2] = acceleration[2] + gravity[2] + lift;
   tick(state);
-  if (player.position[2] < 0) {
-    player.position[2] = 0;
+  const floor = -(state.drop || 0);
+  if (player.position[2] < floor) {
+    player.position[2] = floor;
     if (player.velocity[2] < 0) player.velocity[2] = 0;
   }
 }
@@ -37,13 +39,14 @@ export function createStamina() {
   return { value: 100, debt: 0, credit: 0, wait: 0, locked: false };
 }
 
-export function stepStamina(pool, { sprint = false, jump = false } = {}) {
+export function stepStamina(pool, { sprint = false, jump = false, wind = 0 } = {}) {
   if (jump) pool.value = Math.max(0, pool.value - 12);
   if (sprint) {
     pool.wait = 0;
     pool.credit = 0;
     if (pool.value > 0 && !pool.locked) {
-      pool.debt += 14;
+      const cost = Math.max(6, 14 - Math.floor(Math.max(0, wind) / 18));
+      pool.debt += cost;
       while (pool.debt >= 30 && pool.value > 0) {
         pool.debt -= 30;
         pool.value -= 1;
@@ -70,8 +73,14 @@ export function stepStamina(pool, { sprint = false, jump = false } = {}) {
   if (pool.locked && pool.value >= 20) pool.locked = false;
 }
 
-export function wishSpeed(pool, { crouch = false, sprint = false } = {}) {
-  if (crouch) return 2.2;
-  if (sprint && !pool.locked && pool.value > 0) return 6.6;
-  return 4.4;
+export function runSpeed(skill = 0) {
+  const trained = Math.max(0, Math.min(140, skill));
+  return 6.6 * (1 + 0.35 * trained / 140);
+}
+
+export function wishSpeed(pool, { crouch = false, sprint = false, run = 0, limp = 1 } = {}) {
+  const factor = typeof limp === "number" ? limp : 1;
+  const heavy = factor <= 0.4;
+  const base = crouch ? 2.2 : !heavy && sprint && !pool.locked && pool.value > 0 ? runSpeed(run) : 4.4;
+  return base * factor;
 }

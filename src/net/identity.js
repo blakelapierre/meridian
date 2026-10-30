@@ -7,6 +7,40 @@ hashes.sha512 = sha512;
 const text = new TextEncoder();
 const textOut = new TextDecoder();
 
+export function keyPhrase(identity) {
+  return exportKey(identity).replace(/(.{4})/g, "$1 ").trim();
+}
+
+const RECOVERY = ["ash", "bay", "cairn", "dune", "eel", "fir", "gull", "helm", "iris", "jade", "kelp", "lime", "moss", "nail", "oak", "pine", "quartz", "reed", "salt", "tide", "urn", "vine", "well", "yew"];
+
+export function recoveryPhrase(identity, count = 6) {
+  const bytes = identity?.pubkey;
+  if (!bytes?.length) return "";
+  const words = [];
+  for (let i = 0; i < count; i++) words.push(RECOVERY[bytes[i % bytes.length] % RECOVERY.length]);
+  return words.join(" ");
+}
+
+export function exportKey(identity) {
+  const bytes = new Uint8Array(identity.secret.length + identity.pubkey.length);
+  bytes.set(identity.secret, 0);
+  bytes.set(identity.pubkey, identity.secret.length);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function importKey(hex) {
+  const cleaned = String(hex || "").replace(/\s+/g, "");
+  if (!cleaned || cleaned.length < 4 || cleaned.length % 2) return null;
+  const bytes = new Uint8Array(cleaned.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    const value = Number.parseInt(cleaned.slice(i * 2, i * 2 + 2), 16);
+    if (Number.isNaN(value)) return null;
+    bytes[i] = value;
+  }
+  if (bytes.length < 64) return null;
+  return { secret: bytes.slice(0, 32), pubkey: bytes.slice(32, 64) };
+}
+
 export function createIdentity() {
   const { secretKey, publicKey } = keygen();
   return { secret: secretKey, pubkey: publicKey };

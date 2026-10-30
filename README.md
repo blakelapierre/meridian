@@ -33,7 +33,7 @@ npm start                     # dev server on :8080, signaling on :8787
 - [Engine basis](docs/engine.md) — the nbody-raycaster commit that is the renderer and the physics.
 - [Engineering locks](docs/engineering.md) — where code goes, and how tests run.
 - [Integer crust](docs/crust.md) — the dig brush and the chunk hash.
-- [Keymap](docs/keymap.md)
+- [Keepers](docs/keepers.md) — the headless archive, and what its operator earns.
 - [Atoll](content/atoll.json) — the island, in centimeters.
 
 On conflict: the concept wins on fantasy, the game spec wins on rules, the crust doc wins on voxels, the engine doc wins on the renderer and the integrator, the engineering doc wins on layout and tests, the WebRTC spec wins on bytes.

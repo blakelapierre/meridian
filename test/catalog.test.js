@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { bytesHash } from "../src/net/hello.js";
 import { WEAPONS } from "../src/sim/damage.js";
 import {
   acceptHello,
@@ -27,6 +28,7 @@ test("a changed atoll file changes the catalog hash", () => {
   const atoll = readFileSync(new URL("../content/atoll.json", import.meta.url));
   const catalog = readFileSync(new URL("../content/catalog.json", import.meta.url));
   assert.equal(catalogHash([atoll, catalog]), loaded.hash);
+  assert.equal(bytesHash([atoll, catalog]), loaded.hash);
   const tweaked = Buffer.from(atoll.toString("utf8").replace("atoll-slice-1", "atoll-slice-2"));
   assert.equal(acceptHello(loaded.hash, catalogHash([tweaked, catalog])), false);
 });

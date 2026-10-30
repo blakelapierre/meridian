@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Meridian check</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; color: #eee; }
+      body { display: flex; gap: 8px; padding: 8px; box-sizing: border-box; height: 100vh; }
+      main, section { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 2px solid #9cf; background: #111; }
+      main { height: 100%; width: min(72vw, calc((100vh - 16px) * 16 / 9)); border-color: #9f9; }
+      aside { flex: 1; min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; gap: 8px; }
+      section { flex: 1 1 0; }
+      section.second { border-color: #fc8; }
+      section.follow { border-color: #c9f; flex: 1 1 0; }
+      section.ais { flex: 1 1 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; border: 0; background: transparent; min-height: 0; }
+      section.ais[hidden], section.second[hidden] { display: none; }
+      section.ais iframe { width: 100%; height: 100%; min-width: 0; min-height: 0; border: 2px solid #fc8; display: block; }
+      header { flex: 0 0 auto; padding: 4px 8px; font: 12px/1.2 sans-serif; letter-spacing: 0.04em; background: #0c0c0c; }
+      main header { color: #9f9; }
+      section.second header { color: #fc8; }
+      section.follow header { color: #c9f; }
+      iframe { flex: 1; width: 100%; min-height: 0; border: 0; background: #000; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>Primary</header>
+      <iframe id="primary" title="Primary"></iframe>
+    </main>
+    <aside>
+      <section class="second" id="second-wrap">
+        <header>Second</header>
+        <iframe id="second" title="Second"></iframe>
+      </section>
+      <section class="ais" id="ais" hidden></section>
+      <section class="follow">
+        <header>Follow</header>
+        <iframe id="follow" title="Follow"></iframe>
+      </section>
+    </aside>
+    <script type="module">
+      import { bootOrder } from "/tools/launch.js";
+      const params = new URLSearchParams(location.search);
+      const quiet = (src) => {
+        const url = new URL(src, location.origin);
+        url.searchParams.set("quiet", "1");
+        return url.pathname + url.search;
+      };
+      const ais = params.getAll("ai");
+      const frames = new Map();
+      if (ais.length) {
+        document.querySelector("#second-wrap").hidden = true;
+        const host = document.querySelector("#ais");
+        host.hidden = false;
+        for (const src of ais) {
+          const url = new URL(src, location.origin);
+          const frame = document.createElement("iframe");
+          frame.title = url.searchParams.get("ai") || "ai";
+          host.append(frame);
+          frames.set(src, frame);
+        }
+      }
+      for (const id of ["primary", "second", "follow"]) {
+        frames.set(id, document.querySelector("#" + id));
+      }
+      function whenReady(frame) {
+        const started = performance.now();
+        return new Promise((resolve) => {
+          const check = () => {
+            let ready = false;
+            try {
+              ready = frame.contentDocument?.querySelector("canvas")?.dataset.ready === "1";
+            } catch (error) {
+              ready = false;
+            }
+            if (ready || performance.now() - started > 8000) resolve();
+            else setTimeout(check, 40);
+          };
+          frame.addEventListener("load", () => check(), { once: true });
+        });
+      }
+      const order = bootOrder({
+        primary: params.get("primary") || "",
+        follow: params.get("follow") || "",
+        second: ais.length ? "" : (params.get("second") || ""),
+        ais,
+      });
+      for (const step of order) {
+        const frame = step.slot === "ai" ? frames.get(step.src) : frames.get(step.slot);
+        if (!frame || !step.src) continue;
+        const src = step.slot === "primary" || step.slot === "ai" ? step.src : quiet(step.src);
+        const ready = whenReady(frame);
+        frame.src = src;
+        await ready;
+      }
+    </script>
+  </body>
+</html>

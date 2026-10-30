@@ -1,6 +1,6 @@
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000 }) {
+export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, role = "player", catalog = "" }) {
   const socket = new WebSocket(url);
   const listeners = new Set();
   const ready = new Promise((resolve, reject) => {
@@ -18,7 +18,7 @@ export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000 }) {
   });
   function announce() {
     if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "announce", pubkey: me, cell }));
+      socket.send(JSON.stringify({ type: "announce", pubkey: me, cell, role, catalog }));
     }
   }
   async function start() {
@@ -37,12 +37,24 @@ export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000 }) {
   }
   function list() {
     return new Promise((resolve) => {
+      let settled = false;
+      const finish = (peers) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        stop();
+        resolve(peers);
+      };
       const stop = onMessage((message) => {
         if (message.type !== "present") return;
-        stop();
-        resolve(message.peers);
+        finish(message.peers || []);
       });
-      socket.send(JSON.stringify({ type: "list", cell }));
+      const timer = setTimeout(() => finish([]), 2000);
+      try {
+        socket.send(JSON.stringify({ type: "list", cell }));
+      } catch {
+        finish([]);
+      }
     });
   }
   return { start, send, onMessage, list, close: () => socket.close() };
@@ -66,7 +78,7 @@ export async function connectPeer({ pc, room, me, to, offer, isOpen, status }) {
   };
   pc.oniceconnectionstatechange = () => note(`ice ${pc.iceConnectionState}`);
   room.onMessage(async (message) => {
-    if (message.type !== "signal" || message.from === me) return;
+    if (message.type !== "signal" || message.from !== to) return;
     let payload;
     try {
       payload = JSON.parse(message.blob);
