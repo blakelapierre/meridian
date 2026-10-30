@@ -131,6 +131,18 @@ vec3 duneNormal(vec2 p) {
   return normalize(vec3(h - hx, h - hy, e));
 }
 
+float islandExit(vec3 ro, vec3 rd) {
+  vec2 o = ro.xy;
+  vec2 d = rd.xy;
+  float a = dot(d, d);
+  if (a < 1.0e-8) return 8000.0;
+  float b = dot(o, d);
+  float c = dot(o, o) - 65536.0;
+  float disc = b * b - a * c;
+  if (disc < 0.0) return 0.0;
+  return (-b + sqrt(disc)) / a;
+}
+
 bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
   if (dot(ro.xy, ro.xy) <= 65536.0 && ro.z < duneHeight(ro.xy) + 0.02) {
     t = 0.02;
@@ -138,18 +150,27 @@ bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
     p.z = duneHeight(p.xy);
     return true;
   }
-  float prevT = 0.02;
-  vec3 prevP = ro + rd * prevT;
-  float prevDist = prevP.z - duneHeight(prevP.xy);
-  t = 0.28;
+  float tFar = islandExit(ro, rd);
+  float tNear = 0.02;
+  if (rd.z < -1.0e-4) {
+    if (ro.z > 5.6) tNear = max(tNear, (5.6 - ro.z) / rd.z);
+    float tGround = max(-ro.z / rd.z, tNear + 8.0);
+    tFar = min(tFar, tGround);
+  }
+  tFar = clamp(tFar, tNear, 8000.0);
+  float prevT = tNear;
+  vec3 prevQ = ro + rd * prevT;
+  float prevDist = prevQ.z - duneHeight(prevQ.xy);
   bool hit = false;
   float lo = prevT;
-  float hi = t;
-  for (int i = 0; i < 40; i++) {
+  float hi = prevT;
+  float advance = max((tFar - prevT) / 80.0, 0.2);
+  t = prevT;
+  for (int i = 0; i < 80; i++) {
+    t += advance;
     vec3 q = ro + rd * t;
     float dist = q.z - duneHeight(q.xy);
-    bool beach = dot(q.xy, q.xy) <= 65536.0;
-    bool cross = !hit && beach && t < 140.0 && prevDist > 0.0 && dist <= 0.02;
+    bool cross = !hit && prevDist > 0.0 && dist <= 0.02;
     if (cross) {
       hit = true;
       lo = prevT;
@@ -157,20 +178,19 @@ bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
     }
     prevDist = dist;
     prevT = t;
-    t += (!hit && beach && t < 140.0) ? clamp(max(dist, 0.0) * 0.55, 0.28, 2.0) : 0.0;
   }
   if (!hit) {
     p = ro;
     return false;
   }
-  for (int k = 0; k < 8; k++) {
+  for (int k = 0; k < 10; k++) {
     float mid = 0.5 * (lo + hi);
     vec3 m = ro + rd * mid;
     if (m.z - duneHeight(m.xy) > 0.0) lo = mid;
     else hi = mid;
   }
   t = hi;
-  p = ro + rd * t;
+  p = ro + rd * hi;
   p.z = duneHeight(p.xy);
   return dot(p.xy, p.xy) <= 65536.0;
 }
