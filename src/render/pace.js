@@ -34,17 +34,23 @@ export function cameraSpeed(previous, next, dt) {
   return travel + turn * 4;
 }
 
-export function motionLimit(speed, refreshMs) {
-  const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
-  const pace = Math.min(1, Math.max(0, speed / 4.4)) ** 2;
-  return (1000 / 12) * (1 - pace) + refresh * pace;
+export function cameraAccel(previous, next, dt) {
+  if (!(dt > 0)) return 0;
+  return Math.abs((next || 0) - (previous || 0)) / dt;
 }
 
-export function visualThroughput(pixels, frameMs, refreshMs, speed = 1) {
+export function motionLimit(speed, refreshMs, accel = 0) {
+  const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
+  const surge = Math.min(1, Math.max(0, accel) / 8) ** 2;
+  return (1000 / 12) * (1 - surge) + refresh * surge;
+}
+
+export function visualThroughput(pixels, frameMs, refreshMs, speed = 1, accel = 0) {
   if (!(pixels > 0) || !(frameMs > 0)) return 0;
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
   const fps = Math.min(1000 / frameMs, 1000 / refresh);
-  return pixels * fps * Math.max(speed, 0) ** 2;
+  const surge = 1 + Math.min(1, Math.max(accel, 0) / 8);
+  return pixels * fps * Math.max(speed, 0) ** 2 * surge;
 }
 
 export function createPicturePace() {
@@ -56,11 +62,12 @@ export function createPicturePace() {
   let direction = 1;
   let lastScore = 0;
   let wasStill = false;
+  let surged = false;
   return {
     get scale() {
       return scale;
     },
-    step({ gap = 0, displayW = 960, displayH = 540, still = false, speed = 0 } = {}) {
+    step({ gap = 0, displayW = 960, displayH = 540, still = false, speed = 0, accel = 0 } = {}) {
       if (gap >= 8 && gap <= 50) {
         period = periodSamples ? period * 0.85 + gap * 0.15 : gap;
         periodSamples += 1;
@@ -72,6 +79,18 @@ export function createPicturePace() {
         return { scale, refresh, info, width: size.width, height: size.height };
       };
       if (!(gap > 0)) return pack(0);
+      const surge = Math.min(1, Math.max(0, accel) / 8);
+      if (!still && surge >= 1 && !surged && gap > refresh) {
+        scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(refresh / gap)));
+        bucket = [];
+        skip = true;
+        direction = 0;
+        lastScore = 0;
+        surged = true;
+        wasStill = false;
+        return pack(0);
+      }
+      if (surge < 1) surged = false;
       if (wasStill && !still && gap > refresh) {
         scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(refresh / gap)));
         bucket = [];
@@ -87,15 +106,16 @@ export function createPicturePace() {
         return pack(0);
       }
       bucket.push(gap);
-      if (bucket.length < 4) return pack(visualThroughput(sized().width * sized().height, gap, refresh, still ? 1 : speed));
+      const moving = still ? 1 : Math.max(speed, 0.05);
+      if (bucket.length < 4) return pack(visualThroughput(sized().width * sized().height, gap, refresh, moving, accel));
       const ordered = [...bucket].sort((a, b) => a - b);
       const ms = ordered[ordered.length >> 1];
       bucket = [];
       const size = sized();
-      const score = visualThroughput(size.width * size.height, ms, refresh, still ? 1 : Math.max(speed, 0.05));
-      const limit = still ? Infinity : motionLimit(speed, refresh);
-      const ease = Math.min(1, Math.max(0, speed / 4.4)) ** 2;
-      const growBy = 1.04 + (1 - ease) * 0.14;
+      const score = visualThroughput(size.width * size.height, ms, refresh, moving, 0);
+      const shown = visualThroughput(size.width * size.height, ms, refresh, moving, accel);
+      const limit = still ? Infinity : motionLimit(speed, refresh, accel);
+      const growBy = still ? 1.18 : 1.04 + (1 - surge) * 0.04;
       if (!still && ms > limit) {
         scale = Math.max(0.08, Math.min(1, scale * Math.sqrt(limit / ms)));
         direction = 0;
@@ -110,7 +130,7 @@ export function createPicturePace() {
       }
       skip = true;
       const next = pictureSize(scale, displayW, displayH);
-      return { scale, refresh, info: score, width: next.width, height: next.height };
+      return { scale, refresh, info: shown, width: next.width, height: next.height };
     },
   };
 }
