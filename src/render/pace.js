@@ -27,43 +27,99 @@ export function coverLevel(targetW, targetH, rays) {
   return 8;
 }
 
+export function visualThroughput(pixels, frameMs, refreshMs) {
+  if (!(pixels > 0) || !(frameMs > 0)) return 0;
+  const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
+  const shown = Math.min(1000 / frameMs, 1000 / refresh);
+  const motion = shown < 8 ? shown * (shown / 8) : shown;
+  return pixels * motion * motion;
+}
+
 export function createPicturePace() {
   let octave = 2;
-  let wait = 0;
   let period = 1000 / 60;
-  let samples = 0;
+  let periodSamples = 0;
+  let bucket = [];
+  let dwell = 0;
+  let history = [];
+  let hold = 0;
+  const dwellFrames = 5;
+  function predict(pixels) {
+    if (!history.length) return null;
+    const distinct = new Set(history.map((sample) => sample.pixels)).size;
+    const last = history[history.length - 1];
+    if (distinct < 2) return last.ms * (pixels / last.pixels);
+    let count = 0;
+    let sx = 0;
+    let sy = 0;
+    let sxx = 0;
+    let sxy = 0;
+    for (const sample of history) {
+      count += 1;
+      sx += sample.pixels;
+      sy += sample.ms;
+      sxx += sample.pixels * sample.pixels;
+      sxy += sample.pixels * sample.ms;
+    }
+    const den = count * sxx - sx * sx;
+    if (Math.abs(den) < 1) return last.ms * (pixels / last.pixels);
+    const slope = Math.max(0, (count * sxy - sx * sy) / den);
+    const overhead = Math.max(0, (sy - slope * sx) / count);
+    return Math.max(1, overhead + slope * pixels);
+  }
   return {
     get octave() {
       return octave;
     },
     step({ gap = 0, displayW = 960, displayH = 540 } = {}) {
-      if (!(gap > 0)) return { octave, detail: 0, refresh: period };
-      if (gap >= 8 && gap <= 42) {
-        period = samples ? period * 0.85 + gap * 0.15 : gap;
-        samples += 1;
+      const size = sizeAt(octave, displayW, displayH);
+      const pixels = Math.max(1, size.width * size.height);
+      if (gap >= 8 && gap <= 50) {
+        period = periodSamples ? period * 0.85 + gap * 0.15 : gap;
+        periodSamples += 1;
       }
-      const budget = samples < 6 ? Math.max(period, 1000 / 30) : period;
-      const relaxed = 1000 / 12;
-      const picture = sizeAt(octave, displayW, displayH);
-      const tiny = Math.max(picture.width, picture.height) < 220;
-      if (gap > relaxed) {
-        octave = Math.min(8, octave + (gap > relaxed * 2 ? 2 : 1));
-        wait = 0;
-        return { octave, detail: 0, refresh: budget };
+      const refresh = periodSamples < 4 ? Math.max(period, 1000 / 30) : period;
+      if (!(gap > 0)) return { octave, detail: 0, refresh, info: 0 };
+      if (dwell === 0) {
+        dwell = 1;
+        return { octave, detail: 0, refresh, info: 0 };
       }
-      if (!tiny && gap > budget * 1.35) {
-        octave = Math.min(8, octave + 1);
-        wait = 0;
-        return { octave, detail: 0, refresh: budget };
+      bucket.push(gap);
+      dwell += 1;
+      if (dwell <= dwellFrames) {
+        return { octave, detail: 0, refresh, info: visualThroughput(pixels, gap, refresh) };
       }
-      wait += 1;
-      const due = tiny && Math.max(picture.width, picture.height) < 80 ? 4 : 8;
-      const room = gap <= budget * 1.15 || (tiny && gap < relaxed * 0.9);
-      if (wait >= due && octave > 0 && room) {
-        octave -= 1;
-        wait = 0;
+      const ordered = [...bucket].sort((a, b) => a - b);
+      const ms = ordered[ordered.length >> 1];
+      bucket = [];
+      dwell = 0;
+      history.push({ pixels, ms });
+      if (history.length > 8) history.shift();
+      const info = visualThroughput(pixels, ms, refresh);
+      if (hold > 0) {
+        hold -= 1;
+        return { octave, detail: 0, refresh, info };
       }
-      return { octave, detail: 0, refresh: budget };
+      const distinct = new Set(history.map((sample) => sample.pixels)).size;
+      let best = octave;
+      let bestInfo = -1;
+      if (distinct < 2) best = octave > 0 ? octave - 1 : Math.min(8, octave + 1);
+      else {
+        for (let step = -1; step <= 1; step += 1) {
+          const candidate = octave + step;
+          if (candidate < 0 || candidate > 8) continue;
+          const box = sizeAt(candidate, displayW, displayH);
+          const guess = predict(box.width * box.height);
+          const score = visualThroughput(box.width * box.height, guess, refresh);
+          if (score > bestInfo) {
+            bestInfo = score;
+            best = candidate;
+          }
+        }
+      }
+      if (best === octave) hold = 4;
+      octave = best;
+      return { octave, detail: 0, refresh, info };
     },
   };
 }

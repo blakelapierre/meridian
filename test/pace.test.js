@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coverLevel, createPacer, createPicturePace, easePixels, fitPixels, nativePixels, nextScale, noteRayRate, paceWord, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill } from "../src/render/pace.js";
+import { coverLevel, createPacer, createPicturePace, easePixels, fitPixels, nativePixels, nextScale, noteRayRate, paceWord, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill, visualThroughput } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -65,36 +65,31 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
 });
 
-test("a steady 30Hz frame is vsync and the picture climbs", () => {
-  const picture = createPicturePace();
-  let held = null;
-  for (let i = 0; i < 40; i += 1) held = picture.step({ gap: 33.3 });
-  assert.ok(held.octave < 2);
-  assert.ok(held.refresh > 28 && held.refresh < 40);
+test("visual throughput prefers a real picture at 12fps over a speck at 30", () => {
+  const speck = visualThroughput(6 * 4, 33, 33);
+  const picture = visualThroughput(160 * 90, 80, 33);
+  const slideshow = visualThroughput(960 * 540, 250, 33);
+  assert.ok(picture > speck * 10);
+  assert.ok(picture > slideshow);
 });
 
-test("a tiny picture spends down toward 12fps instead of staying microscopic", () => {
-  const picture = createPicturePace();
+test("the picture moves toward the size with the highest throughput", () => {
   const box = { displayW: 1280, displayH: 720 };
-  for (let i = 0; i < 12; i += 1) picture.step({ gap: 200, ...box });
-  const stuck = picture.step({ gap: 50, ...box });
-  const size = sizeAt(stuck.octave, box.displayW, box.displayH);
-  assert.ok(Math.max(size.width, size.height) < 220);
-  let later = stuck;
-  for (let i = 0; i < 24; i += 1) later = picture.step({ gap: 50, ...box });
-  assert.ok(later.octave < stuck.octave);
-});
-
-test("resolution climbs back to the window after a late frame", () => {
+  const cost = (level) => {
+    const size = sizeAt(level, box.displayW, box.displayH);
+    return 18 + size.width * size.height * 0.01;
+  };
   const picture = createPicturePace();
-  const missed = picture.step({ gap: 200, refresh: 16 });
-  assert.equal(missed.detail, 0);
-  assert.ok(missed.octave > 2);
-  let held = null;
-  for (let i = 0; i < 24; i += 1) held = picture.step({ gap: 16, refresh: 16 });
-  assert.ok(held.octave < missed.octave);
-  for (let i = 0; i < 80; i += 1) held = picture.step({ gap: 16, refresh: 16 });
-  assert.equal(held.octave, 0);
+  let last = null;
+  for (let i = 0; i < 80; i += 1) {
+    const gap = last ? cost(last.octave) : cost(2);
+    last = picture.step({ gap, ...box });
+  }
+  const size = sizeAt(last.octave, box.displayW, box.displayH);
+  const fps = 1000 / cost(last.octave);
+  assert.ok(size.width * size.height > 24);
+  assert.ok(fps > 10);
+  assert.ok(fps < 40);
 });
 
 test("resolution climbs one octave toward the window and steps back when a frame misses", () => {
