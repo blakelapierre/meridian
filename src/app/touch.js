@@ -58,9 +58,10 @@ export function mountTouch({ keys, look, fire }) {
   const press = (code, type) => dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
   const root = document.createElement("div");
   root.id = "touch";
-  root.innerHTML = `<div id="stick"><div id="nub"></div></div><div id="lookpad"></div><div id="tbuttons"></div><button id="tfire">Fire</button>`;
+  root.innerHTML = `<div id="stickzone"></div><div id="stick"><div id="nub"></div></div><div id="lookpad"></div><div id="tbuttons"></div><button id="tfire">Fire</button>`;
   document.body.append(root);
   const stick = root.querySelector("#stick");
+  const zone = root.querySelector("#stickzone");
   const nub = root.querySelector("#nub");
   const pad = root.querySelector("#lookpad");
   const fireButton = root.querySelector("#tfire");
@@ -91,32 +92,49 @@ export function mountTouch({ keys, look, fire }) {
   let origin = [0, 0];
   const setStick = (dx, dy) => {
     const r = Math.hypot(dx, dy);
-    const k = r > 60 ? 60 / r : 1;
+    const k = r > 44 ? 44 / r : 1;
     nub.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
-    const held = stickKeys(dx, dy);
+    const held = stickKeys(dx, dy, 44);
     for (const code of STICK_CODES) {
       if (held.has(code)) keys.add(code);
       else keys.delete(code);
     }
   };
-  stick.addEventListener("pointerdown", (event) => {
+  // The stick floats: it centres where the thumb lands on the left side, and goes back when let go.
+  const grab = (target, float) => (event) => {
     event.preventDefault();
+    if (stickId !== null) return;
     stickId = event.pointerId;
-    stick.setPointerCapture?.(event.pointerId);
+    target.setPointerCapture?.(event.pointerId);
+    if (float) {
+      const half = stick.offsetWidth / 2 || 50;
+      stick.style.left = `${event.clientX - half}px`;
+      stick.style.top = `${event.clientY - half}px`;
+      stick.style.bottom = "auto";
+      stick.classList.add("live");
+    }
     const box = stick.getBoundingClientRect();
     origin = [box.left + box.width / 2, box.top + box.height / 2];
     setStick(event.clientX - origin[0], event.clientY - origin[1]);
-  });
-  stick.addEventListener("pointermove", (event) => {
+  };
+  const moveStick = (event) => {
     if (event.pointerId === stickId) setStick(event.clientX - origin[0], event.clientY - origin[1]);
-  });
+  };
   const endStick = (event) => {
     if (event.pointerId !== stickId) return;
     stickId = null;
     setStick(0, 0);
+    stick.style.left = "";
+    stick.style.top = "";
+    stick.style.bottom = "";
+    stick.classList.remove("live");
   };
-  stick.addEventListener("pointerup", endStick);
-  stick.addEventListener("pointercancel", endStick);
+  for (const [target, float] of [[stick, false], [zone, true]]) {
+    target.addEventListener("pointerdown", grab(target, float));
+    target.addEventListener("pointermove", moveStick);
+    target.addEventListener("pointerup", endStick);
+    target.addEventListener("pointercancel", endStick);
+  }
   const drags = new Map();
   pad.addEventListener("pointerdown", (event) => {
     event.preventDefault();
