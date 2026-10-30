@@ -4,7 +4,7 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=67";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=68";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=77";
 import {
@@ -1760,6 +1760,7 @@ if (params.get("still") !== "1") {
   let issued = false;
   let blend = 1;
   let lastTrace = 0;
+  let lastTraceKey = "";
   let last = performance.now();
   let bank = 0;
   const frame = (now) => {
@@ -2282,7 +2283,10 @@ if (params.get("still") !== "1") {
       pacer.note(paintMs, active, still);
       lastTrace = now;
       issued = true;
-      blend = 0;
+      const key = `${trace.width}x${trace.height}`;
+      if (key !== lastTraceKey) blend = 0;
+      else blend = 1;
+      lastTraceKey = key;
     }
     const fade = Math.min(0.12, Math.max(0.03, interval / 1000));
     blend = Math.min(1, blend + dt / fade);

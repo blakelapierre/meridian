@@ -617,16 +617,25 @@ void main() {
   let prior = -1;
   const fitHold = (slot, tw, th) => {
     if (slot.w === tw && slot.h === th) return true;
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, slot.tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tw, th, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, slot.fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, slot.tex, 0);
     const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     if (!ok) return false;
     slot.w = tw;
     slot.h = th;
     return true;
+  };
+  const releaseHold = () => {
+    gl.activeTexture(gl.TEXTURE9);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE10);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
   };
   const blitVs = compile(gl, gl.VERTEX_SHADER, `#version 300 es
 in vec2 aPos;
@@ -823,7 +832,9 @@ void main() {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         return draw(scene, "full", 0);
       }
+      releaseHold();
       gl.bindFramebuffer(gl.FRAMEBUFFER, slot.fbo);
+      gl.viewport(0, 0, tw, th);
       viewSize = { w: tw, h: th };
       const traced = draw(scene, "full", 0);
       viewSize = null;
@@ -852,6 +863,7 @@ void main() {
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      releaseHold();
       return true;
     },
     paintRandom(scene, count) {
