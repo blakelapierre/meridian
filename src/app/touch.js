@@ -44,7 +44,12 @@ export function wantsTouch(win = globalThis) {
   const params = new URLSearchParams(win.location?.search || "");
   if (params.get("touch") === "0") return false;
   if (params.get("touch") === "1") return true;
-  return Boolean(win.matchMedia?.("(pointer: coarse)").matches);
+  const media = (query) => Boolean(win.matchMedia?.(query).matches);
+  if (media("(pointer: coarse)")) return true;
+  // Some Android builds report a fine primary pointer. Any touch surface with
+  // no fine pointer at all is still a phone or tablet.
+  const touchy = (win.navigator?.maxTouchPoints || 0) > 0 || "ontouchstart" in win;
+  return touchy && !media("(any-pointer: fine)");
 }
 
 export function mountTouch({ keys, look, fire }) {
