@@ -16,6 +16,9 @@ test("topography is a subskill and it refines the contours", () => {
   grantUse(skills, "mapping", { tick: 1 });
   assert.ok(grantUse(skills, "topography", { tick: 1 }) > 0);
   assert.ok(skills.topography.value <= skills.mapping.value);
+  assert.equal(skills.prospect.parent, "mining");
+  assert.equal(skills.trailing.parent, "tracking");
+  assert.equal(grantUse(skills, "wind", { tick: 2 }), 0);
   const lines = contourLines({
     x: 3,
     y: 0,
@@ -105,6 +108,11 @@ test("the chart keeps ground, pits, and places as skills rise", () => {
   assert.equal([...fresh.ground.values()][0].kind, "sand");
   noteSurvey(fresh, { x: 1, y: 2, yaw: 0, depthAt: () => -0.5, skills: { mapping: 10, mining: 12 } });
   assert.equal([...fresh.ground.values()].some((cell) => cell.kind === "pit"), true);
+  const blind = createSurvey();
+  noteSurvey(blind, { x: 1, y: 2, yaw: 0, depthAt: () => -0.5, skills: { mapping: 10, mining: 40, prospect: 0 } });
+  assert.equal([...blind.ground.values()].some((cell) => cell.kind === "pit"), false);
+  noteSurvey(blind, { x: 1, y: 2, yaw: 0, depthAt: () => -0.5, skills: { mapping: 10, mining: 40, prospect: 8 } });
+  assert.equal([...blind.ground.values()].some((cell) => cell.kind === "pit"), true);
   assert.equal(fresh.places.has("pit:0:1") || fresh.places.has("pit:0:0"), true);
   const sight = createSurvey();
   noteSurvey(sight, { x: 0, y: 0, yaw: 0, depthAt: () => 0, skills: { mapping: 10, eyesight: 140 } });

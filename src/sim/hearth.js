@@ -102,9 +102,10 @@ export function finOutput(tick) {
   return finFluxPerMin([0, 0, 1], sunDirection(tick));
 }
 
-export function fallHurt(integrity, speedDown) {
+export function fallHurt(integrity, speedDown, landing = 0) {
   if (speedDown > -9) return integrity;
-  return Math.max(0, integrity - 8);
+  const soak = Math.min(6, Math.floor(Math.max(0, landing) / 24));
+  return Math.max(0, integrity - (8 - soak));
 }
 
 export function bleed(vitals, seconds = 1 / 30) {

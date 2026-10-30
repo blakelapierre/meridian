@@ -49,7 +49,7 @@ export function stepHands(world, player, stamina, input, jump = null, jumpSkill 
   const running = !airborne && !!input.sprint && !input.crouch && speed > 5;
   if (!jump) {
     const leaving = !airborne && input.jump && stamina.value >= 12;
-    stepStamina(stamina, { sprint: !airborne && input.sprint, jump: leaving });
+    stepStamina(stamina, { sprint: !airborne && input.sprint, jump: leaving, wind: input.wind || 0 });
     stepPlayer(world, player, accel, leaving);
     return { jump: leaving, speed, running };
   }

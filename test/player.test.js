@@ -55,6 +55,9 @@ test("stamina drains while sprinting and will not sprint again until 20", () => 
   assert.equal(wishSpeed(pool, { sprint: true }), 6.6);
   assert.ok(runSpeed(140) > 6.6);
   assert.equal(wishSpeed(createStamina(), { sprint: true, run: 140 }), runSpeed(140));
+  const rested = createStamina();
+  for (let step = 0; step < 30; step++) stepStamina(rested, { sprint: true, wind: 140 });
+  assert.ok(rested.value > 86, rested.value);
   const jumped = createStamina();
   stepStamina(jumped, { jump: true });
   assert.equal(jumped.value, 88);

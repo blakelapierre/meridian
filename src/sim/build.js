@@ -63,6 +63,10 @@ export function placeTicks(skill = 0) {
   return Math.max(1, Math.round(12 * 30 * (1 - 0.4 * trained / 140)));
 }
 
+export function braceBonus(bracing = 0) {
+  return Math.round(Math.max(0, Math.min(140, bracing)) / 140 * 24);
+}
+
 export function pieceIntegrity(skill = 0) {
   const trained = Math.max(0, Math.min(140, skill));
   return Math.round(80 + (trained / 140) * 40);

@@ -35,7 +35,7 @@ export function stepLift(world, player, stamina, input, jump, skill, acceleratio
   } else if (!input.jump) {
     jump.lift = false;
   }
-  stepStamina(stamina, { sprint, jump: launched });
+  stepStamina(stamina, { sprint, jump: launched, wind: input.wind || 0 });
   stepPlayer(world, player, acceleration, false, impulse);
   if (jump.lift && player.position[2] - ground > cap) {
     player.position[2] = ground + cap;

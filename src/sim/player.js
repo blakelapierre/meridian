@@ -39,13 +39,14 @@ export function createStamina() {
   return { value: 100, debt: 0, credit: 0, wait: 0, locked: false };
 }
 
-export function stepStamina(pool, { sprint = false, jump = false } = {}) {
+export function stepStamina(pool, { sprint = false, jump = false, wind = 0 } = {}) {
   if (jump) pool.value = Math.max(0, pool.value - 12);
   if (sprint) {
     pool.wait = 0;
     pool.credit = 0;
     if (pool.value > 0 && !pool.locked) {
-      pool.debt += 14;
+      const cost = Math.max(6, 14 - Math.floor(Math.max(0, wind) / 18));
+      pool.debt += cost;
       while (pool.debt >= 30 && pool.value > 0) {
         pool.debt -= 30;
         pool.value -= 1;

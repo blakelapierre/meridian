@@ -41,6 +41,11 @@ function skillValue(skills, name) {
   return typeof value === "number" ? value : value?.value || 0;
 }
 
+function practiced(skills, child, parent) {
+  if (skills && skills[child] != null) return skillValue(skills, child);
+  return skillValue(skills, parent);
+}
+
 function writeGround(survey, x, y, depth, skills) {
   const mapping = skillValue(skills, "mapping");
   const budget = groundBudget(mapping);
@@ -48,14 +53,15 @@ function writeGround(survey, x, y, depth, skills) {
   const size = cellSize(mapping);
   const i = Math.round(x / size);
   const j = Math.round(y / size);
-  const pit = skillValue(skills, "mining") >= 8 && depth < -0.05;
+  const prospect = practiced(skills, "prospect", "mining");
+  const pit = prospect >= 4 && depth < -0.05;
   survey.ground.set(`${size}:${i}:${j}`, {
     point: [i * size, j * size],
     depth: pit ? depth : 0,
     kind: pit ? "pit" : "sand",
   });
   while (survey.ground.size > budget) survey.ground.delete(survey.ground.keys().next().value);
-  if (pit && skillValue(skills, "mining") >= 12) {
+  if (pit && prospect >= 8) {
     notePlace(survey, {
       id: `pit:${i}:${j}`,
       kind: "pit",

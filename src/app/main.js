@@ -28,7 +28,7 @@ import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor } from "../sim/crust.js";
 import { bitAim } from "../sim/bit.js";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, breakFin, createYard, pieceIntegrity, placeTicks, rollCart, toggleDoor, toggleGate, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, rollCart, toggleDoor, toggleGate, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -525,6 +525,7 @@ function input() {
     crouch: keys.has("ControlLeft") || keys.has("ControlRight"),
     jump: keys.has("Space"),
     run: skills.run.value,
+    wind: skills.wind.value,
   };
 }
 
@@ -540,9 +541,12 @@ function playerPress(code) {
 function turnWheel(direction) {
   const before = zoom.level;
   const wasFirst = zoom.first;
-  zoom = stepZoom(zoom, direction, skills.eyesight.value, optics);
+  zoom = stepZoom(zoom, direction, skills.eyesight.value + skills.focus.value * 0.5, optics);
   cameraDistance = zoom.distance;
-  if ((zoom.first && !wasFirst) || zoom.level > before) grantUse(skills, "eyesight", { tick, gap: 30 });
+  if ((zoom.first && !wasFirst) || zoom.level > before) {
+    grantUse(skills, "eyesight", { tick, gap: 30 });
+    grantUse(skills, "focus", { tick, gap: 45 });
+  }
 }
 
 function useRightClick() {
@@ -623,7 +627,7 @@ function cameraAim(sample = {}) {
       pitch: bodyPitch,
       distance: null,
       third: false,
-      fov: zoomFov(zoom.level, skills.eyesight.value, optics),
+      fov: zoomFov(zoom.level, skills.eyesight.value + skills.focus.value * 0.5, optics),
     };
   }
   return {
@@ -884,9 +888,8 @@ function drawChart() {
     ground: [...survey.ground.values()],
     places: [...survey.places.values()],
   });
-  const tracking = skills.tracking.value;
   for (const point of selfPath) plotted.marks.push({ kind: "path", id: "self", point });
-  if (tracking >= 18) {
+  if (skills.trailing.value >= 4) {
     for (const [id, line] of tracks) {
       for (const point of line) plotted.marks.push({ kind: "track", id, point });
     }
@@ -1002,6 +1005,7 @@ function actOn(sample) {
     }
     terrain.dig(eye, point, { peer: witnessed() });
     grantUse(skills, "mining", { tick, gap: 30 });
+    grantUse(skills, "prospect", { tick, gap: 45 });
     report = "dig";
     return;
   }
@@ -1206,7 +1210,7 @@ function paint(sample) {
   const ranged = inEyes
     ? cast(scene.camera.origin, dir, scene.objects.filter((object) => !object.self), scene.miss)
     : null;
-  const reading = inEyes ? rangeRead(ranged?.object ? ranged.t : null, skills.ranging.value, optics) : null;
+  const reading = inEyes ? rangeRead(ranged?.object ? ranged.t : null, skills.ranging.value + skills.measure.value * 0.5, optics) : null;
   rangeText = reading?.text || "";
   if (reading?.meters != null) grantUse(skills, "ranging", { tick, gap: 45 });
   const color = hit.color || scene.miss;
@@ -1803,6 +1807,7 @@ if (params.get("still") !== "1") {
             if (placed.ok) {
               hear("place");
               grantUse(skills, "building", { tick });
+              grantUse(skills, "bracing", { tick, gap: 20 });
               writeNote(notes, skills, job === "wall" ? "wall" : job);
               const nonce = Math.floor(tick);
               if (job === "wall") {
@@ -1810,7 +1815,7 @@ if (params.get("still") !== "1") {
                 sendOps(encodeWall(identity, {
                   nonce,
                   cell: raising.cell,
-                  integrity: pieceIntegrity(skills.building.value),
+                  integrity: pieceIntegrity(skills.building.value) + braceBonus(skills.bracing.value),
                 }));
                 notePlace(survey, {
                   id: `wall:${raising.cell[0]}:${raising.cell[1]}`,
@@ -1866,6 +1871,7 @@ if (params.get("still") !== "1") {
             }
             hear(brush === "fill" ? "fill" : "dig");
             grantUse(skills, "mining", { tick, gap: 30 });
+            grantUse(skills, "prospect", { tick, gap: 45 });
             writeNote(notes, skills, brush === "fill" ? "fill" : "dig");
           }
         } else if (!raising) {
@@ -1926,13 +1932,21 @@ if (params.get("still") !== "1") {
         }
       }
       coolPain(vitals, 1 / 30);
-      if (moved.jump) grantUse(skills, "jump", { tick });
-      if (moved.running) grantUse(skills, "run", { tick, gap: 30 });
+      if (moved.jump) {
+        grantUse(skills, "jump", { tick });
+        grantUse(skills, "landing", { tick, gap: 20 });
+      }
+      if (moved.running) {
+        grantUse(skills, "run", { tick, gap: 30 });
+        grantUse(skills, "wind", { tick, gap: 45 });
+      }
       const stride = hearStep(stepAt, player.position, !!sample.sprint);
       stepAt = stride.at;
       hear(stride.cue);
       if (stride.cue) {
         grantUse(skills, "tracking", { tick, gap: 40 });
+        const nearOther = otherActors().some((other) => Math.hypot(other.feet[0] - player.position[0], other.feet[1] - player.position[1]) < 8);
+        if (nearOther) grantUse(skills, "trailing", { tick, gap: 50 });
         notePath(selfPath, [player.position[0], player.position[1]], skills.tracking.value);
         if (pathStamp(skills.tracking.value)) {
           stamp(plate, player.position[0], player.position[1], [110, 86, 52, 230], 0.55);
@@ -1948,11 +1962,11 @@ if (params.get("still") !== "1") {
           sendOps(frame);
         }
       }
-      if (skills.tracking.value >= 18) {
+      if (skills.trailing.value >= 4) {
         for (const other of otherActors()) {
           const line = tracks.get(other.id) || [];
           tracks.set(other.id, line);
-          notePath(line, [other.feet[0], other.feet[1]], skills.tracking.value - 16);
+          notePath(line, [other.feet[0], other.feet[1]], skills.trailing.value);
         }
       }
       if (mapMode !== "none") grantUse(skills, "mapping", { tick, gap: 15 });
@@ -1967,7 +1981,7 @@ if (params.get("still") !== "1") {
         player.position[2] = floor;
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
-      if (falling < -9 && player.position[2] <= (world.ground || 0) + 0.2) vitals.integrity = fallHurt(vitals.integrity, falling);
+      if (falling < -9 && player.position[2] <= (world.ground || 0) + 0.2) vitals.integrity = fallHurt(vitals.integrity, falling, skills.landing.value);
       claimSpecialty(skills);
       const bag = skillBag();
       noteSurvey(survey, {
@@ -2022,7 +2036,7 @@ if (params.get("still") !== "1") {
           sendOps(encodeWall(identity, {
             nonce: Math.floor(tick),
             cell: mark.cell,
-            integrity: pieceIntegrity(skills.building.value),
+            integrity: pieceIntegrity(skills.building.value) + braceBonus(skills.bracing.value),
             yaw: turned.yaw,
           }));
           report = turned.yaw ? "turned" : "wall";
