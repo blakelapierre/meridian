@@ -105,4 +105,11 @@ test("the other browser traces the same shot before applying it", () => {
     hitbox: "head",
   });
   assert.equal(acceptShot(liar, scene.objects).reason, "split");
+  const sunTick = encodeShot(createIdentity(), {
+    nonce: 4.87,
+    origin: scene.camera.origin,
+    dir: shot.dir,
+    hitbox: shot.hitbox,
+  });
+  assert.equal(acceptShot(sunTick, scene.objects).nonce, 4);
 });

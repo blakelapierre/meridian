@@ -118,6 +118,54 @@ function dist2(a, b) {
   return dx * dx + dy * dy + dz * dz;
 }
 
+export function columnFloor(crust, x, y) {
+  const i = Math.floor(x * 2);
+  const j = Math.floor(y * 2);
+  let floor = 0;
+  for (const [key, sample] of crust.overrides) {
+    if (sample <= 0) continue;
+    const [di, dj, dk] = key.split(",").map(Number);
+    if (di !== i || dj !== j) continue;
+    const bottom = dk * 0.5;
+    if (bottom < floor) floor = bottom;
+  }
+  return floor;
+}
+
+function sampleStep(sample) {
+  if (sample > 0) return Math.max(0, sample - 500);
+  if (sample < 0) return Math.min(0, sample + 500);
+  return sample;
+}
+
+export function offBeachSlump(beach, here, neighbor) {
+  if (beach) return null;
+  return slumpChoice(here, neighbor);
+}
+
+export function bitMode(beach, brush) {
+  if (beach || brush !== "smooth") return brush;
+  return "slump";
+}
+
+export function applySlump(crust, aim) {
+  if (!crust || !aim) return null;
+  const i = voxelIndex(aim[0]);
+  const j = voxelIndex(aim[1]);
+  const k = voxelIndex(aim[2]);
+  const here = crust.sampleIndex(i, j, k);
+  const neighbor = crust.sampleIndex(i, j + 1, k);
+  const next = offBeachSlump(false, here, neighbor);
+  if (next == null) return null;
+  crust.write(i, j, k, next);
+  return next;
+}
+
+export function slumpChoice(here, neighbor) {
+  if (here - neighbor < 500) return null;
+  return here - 250;
+}
+
 export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 0 }) {
   const grant = 6667 + Math.floor((6667 * skill) / 140);
   crust.budgetCm3 += grant * ticks;
@@ -141,6 +189,7 @@ export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 
           const sample = crust.sampleIndex(i, j, k);
           if (mode === "dig" && sample > 0) continue;
           if (mode === "fill" && sample <= 0) continue;
+          if (mode === "smooth" && (sample === 0 || Math.min(500, Math.abs(sample)) === 0)) continue;
           const d = dist2(center, aim);
           if (d < bestD || (d === bestD && best && (i < best.i || (i === best.i && (j < best.j || (j === best.j && k < best.k)))))) {
             bestD = d;
@@ -150,8 +199,13 @@ export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 
       }
     }
     if (!best) break;
+    const next = mode === "dig"
+      ? DIG_SAMPLE_MM
+      : mode === "fill"
+        ? -DIG_SAMPLE_MM
+        : sampleStep(best.sample);
+    if (next === best.sample) break;
     crust.budgetCm3 -= VOXEL_CM3;
-    const next = mode === "dig" ? DIG_SAMPLE_MM : -DIG_SAMPLE_MM;
     crust.write(best.i, best.j, best.k, next);
     writes.push({ i: best.i, j: best.j, k: best.k, sdf_mm: next });
   }

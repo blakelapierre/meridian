@@ -57,6 +57,11 @@ test("an older position packet does not overwrite a newer one", () => {
   assert.equal(latest.x, 1.5);
   assert.equal(latest.y, -12.5);
   assert.deepEqual(decodePosition(first), { tick: 2, x: 1.5, y: -12.5, z: 0 });
+  const look = encodePosition({ tick: 3, x: 1, y: 2, z: 3, yaw: 1.25, pitch: -0.5 });
+  const posed = decodePosition(look);
+  assert.equal(posed.yaw, 1.25);
+  assert.equal(posed.pitch, -0.5);
+  assert.equal(look.byteLength, 24);
 });
 
 test("a late second tab still receives a position", { skip: !chrome, timeout: 30000 }, async () => {

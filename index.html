@@ -13,39 +13,68 @@
   </head>
   <body>
     <h1>Meridian — what this build shows</h1>
-    <p>One beach, a software raycaster, and three peer checks. <code>npm start</code> only serves these files and introduces browsers. It does not decide a hit, a dig, or a death.</p>
-    <p>Pass means the sentence under each check actually happens. A red error, two different hashes, or a page that stays on “waiting” is a fail.</p>
+    <p>Newest check first. <code>npm start</code> only serves these files and introduces browsers. It does not decide a hit, a dig, or a death. Press <code>q</code> in that server console to stop it. Q in a browser window does nothing.</p>
+    <p>A check opens one window with three labeled frames. The wide green frame is the primary test, and it keeps the instructions. The amber frame is the other client. The violet frame follows 3.5 m behind. Those two hide the instructions and keep the status line. Pits, walls, and shots reach the follow frame on the same channels as any other client.</p>
+    <p id="windows"></p>
+    <p>Pass means the sentence under the check actually happens. A red error, two different results, or a page that stays on “waiting” is a fail.</p>
 
-    <h2>1. Walk</h2>
-    <p>You stand on the south beach, looking north. The ground is the integer crust. The sky is blue because the sun is up. With WebGL2 the picture is sharp. Without it, you get the coarse 160×90 fallback.</p>
-    <p>Click the picture, then look with the mouse. W A S D move. A and D strafe; they do not turn you. Shift sprints. Space jumps and lands. Walk north and the wooden compound gets closer.</p>
-    <p>Press 3 for the bit. Look down and hold the left mouse for about a second. Pass: a darker pit opens in the sand, and the line reads <code>voxel 500</code> plus a hash.</p>
-    <p>Press 1 for the line. <a href="/tools/view/index.html?look=dummy">The pad view</a> is already aimed at the dummy. Click it. Pass: <code>chest 28</code> and <code>dummy 72</code>. Four hits and it reads <code>dummy dead</code>, then it stands back up after 5 seconds.</p>
+    <h2>1. Archive</h2>
+    <p>Open the archive and leave it open. It has no body and no picture. It mines. Then open a walk. The walk line gains <code>archive</code> once the two are linked. Dig. The line says <code>provisional</code> until a block lands, then <code>block 1 official</code>. Close both and open them again. The archive is the same keeper. The hole is still there. The walk is the same person, with the same skills and place.</p>
+    <p>Pass: the archive leaves <code>idle</code> for <code>mining</code>, then the walk and the other two frames show <code>block 1 official</code> and the same hole. The archive's <code>keep</code> rises by 10. A lighter fork does not replace that hole. The page does not mint the crate or pay the bounty. <a href="/docs/keepers.md">The keeper note</a> is the schedule.</p>
+    <p><a href="/tools/archive/">Open the archive</a> · <a href="/tools/view/index.html">Open the walk</a></p>
+
+    <h2>2. Strike at the gate</h2>
+    <p>The wide frame starts just south of the compound. Walk north a step. The line says <code>atoll-skirmish</code>. Press E.</p>
+    <p>Pass: <code>strike south</code>, <code>scrip 800</code>, and <code>metal 30</code>. Press B while the line says <code>buy</code>. Pass: <code>smoke</code> and <code>scrip 500</code>. Metal is still <code>30</code>. The line rifle does not sell. Hold the bit or the hammer and it says <code>frozen</code>. Walk back out and wait 5 seconds. Pass: <code>beach</code>, and the scrip does not become a payout.</p>
+    <p><a href="/tools/view/index.html?gate=1">Open the gate</a></p>
+
+    <h2>3. Reflections</h2>
+    <p>The sand reflection is one smooth bounce, so the view stays live. Look up and to the right: the sun is the bright disc, and it is the light. Lit sand is warm. A wall or the dummy throws a shadow. The sun shows in the sand as one glint, not stripes. If a frame stalls, the picture shrinks instead of freezing.</p>
+    <p>Pass: look down and the sand is grain, not a flat brown, with the sky in it. <a href="/tools/view/index.html?look=dummy">From the pad</a>, the dummy wears red and cream rings and shows the beach and the sky on its curve.</p>
     <p><a href="/tools/view/index.html">Open the walk</a></p>
 
-    <h2>2. Position</h2>
-    <p>Two browsers trade an unreliable position. No island is drawn.</p>
-    <p>Pass: both logs say <code>waiting for the other tab</code> or <code>waiting for the offer</code>, then <code>offered</code> or <code>answered</code>, then <code>snap open</code> and <code>remote x,y,z</code> lines that change. Open either tab first. If a log says <code>lighthouse failed</code>, <code>npm start</code> is not running.</p>
-    <p><a href="/tools/link/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/link/index.html?id=b&to=a">Tab B</a></p>
+    <h2>4. Pace</h2>
+    <p>Open the walk and leave this window focused. The corner reads a frame rate, and the line ends in <code>vsync</code> and a pixel size. The picture follows the screen.</p>
+    <p>Click another window so the walk is still visible but not focused. Pass: the corner falls to about <code>1 fps</code> and the line says <code>1fps</code>. Click the walk again and the corner climbs back with the screen. If a frame stalls, the picture shrinks on its own instead of staying frozen at full size.</p>
+    <p>If a frame takes longer than the screen, the pixel size steps down until the picture keeps up. It steps down further if that is what it takes to stay near 30 fps, and steps back up when the frames are short. The floor is a quarter of the window.</p>
+    <p><a href="/tools/view/index.html">Open the walk</a></p>
 
-    <h2>3. Signed shot</h2>
+    <h2>5. Wall on the ruin</h2>
+    <p>Press 3 until the line says <code>hammer</code>. The amber square is its sight. Walk north to the stone slab. When the ground beside it is in reach, the square goes bright and the cell lights up. Hold the left mouse. Pass: a cyan column rises on that cell and the line counts <code>work</code> for 12 seconds. Then the wooden wall stands and the line says <code>wall</code> and <code>metal 24</code>. Look at the wall and the sight names it. Right-click. Pass: <code>salvage</code>, the wall is gone, and the metal is <code>30</code>.</p>
+    <p>Right-click the wall. Pass: it says <code>salvage</code>, the wall is gone, and the metal is <code>30</code>. The same hold on empty sand says <code>support</code> and the metal does not change. The other tab, if it is connected, shows the same wall and still has <code>metal 30</code>.</p>
+    <p><a href="/tools/view/index.html">Open the walk</a></p>
+
+    <h2>6. Shared shot</h2>
+    <p>Two walk tabs, both opened from the pad. Wait until one says <code>offered</code> and the other <code>answered</code>. Tab A clicks the dummy.</p>
+    <p>Pass: both lines say <code>chest 28</code> and <code>dummy 72</code>. <code>split</code> means the other tab did not see the same hit, and that shot does not count.</p>
+    <p><a href="/tools/view/index.html?look=dummy&id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?look=dummy&id=b&to=a">Tab B</a></p>
+
+    <h2>7. Shared pit</h2>
+    <p>The same walk, in two tabs. Press 3 until the line says <code>bit</code>. Tab A looks down and holds the left mouse. Tab B looks down at the same sand.</p>
+    <p>Pass: both lines show <code>voxel 500</code> and the same hash. The darker pit is in both pictures. Open either tab first.</p>
+    <p><a href="/tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?id=b&to=a">Tab B</a></p>
+
+    <h2>8. Certified dig</h2>
+    <p>Tab A proposes one voxel. Tab B signs the vote. Both apply the same op. You do not aim it.</p>
+    <p>Pass: both pages leave <code>waiting</code>, then log <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. The line <code>voxel before</code> is negative. Open either tab first.</p>
+    <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a></p>
+
+    <h2>9. Signed shot</h2>
     <p>A fixed shot from the accuracy pad into the dummy. You do not aim it.</p>
     <p>Pass: one log says <code>offered</code>, the other <code>answered</code>, then tab A logs <code>verified hit</code> and tab B logs <code>traced hit</code>. Open either tab first.</p>
     <p><a href="/tools/shot/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/shot/index.html?id=b&to=a">Tab B</a></p>
 
-    <h2>4. Certified dig</h2>
-    <p>Tab A proposes one voxel. Tab B signs the vote. Both apply the same op.</p>
-    <p>Pass: both pages leave <code>waiting</code>, then log <code>applied</code>, the same <code>hash</code>, and <code>voxel 500</code>. The line <code>voxel before</code> is negative. Open either tab first.</p>
-    <p><a href="/tools/dig/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/dig/index.html?id=b&to=a">Tab B</a></p>
+    <h2>10. Position</h2>
+    <p>Two browsers trade an unreliable position. No island is drawn.</p>
+    <p>Pass: both logs say <code>waiting for the other tab</code> or <code>waiting for the offer</code>, then <code>offered</code> or <code>answered</code>, then <code>snap open</code> and <code>remote x,y,z</code> lines that change. Open either tab first. <code>lighthouse failed</code> means <code>npm start</code> is not running.</p>
+    <p><a href="/tools/link/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/link/index.html?id=b&to=a">Tab B</a></p>
 
-    <h2>5. Shared pit</h2>
-    <p>The same walk, in two tabs. Tab A looks down and holds the left mouse. Tab B looks down at the same sand.</p>
-    <p>Pass: both lines show <code>voxel 500</code> and the same hash. The darker pit is in both pictures. Open either tab first.</p>
-    <p><a href="/tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?id=b&to=a">Tab B</a></p>
-
-    <h2>6. Shared shot</h2>
-    <p>Two walk tabs, both opened from the pad. Tab A clicks the dummy.</p>
-    <p>Pass: both lines say <code>chest 28</code> and <code>dummy 72</code>. <code>split</code> means the other tab did not see the same hit, and that shot does not count.</p>
-    <p><a href="/tools/view/index.html?look=dummy&id=a&to=b&offer=1">Tab A</a> · <a href="/tools/view/index.html?look=dummy&id=b&to=a">Tab B</a></p>
+    <h2>11. Walk</h2>
+    <p>You stand on the south beach, looking north. The ground is the integer crust. The sky is blue because the sun is up. With WebGL2 the picture is sharp. Without it, you get the coarse 160×90 fallback.</p>
+    <p>Click the picture, then look with the mouse. W A S D move. A and D strafe; they do not turn you. Shift sprints. Space jumps and lands. Walk north and the wooden compound gets closer.</p>
+    <p>Press 3 until the line says <code>bit</code>. Look down and hold the left mouse. Pass: a darker pit opens, and the line reads <code>voxel 500</code>.</p>
+    <p>Press 1 for the line. <a href="/tools/view/index.html?look=dummy">The pad view</a> is already aimed at the dummy. Click it. Pass: <code>chest 28</code> and <code>dummy 72</code>. Four hits and it reads <code>dummy dead</code>, then it stands back up after 5 seconds.</p>
+    <p><a href="/tools/view/index.html">Open the walk</a></p>
+    <script type="module" src="/tools/launch.js"></script>
   </body>
 </html>

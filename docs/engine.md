@@ -1,7 +1,7 @@
 # MERIDIAN
 ## Engine basis
 
-The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `e4c14f70cd6db37e9f36761bd4e0fb73666db62c` (`pen.js`). That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
+The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `37226b0afc58efc0ff93b5c18edd4679835408d4`. That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
 
 This file wins over [engineering.md](engineering.md) on what draws the frame and what integrates motion. It does not win on damage numbers, the keymap, the chunk hash, or packet layout.
 
@@ -32,7 +32,7 @@ The demo only intersects spheres. Meridian's `cast` keeps that loop and adds two
 
 Bodies, the dummy, and projectiles stay spheres. A standing character is drawn as a sphere of radius **0.35 m** until a capsule intersection exists. That sphere is the picture. It is not the merge collider.
 
-One extra ray toward the sun is allowed, using `cast`, and only to darken a hit. It is not a path tracer. Reflections, ReSTIR, and a GPU backend are later implementations of this same `cast` interface. They are not a second renderer beside it.
+The trace is drawn into one of three offscreen buffers. Every refresh copies the latest buffers to the canvas. The score is pixels times the displayed frame rate times speed squared times acceleration squared. The frame target is an inverse square of acceleration: it stays near 12 fps for a light acceleration and approaches the display refresh only as acceleration gets hard. A squared clamp and a cube both kinked. Putting velocity in that curve, either squared or as one over a square, missed the refresh at the start of a flick or blew up when the camera stopped, so speed is only in the score. With no acceleration the spare time down to 12 fps raises the resolution. The frame rate does not go below 12 while the camera is moving. Only a completely still camera may go slower, and that is when the picture climbs to native. A jump is vertical speed. Reported acceleration of 1 or more, including that rise, cuts a still picture to the display refresh on the same frame. A resolution change crossfades. Orbit trails from that pen are not drawn.
 
 ### Physics
 
@@ -73,6 +73,7 @@ The demo `Clock` advances from `Date`. Meridian does not. One sim tick at 30 Hz 
 | Overlap merges the smaller body into the larger, mixes color, keeps momentum | Policy on the body. `merge` is the demo and is legal for debris that should coalesce. Characters, projectiles, and structures are `separate` or `event`. A character is pushed out along the contact normal and loses the inward velocity. A projectile emits a hit event and is removed. Nobody is absorbed into the planet |
 | `size` derived from uniform-density mass, and that radius is `collisionSize` | Drawn radius and collision radius are separate fields. The planet's drawn surface is the crust, not a sphere of radius `cbrt(M)` |
 | `Math.random` sky on a miss | A fixed sky color from the sun elevation |
+| Orbit trails drawn over the preview | Not taken. Bodies do not leave a screen-space trail |
 | Sliders, pause button, `state-view` text | Not part of the game HUD |
 
 Rapier is still not the physics engine. This one is.

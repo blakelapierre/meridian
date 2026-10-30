@@ -35,9 +35,17 @@ export function createStaticServer(root, port = 0) {
     try {
       let target = file;
       const info = await stat(target);
+      if (info.isDirectory() && !url.pathname.endsWith("/")) {
+        response.writeHead(308, { location: `${url.pathname}/${url.search}` });
+        response.end();
+        return;
+      }
       if (info.isDirectory()) target = resolve(target, "index.html");
       const body = await readFile(target);
-      response.writeHead(200, { "content-type": types[extname(target)] || "application/octet-stream" });
+      response.writeHead(200, {
+        "content-type": types[extname(target)] || "application/octet-stream",
+        "cache-control": "no-store",
+      });
       response.end(body);
     } catch {
       response.writeHead(404);
@@ -45,7 +53,7 @@ export function createStaticServer(root, port = 0) {
     }
   });
   return new Promise((resolveReady) => {
-    server.listen(port, "127.0.0.1", () => {
+    server.listen(port, "0.0.0.0", () => {
       const address = server.address();
       resolveReady({
         port: address.port,

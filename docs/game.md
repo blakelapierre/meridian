@@ -350,7 +350,7 @@ Bodies and worn gear have mass. The first-slice kit (bit, mallet, a stone, 30 me
 Crafted items store `quality` 1–100.
 
 - Weapons: damage × `0.85 + 0.30 * (quality / 100)`.
-- Tools: the mining and masonry rates scale the same way.
+- Tools: the mining and building rates scale the same way.
 - Strike-bought weapons are treated as quality **50** and do not roll.
 
 ### 8.3 First recipes
@@ -360,8 +360,8 @@ Crafting is a channel at a station, or at the hands for the trivial ones. It emi
 | Recipe | Station | Inputs | Time | Skill |
 |---|---|---|---|---|
 | Spoil from dig | — | the edit | — | mining |
-| Stone block | hands | 4 spoil | 4 s | masonry |
-| Hearth stone | any footing you placed | 20 metal, 8 stone | 20 s | masonry |
+| Stone block | hands | 4 spoil | 4 s | building |
+| Hearth stone | any footing you placed | 20 metal, 8 stone | 20 s | building |
 | Bandage | hands | 2 fiber | 2 s | surgery |
 | Ration | hands | 1 grain or 1 ration crate | 1 s | — |
 | Line rifle, wilderness | bench | 12 metal, 4 wood, smithing ≥ 20 | 30 s | smithing |
@@ -512,12 +512,14 @@ Success is defined per skill: a certified hit for marksmanship, a certified edit
 | Close combat | Mallet damage × `1 + 0.35 * skill/140` |
 | Breach | Plant, defuse, and charge times × `1 - 0.25 * skill/140` |
 | Fieldcraft | Sprint drain × `1 - 0.30 * skill/140`. Fall damage × the same factor |
+| Run | Sprint speed × `1 + 0.35 * skill/140`. Walking speed is unchanged |
 | Surgery | Bandage and splint times × `1 - 0.40 * skill/140` |
-| Masonry | Structure piece integrity starts at `80 + skill/140*40`. Place work time down by the same fraction as surgery |
+| Building | Structure piece integrity starts at `80 + skill/140*40`. Place work time down by the same fraction as surgery |
 | Mining | Terraform rate, §7 |
 | Smithing | Crafted weapon quality roll ceiling. The roll is `20 + skill * 80/140`, seeded, then clamped to 100 |
 | Fabrication | Personal work rate, §9 |
 | Survey | Vein and mast radius × `1 + skill/140` |
+| Mapping | Sensed-map radius is `16 + skill/140*64` meters. Looking paints a persistent geography image; later findings update it. Nearby players exchange that image by friendliness and by mapping, mining, building, and appraisal. The chart zooms and pans on its own. Unsensed people stay off the map |
 | Command | Table radius, §12. Specialization required to sit as commander |
 | Logistics | Carry mass limits +50% at 140. Link upkeep −25% at 140 |
 | Signals | Aggregate subscribe range. Does not reveal unsensed bodies |
@@ -579,7 +581,7 @@ At a given tick the sun direction is a pure function. Dawn and dusk are the 6 mi
 
 Darkness is the lack of sun and lamps. A body carries no personal magic light. Muzzle flashes and the firepot are the short ones. Vision traces for sensors and for “can this commander see that dot” use the same occlusion as bullets’ line of sight, smoke included.
 
-The player HUD does not include a radar of unsensed people. A compass is allowed. A map shows SDF you have walked within 50 m, plus your deed, plus strike geometry while you are in that contract.
+The player HUD does not include a radar of unsensed people. The sensed map shows world coordinates, a live heading, the current target, and only the people inside the mapping range. That range, the trail, names, and nearby objects grow with the mapping skill.
 
 ---
 

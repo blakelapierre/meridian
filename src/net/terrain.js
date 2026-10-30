@@ -18,6 +18,7 @@ function editOf(body) {
     mode: body.mode,
     spoilRoom: body.writes.length,
     writes: body.writes.map(([i, j, k, sdf_mm]) => ({ i, j, k, sdf_mm })),
+    cell: body.cell || "",
   };
 }
 
@@ -78,9 +79,12 @@ export function createTerrain({ identity, leader }) {
     return adopted;
   }
 
-  function dig(eye, aim, { peer }) {
+  let here = "atoll-0";
+  let deed = null;
+
+  function dig(eye, aim, { peer, mode = "dig", cell = here } = {}) {
     const saved = new Map(log.crust.overrides);
-    const writes = brushWrites(log.crust, { eye, aim, ticks: 1 });
+    const writes = brushWrites(log.crust, { eye, aim, ticks: 1, mode });
     if (!writes.length) return;
     const chunk = chunkOf(writes[0]);
     const budget = log.crust.budgetCm3;
@@ -90,15 +94,15 @@ export function createTerrain({ identity, leader }) {
     log.crust.budgetCm3 = budget;
     remember(writes);
     const proposal = signProposal(identity, {
-      cell: "atoll-0",
+      cell,
       nonce: nonce++,
       body: terrainBody({
-        cell: "atoll-0",
+        cell,
         eye,
         aim,
         chunk,
         before,
-        mode: "dig",
+        mode,
         writes,
       }),
     });
@@ -141,8 +145,11 @@ export function createTerrain({ identity, leader }) {
     if (frame.kind === 2) {
       const proposal = remote || proposed;
       if (!leader || !proposal) return { ok: false, reason: "proposal" };
+      const voteBody = decode(frame.bytes);
+      if (voteBody.seq !== log.seq + 1) return { ok: false, reason: "seq" };
       const vote = { bytes: frame.bytes, sig: frame.sig, pubkey: frame.pubkey };
       const sealed = seal(proposal, vote, false);
+      if (!sealed.ok) return sealed;
       if (proposal === proposed) proposed = null;
       if (proposal === remote) remote = null;
       flush();
@@ -150,6 +157,9 @@ export function createTerrain({ identity, leader }) {
     }
     if (frame.kind === 3) {
       const record = decode(frame.bytes);
+      const edit = editOf(decode(record.proposal).body);
+      if (edit.cell && edit.cell !== here) return { ok: false, reason: "cell" };
+      if (deed && edit.aim && !deed.allow(edit.aim[0] / 100, edit.aim[1] / 100, record.proposer)) return { ok: false, reason: "deed" };
       const op = {
         seq: record.seq,
         proposal: record.proposal,
@@ -171,14 +181,36 @@ export function createTerrain({ identity, leader }) {
     return { ok: false, reason: "kind" };
   }
 
+  function openEdits() {
+    const packets = [remote, proposed, ...waiting].filter(Boolean);
+    return packets.map((packet) => {
+      const body = decode(packet.bytes).body;
+      return {
+        eye: body.eye,
+        aim: body.aim,
+        chunk: body.chunk,
+        before: body.before,
+        mode: body.mode,
+        writes: body.writes,
+      };
+    });
+  }
+
   return {
     log,
     dig,
     receive,
     take,
+    openEdits,
     voxel: () => (last ? log.crust.sampleIndex(last.i, last.j, last.k) : null),
     write: () => last,
     hash: () => (last ? hex(log.crust.hash(...chunkOf(last))) : ""),
+    setCell(id) {
+      here = id || "atoll-0";
+    },
+    setDeed(next) {
+      deed = next;
+    },
   };
 }
 

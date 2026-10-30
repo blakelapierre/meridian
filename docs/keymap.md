@@ -21,13 +21,14 @@ Slice keys. Later screens do not get to steal these. Hands are first person: the
 | 2 | Secondary | — | — | — |
 | 3 | Tool (bit or hammer) | — | — | — |
 | 4 | Select utility. Press again to cycle the four strike slots | — | — | — |
-| Wheel | Next or previous among 1–4 | — | — | — |
+| Wheel | Follow distance and height. Scroll out to sit farther and higher | same | same | same |
 | G | Throw the selected utility | — | — | — |
 | B | — | — | — | Buy menu. Hidden outside the window |
-| Tab | Hold inventory | Hold inventory | Hold inventory | Hold inventory |
-| M | Sensed map. No players you cannot see | same | same | same |
+| Tab | Cycle people. Shift goes backward | same | same | same |
+| M | Sensed map. Coordinates and heading always. Range, people, names, and objects grow with mapping | same | same | same |
 | Esc | Close the open panel | same | same | same |
-| Backquote | Debug overlay, off by default | same | same | same |
+| Q | Toggle auto run. S still backs up | same | same | same |
+| Backquote | Cycle objects. Shift goes backward. Not people, not sand | same | same | same |
 
 Use is one line in the world: the crate, the strike prompt, the hearth. There is no second interact key.
 

@@ -1,3 +1,5 @@
+import { refuseSlump } from "./rules.js";
+
 function center(i, j, k) {
   return [i * 50 + 25, j * 50 + 25, k * 50 + 25];
 }
@@ -23,6 +25,7 @@ export function acceptEdit(crust, proposal, { certified = false, localEdits = fa
     const hash = crust.hash(proposal.chunk[0], proposal.chunk[1], proposal.chunk[2]);
     if (!sameBytes(hash, proposal.before)) return { ok: false, reason: "hash" };
   }
+  if (refuseSlump(proposal.mode)) return { ok: false, reason: "slump" };
   if (proposal.mode === "dig" && (proposal.spoilRoom ?? 0) < proposal.writes.length) {
     return { ok: false, reason: "spoil" };
   }
@@ -32,6 +35,11 @@ export function acceptEdit(crust, proposal, { certified = false, localEdits = fa
     if (dist2(at, proposal.aim) > 10000) return { ok: false, reason: "brush" };
     const previous = crust.sampleIndex(write.i, write.j, write.k);
     if (proposal.mode === "dig" && (previous > 0 || write.sdf_mm !== 500)) return { ok: false, reason: "dig" };
+    if (proposal.mode === "fill" && (previous <= 0 || write.sdf_mm !== -500)) return { ok: false, reason: "fill" };
+    if (proposal.mode === "smooth") {
+      const delta = Math.abs(write.sdf_mm - previous);
+      if (delta === 0 || delta > 500 || Math.abs(write.sdf_mm) > Math.abs(previous)) return { ok: false, reason: "smooth" };
+    }
   }
   for (const write of proposal.writes) crust.write(write.i, write.j, write.k, write.sdf_mm);
   return { ok: true };

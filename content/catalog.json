@@ -165,8 +165,8 @@
     { "id": "hauler", "metal": 40, "flux": 10, "anchors": false, "enabled": false }
   ],
   "recipes": [
-    { "id": "stone-block", "station": "hands", "inputs": [{ "item": "spoil", "n": 4 }], "seconds": 4, "skill": "masonry", "output": "stone" },
-    { "id": "hearth-stone", "station": "footing", "inputs": [{ "item": "metal", "n": 20 }, { "item": "stone", "n": 8 }], "seconds": 20, "skill": "masonry", "output": "hearth-stone" },
+    { "id": "stone-block", "station": "hands", "inputs": [{ "item": "spoil", "n": 4 }], "seconds": 4, "skill": "building", "output": "stone" },
+    { "id": "hearth-stone", "station": "footing", "inputs": [{ "item": "metal", "n": 20 }, { "item": "stone", "n": 8 }], "seconds": 20, "skill": "building", "output": "hearth-stone" },
     { "id": "bandage", "station": "hands", "inputs": [{ "item": "fiber", "n": 2 }], "seconds": 2, "skill": "surgery", "output": "bandage" },
     { "id": "ration", "station": "hands", "inputs": [{ "item": "grain", "n": 1 }], "seconds": 1, "skill": null, "output": "ration" },
     { "id": "line-rifle", "station": "bench", "inputs": [{ "item": "metal", "n": 12 }, { "item": "wood", "n": 4 }], "seconds": 30, "skill": "smithing", "skillMin": 20, "output": "line", "enabled": false }
