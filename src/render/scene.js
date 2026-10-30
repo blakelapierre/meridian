@@ -4,6 +4,7 @@ import { chaseOrigin, playerParts } from "../sim/body.js";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
+import { fauna, floraBoxes } from "../sim/life.js";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const DUMMY = [0.86, 0.22, 0.18, 1];
@@ -50,6 +51,17 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       color: [0.32, 0.48, 0.24, 1],
       reflectivity: 0.04,
       body: "swarm",
+    });
+  }
+  for (const box of floraBoxes()) objects.push(box);
+  for (const animal of fauna(Date.now(), feet)) {
+    objects.push({
+      type: "sphere",
+      origin: animal.at,
+      radius: animal.radius,
+      color: animal.color,
+      reflectivity: 0.02,
+      body: animal.kind,
     });
   }
   const dummy = atoll.placements.dummy;

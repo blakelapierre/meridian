@@ -3,8 +3,8 @@ import { hearStep } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=50";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=54";
+import { buildScene } from "../render/scene.js?v=55";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=55";
 import { createFps } from "../render/fps.js";
 import { createPacer, easePixels, nativePixels, paceWord, playPixels, soldierTarget, viewStill } from "../render/pace.js?v=52";
 import {
@@ -72,6 +72,7 @@ import { boltHit, penFactor, startBolt, stepBolt } from "../sim/bolt.js";
 import { noteHarm } from "../sim/identityharm.js";
 import { cellId, inInterest, quorum, sameCell } from "../sim/cell.js";
 import { maySit } from "../sim/command.js";
+import { standHeight } from "../sim/life.js";
 import { swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -654,10 +655,10 @@ function aimCamera(sample, dt) {
     const len = Math.hypot(idealLook[0], idealLook[1], idealLook[2]) || 1;
     idealLook = [idealLook[0] / len, idealLook[1] / len, idealLook[2] / len];
   }
-  liftCamera(ideal, columnFloor(terrain.log.crust, ideal[0], ideal[1]));
+  liftCamera(ideal, standHeight(ideal[0], ideal[1], columnFloor(terrain.log.crust, ideal[0], ideal[1])));
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
-  const landed = columnFloor(terrain.log.crust, cameraPos[0], cameraPos[1]);
+  const landed = standHeight(cameraPos[0], cameraPos[1], columnFloor(terrain.log.crust, cameraPos[0], cameraPos[1]));
   if (cameraPos[2] < landed + 0.45) {
     cameraPos[2] = landed + 0.45;
     cameraSpring.vel[2] = Math.max(0, cameraSpring.vel[2]);
@@ -1821,7 +1822,8 @@ if (params.get("still") !== "1") {
       if (roadHere && !dragging) sample.forward *= 1.15;
       const down = radialDown(player.position[0], player.position[1], player.position[2]);
       world.gravity = [down[0] * 9.81, down[1] * 9.81, down[2] * 9.81];
-      world.drop = shellDrop(player.position[0], player.position[1]);
+      const ground = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
+      world.drop = shellDrop(player.position[0], player.position[1]) - ground;
       if (pools.some((pool) => Math.hypot(pool.x - player.position[0], pool.y - player.position[1]) < 0.7)) {
         world.gravity[2] += 14;
       }
