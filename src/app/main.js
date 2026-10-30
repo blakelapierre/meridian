@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=66";
 import { createFps } from "../render/fps.js";
-import { createPacer, createPicturePace, paceWord, sizeAt, viewStill } from "../render/pace.js?v=64";
+import { createPacer, createPicturePace, paceWord, sizeAt, viewStill } from "../render/pace.js?v=65";
 import {
   authority,
   bandage,
@@ -1277,7 +1277,8 @@ function publish() {
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
-  if (counter) counter.textContent = `${rate} fps · ${canvas.width}×${canvas.height}`;
+  const cadence = Number(canvas.dataset.cadence) > 0 ? ` · ${Math.round(1000 / Number(canvas.dataset.cadence))}Hz` : "";
+  if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = shown === null ? "" : String(shown);
@@ -2253,7 +2254,9 @@ if (params.get("still") !== "1") {
     }
     paintKind = "full";
     const arrived = still && octave === 0;
-    const paceLabel = !extra && active && decision.gap > decision.refresh * 1.15 ? "behind" : paceWord(decision.mode, { still, arrived, holding: decision.holding });
+    canvas.dataset.cadence = String(Math.round(paced.refresh || decision.refresh));
+    const late = !extra && active && decision.gap > (paced.refresh || decision.refresh) * 1.35;
+    const paceLabel = late ? "behind" : paceWord(decision.mode, { still, arrived, holding: decision.holding });
     canvas.dataset.pace = paceLabel;
     if (params.get("nopaint") !== "1" && decision.paint) {
       const started = performance.now();

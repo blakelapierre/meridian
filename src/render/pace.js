@@ -30,26 +30,32 @@ export function coverLevel(targetW, targetH, rays) {
 export function createPicturePace() {
   let octave = 2;
   let wait = 0;
+  let period = 1000 / 60;
+  let samples = 0;
   return {
     get octave() {
       return octave;
     },
-    step({ gap = 0, refresh = 1000 / 60 } = {}) {
-      const vsync = 1000 / 60;
-      if (!(gap > 0)) return { octave, detail: 0 };
-      if (gap > vsync * 1.15) {
-        const over = gap / vsync;
-        const steps = over >= 8 ? 2 : 1;
+    step({ gap = 0 } = {}) {
+      if (!(gap > 0)) return { octave, detail: 0, refresh: period };
+      if (gap >= 8 && gap <= 42) {
+        period = samples ? period * 0.85 + gap * 0.15 : gap;
+        samples += 1;
+      }
+      const budget = samples < 6 ? Math.max(period, 1000 / 30) : period;
+      if (gap > budget * 1.35) {
+        const over = gap / budget;
+        const steps = over >= 4 ? 2 : 1;
         octave = Math.min(8, octave + steps);
         wait = 0;
-        return { octave, detail: 0 };
+        return { octave, detail: 0, refresh: budget };
       }
       wait += 1;
       if (wait >= 8 && octave > 0) {
         octave -= 1;
         wait = 0;
       }
-      return { octave, detail: 0 };
+      return { octave, detail: 0, refresh: budget };
     },
   };
 }
