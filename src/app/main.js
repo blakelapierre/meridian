@@ -6,9 +6,10 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas, NEAR_METERS } from "../render/gpu.js?v=70";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=72";
+import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=1";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=85";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
 import {
   authority,
   bandage,
@@ -127,6 +128,13 @@ let detailRays = 0;
 let rayBudget = 4000;
 let paintKind = "full";
 let lastPaintMs = 0;
+// Perception: focus point plus per-sense acuity/range/refresh (src/sim/perception.js).
+let perception = perceptionFrom();
+let paintStill = false;
+const traceBudget = createTraceBudget();
+let pendingTrace = null;
+let idleGap = 0;
+const poseSeenAt = new Map();
 if (painter) {
   fitCanvas(canvas, viewScale);
   canvas.style.imageRendering = "auto";
@@ -250,7 +258,9 @@ let shotFlash = { text: "", until: 0 };
 let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : tourSpawn ? TOUR_START.yaw : 0);
 let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
-let tick = (0.87 / (Math.PI * 2)) * DAY_TICKS;
+// ?phase=<radians> sets the starting sun angle (0.87 is mid-morning, ~2.9 dusk, ~4.6 night) for repeatable screenshots.
+const phaseParam = Number(params.get("phase"));
+let tick = ((Number.isFinite(phaseParam) && params.get("phase") !== null ? phaseParam : 0.87) / (Math.PI * 2)) * DAY_TICKS;
 let trigger = false;
 let shotQueued = false;
 let cooldown = 0;
@@ -1432,6 +1442,12 @@ function markGoal(scene) {
   el.dataset.on = on ? "1" : "0";
   el.dataset.angle = String(Math.round(off * 180 / Math.PI));
   el.dataset.metres = String(Math.round(metres));
+  // Labels follow perception: a goal near the focus reads at full strength, a peripheral one fades.
+  const look = perception.focus.dir;
+  const toward = [step.goal[0] - player.position[0], step.goal[1] - player.position[1], (step.goal[2] || 0) - player.position[2]];
+  const detail = perceivedDetail(perception, "sight", angleBetween(look, toward), metres);
+  el.dataset.detail = detail.toFixed(2);
+  el.style.opacity = String((0.45 + 0.55 * Math.min(1, detail / 0.5)).toFixed(2));
   const arrow = on ? "▼" : "➤";
   const text = `${step.name} ${Math.round(metres)} m`;
   if (el.dataset.text !== arrow + text) {
@@ -1614,9 +1630,15 @@ function paint(sample, width = canvas.width, height = canvas.height) {
     lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch),
     skills.eyesight.value,
     skills.focus.value,
-    NEAR_METERS,
   );
   if (scene.gaze) canvas.dataset.gaze = String(Math.round(scene.gaze.reach));
+  perception = withFocus(perceptionFrom({ eyesight: skills.eyesight.value, focus: skills.focus.value }), {
+    x: scene.gaze ? scene.gaze.x : 0.5,
+    y: scene.gaze ? scene.gaze.y : 0.5,
+    dir: lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch),
+  });
+  scene.fovea = { ...foveaUniforms(perception), still: paintStill };
+  canvas.dataset.fovea = `${Math.round(perception.senses.sight.fovea * 180 / Math.PI)}deg/${perception.senses.sight.period}f`;
   markTarget(scene);
   markGoal(scene);
   const dir = project(0.5, 0.5, scene.camera);
@@ -1972,6 +1994,13 @@ async function openLink(to, offer, role) {
     net.snapIn += 1;
     const pose = acceptPosition(poses.get(to) || null, new Uint8Array(event.data));
     if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]), 80 + skills.mapping.value / 10)) return;
+    // Perception sets net priority: peers near the focus update every tick, peripheral ones at the sight refresh period.
+    const look = perception.focus.dir;
+    const toward = [pose.x - player.position[0], pose.y - player.position[1], (pose.z || 0) - player.position[2]];
+    const angle = Math.hypot(toward[0], toward[1]) > 0.5 ? angleBetween(look, toward) : 0;
+    const nowMs = performance.now();
+    if (to !== followId && poses.has(to) && !refreshDue(perception, "sight", angle, nowMs - (poseSeenAt.get(to) || 0))) return;
+    poseSeenAt.set(to, nowMs);
     poses.set(to, pose);
     if (to === followId) followed = pose;
   };
@@ -2696,7 +2725,7 @@ if (params.get("still") !== "1") {
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
       : picture.step({
-        gap: settled ? Math.max(decision.gap, 1) : burst || issued ? Math.max(traceCost, 1) : 0,
+        gap: settled ? Math.max(decision.gap, lastPaintMs || 0, 1) : burst || issued ? Math.max(traceCost, 1) : 0,
         displayW,
         displayH,
         still: settled,
@@ -2704,10 +2733,32 @@ if (params.get("still") !== "1") {
         accel,
       });
     issued = false;
-    const trace = { width: paced.width, height: paced.height };
+    // Budget by traced pixels per frame: the foveated periphery is sparse, so size the picture to what fits.
+    const sight = perception.senses.sight;
+    const camAspect = displayW / Math.max(1, displayH);
+    const fraction = painter ? tracedFraction(sight, { aspect: camAspect, gaze: perception.focus, grid: 24 }) : 1;
+    const frameBudget = settled ? STILL_FRAME_MS : Math.max(paced.refresh || decision.refresh || 16, 1000 / 30);
+    const fit = traceBudget.scale({ displayW, displayH, fraction });
+    const finalScale = painter && !extra ? (settled ? fit : Math.min(paced.scale, fit)) : paced.scale;
+    const trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
+    // Trace cost is the extra frame time a trace adds over a present-only frame; it lands in the next gap.
+    if (!extra && decision.gap > 0) {
+      if (pendingTrace) {
+        const traceCost = Math.max(pendingTrace.paintMs, decision.gap - idleGap, 1);
+        canvas.dataset.traceCost = String(Math.round(traceCost));
+        traceBudget.note(pendingTrace.pixels, traceCost, pendingTrace.budget);
+        pendingTrace = null;
+      } else if (decision.gap < 1000) {
+        idleGap = idleGap ? idleGap * 0.9 + decision.gap * 0.1 : decision.gap;
+      }
+    }
+    canvas.dataset.traced = fraction.toFixed(3);
+    canvas.dataset.budgetPx = String(Math.round(traceBudget.pixels));
+    canvas.dataset.idleGap = String(Math.round(idleGap));
+    paintStill = settled;
     canvas.dataset.traceW = String(trace.width);
     canvas.dataset.traceH = String(trace.height);
-    canvas.dataset.level = Number(paced.scale || 0).toFixed(2);
+    canvas.dataset.level = Number(finalScale || 0).toFixed(2);
     canvas.dataset.detail = "0";
     canvas.style.imageRendering = trace.width >= displayW - 4 ? "auto" : "pixelated";
     if (painter) {
@@ -2732,7 +2783,10 @@ if (params.get("still") !== "1") {
       const started = performance.now();
       paint(sample, trace.width, trace.height);
       const paintMs = performance.now() - started;
-      if (!extra) lastPaintMs = paintMs;
+      if (!extra) {
+        lastPaintMs = paintMs;
+        pendingTrace = { pixels: trace.width * trace.height * fraction, paintMs, budget: frameBudget };
+      }
       pacer.note(paintMs, active, still);
       lastTrace = now;
       issued = true;
