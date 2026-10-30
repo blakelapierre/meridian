@@ -86,21 +86,64 @@ export function revealCount(skills = {}) {
   return 5 + Math.round(skillValue(skills, "mapping") / 140 * 16);
 }
 
-export function revealLook({ x, y, yaw = 0, pitch = 0, skills = {} }) {
+function yawTurn(forward, turn) {
+  const c = Math.cos(turn);
+  const s = Math.sin(turn);
+  return [
+    forward[0] * c + forward[1] * s,
+    forward[1] * c - forward[0] * s,
+    forward[2],
+  ];
+}
+
+export function hitGround(origin, dir, heightAt = () => 0, maxDist = 48) {
+  const len = Math.hypot(dir?.[0] || 0, dir?.[1] || 0, dir?.[2] || 0);
+  if (!origin || !(len > 0) || !(maxDist > 0)) return null;
+  const dx = dir[0] / len;
+  const dy = dir[1] / len;
+  const dz = dir[2] / len;
+  const ground = (x, y) => {
+    const h = heightAt(x, y);
+    return Number.isFinite(h) ? h : 0;
+  };
+  const aboveAt = (t) => origin[2] + dz * t - ground(origin[0] + dx * t, origin[1] + dy * t);
+  let lo = 0;
+  let hi = 0;
+  let found = false;
+  const steps = 48;
+  for (let i = 1; i <= steps; i += 1) {
+    const t = (maxDist * i) / steps;
+    if (aboveAt(t) <= 0.02) {
+      hi = t;
+      lo = (maxDist * (i - 1)) / steps;
+      found = true;
+      break;
+    }
+  }
+  if (!found) return null;
+  for (let i = 0; i < 12; i += 1) {
+    const mid = (lo + hi) * 0.5;
+    if (aboveAt(mid) > 0) lo = mid;
+    else hi = mid;
+  }
+  return {
+    x: origin[0] + dx * hi,
+    y: origin[1] + dy * hi,
+  };
+}
+
+export function revealLook({ x, y, yaw = 0, pitch = 0, skills = {}, origin = null, dir = null, heightAt = () => 0 }) {
   const range = revealRange(skills);
   const half = revealHalfFov(skills);
   const count = revealCount(skills);
   const points = [{ x, y }];
+  const eye = origin || [x, y, 1.65];
+  const forward = dir || lookDirection(yaw, pitch);
   for (let i = 0; i < count; i += 1) {
     const turn = count === 1 ? 0 : (i / (count - 1) - 0.5) * 2 * half;
-    const dir = lookDirection(yaw + turn, pitch);
-    const dist = dir[2] < -0.05
-      ? Math.min(range, Math.max(1.2, -1.65 / dir[2]))
-      : Math.min(range, 8);
-    points.push({
-      x: x + Math.sin(yaw + turn) * dist,
-      y: y + Math.cos(yaw + turn) * dist,
-    });
+    const ray = Math.abs(turn) < 1e-6 ? forward : yawTurn(forward, turn);
+    const hit = hitGround(eye, ray, heightAt, range);
+    if (hit) points.push(hit);
   }
   return points;
 }
@@ -114,6 +157,14 @@ export function mapSpan(skill = 0, zoom = 1) {
 export function dragCenter(center, dxPx, dyPx, span, size) {
   const scale = span / size;
   return [center[0] - dxPx * scale, center[1] + dyPx * scale];
+}
+
+export function plateViewRect(plate, center, span, size) {
+  const left = plate.origin[0] - plate.meters / 2;
+  const north = plate.origin[1] + plate.meters / 2;
+  const nw = placeOnView(center, [left, north], span, size);
+  const scale = span > 0 ? (plate.meters / span) * size : 0;
+  return { x: nw.x, y: nw.y, size: scale };
 }
 
 export function placeOnView(center, point, span, size) {

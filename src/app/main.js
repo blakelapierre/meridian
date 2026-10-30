@@ -65,7 +65,7 @@ import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unp
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
-import { paintChart } from "../render/chart.js?v=69";
+import { paintChart } from "../render/chart.js?v=70";
 import { blendDir, blendOrigin, CLOSE, easeFollow, OPTICS, rangeRead, relaxOrbit, stepFollow, zoomFov } from "../sim/sight.js?v=8";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -869,12 +869,20 @@ function geographyAt(x, y) {
 }
 
 function revealMap() {
+  const eye = cameraPos || [
+    player.position[0],
+    player.position[1],
+    player.position[2] + 1.65,
+  ];
   const points = revealLook({
     x: player.position[0],
     y: player.position[1],
     yaw,
     pitch,
+    origin: eye,
+    dir: cameraLook || lookDirection(yaw, pitch),
     skills: skillBag(),
+    heightAt: (px, py) => standHeight(px, py, columnFloor(terrain.log.crust, px, py)),
   });
   const brush = Math.max(1.6, cellSize(skills.mapping.value));
   for (const point of points) {
