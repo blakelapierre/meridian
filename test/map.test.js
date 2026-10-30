@@ -1,6 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abilityLine, createSurvey, formatFix, headingDegrees, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathKeep, pathStamp, placeMark } from "../src/sim/map.js";
+import { abilityLine, contourLines, contourStep, createSurvey, formatFix, headingDegrees, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathKeep, pathStamp, placeMark } from "../src/sim/map.js";
+
+test("contours follow the slope and tighten as mapping rises", () => {
+  assert.equal(contourStep(0), 2);
+  assert.equal(contourStep(40), 1);
+  assert.equal(contourStep(90), 0.5);
+  const lines = contourLines({
+    x: 3,
+    y: 0,
+    span: 6,
+    step: 2,
+    cells: 6,
+    heightAt: (x) => x,
+    knownAt: () => true,
+  });
+  assert.ok(lines.length > 0, lines.length);
+  const hidden = contourLines({
+    x: 3,
+    y: 0,
+    span: 6,
+    step: 2,
+    cells: 4,
+    heightAt: (x) => x,
+    knownAt: () => false,
+  });
+  assert.equal(hidden.length, 0);
+});
 
 test("tracking slowly lengthens the path and later keeps it", () => {
   assert.equal(pathKeep(0), 0);

@@ -45,10 +45,11 @@ function plateImage(plate) {
   return plate.image;
 }
 
-export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plate, center, span }) {
+export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plate, center, span, rise = null, contours = [] }) {
   const here = center || self;
   const across = span || radius * 2;
-  if (read) read.textContent = `${formatFix(self[0], self[1], yaw)}  ·  ${abilityLine(skill)}  ·  sense ${Math.round(radius)} m  ·  ${Math.round(across)} m`;
+  const height = typeof rise === "number" ? `  ·  ${rise.toFixed(1)} m` : "";
+  if (read) read.textContent = `${formatFix(self[0], self[1], yaw)}${height}  ·  ${abilityLine(skill)}  ·  sense ${Math.round(radius)} m  ·  ${Math.round(across)} m`;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const size = canvas.width;
@@ -66,6 +67,23 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plat
     const mpp = plate.meters / plate.size;
     const sw = across / mpp;
     ctx.drawImage(image, cx - sw / 2, cy - sw / 2, sw, sw, 0, 0, size, size);
+  }
+  if (contours?.length) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(half, half, half - 2, 0, Math.PI * 2);
+    ctx.clip();
+    for (const line of contours) {
+      const pa = placeOnView(here, line.a, across, size);
+      const pb = placeOnView(here, line.b, across, size);
+      ctx.strokeStyle = line.major ? "rgba(42, 28, 16, 0.8)" : "rgba(42, 28, 16, 0.4)";
+      ctx.lineWidth = line.major ? 1.5 : 1;
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
   ctx.restore();
   ctx.strokeStyle = "#3d6a7a";
