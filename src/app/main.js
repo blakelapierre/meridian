@@ -1,5 +1,5 @@
 import { paintFrame } from "../engine/frame.js";
-import { mountTouch } from "./touch.js";
+import { mountTouch } from "./touch.js?v=2";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
