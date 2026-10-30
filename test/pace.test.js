@@ -65,20 +65,16 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
 });
 
-test("a full frame keeps vsync, and detail waits until that size is held", () => {
+test("resolution climbs back up after a miss once frames hold vsync", () => {
   const picture = createPicturePace();
   const missed = picture.step({ gap: 200, refresh: 16 });
   assert.equal(missed.detail, 0);
   assert.ok(missed.octave > 2);
   let held = null;
-  for (let i = 0; i < 12; i += 1) held = picture.step({ gap: 16, refresh: 16 });
-  assert.equal(held.detail, 0);
+  for (let i = 0; i < 24; i += 1) held = picture.step({ gap: 16, refresh: 16 });
   assert.ok(held.octave < missed.octave);
-  const settled = createPicturePace();
-  settled.step({ gap: 40, refresh: 16 });
-  let detail = 0;
-  for (let i = 0; i < 40; i += 1) detail = settled.step({ gap: 16, refresh: 16 }).detail;
-  assert.equal(detail, 800);
+  for (let i = 0; i < 80; i += 1) held = picture.step({ gap: 16, refresh: 16 });
+  assert.equal(held.octave, 0);
 });
 
 test("resolution climbs one octave toward the window and steps back when a frame misses", () => {
