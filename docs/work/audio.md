@@ -28,7 +28,7 @@ A shot behind you is half as loud. Distance falloff is unchanged.
 
 ## Next
 
-A shot behind you is half as loud, not silent.
+A shot behind you is half as loud, not silent. Not in this build.
 
 ## Later
 

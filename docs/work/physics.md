@@ -16,7 +16,7 @@ Wind comes from where you are standing, not from one constant. Night still multi
 
 ## Next
 
-Wind is a function of where you stand. It is not stored on the cells.
+The wind is not stored on the cells. Not in this build.
 
 ## Later
 

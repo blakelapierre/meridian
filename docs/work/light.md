@@ -14,7 +14,7 @@ Using a fin breaks it. A broken fin gives no flux.
 
 ## Next
 
-A broken fin stays broken. Metal will not repair it.
+Metal does not repair a broken fin. Not in this build.
 
 ## Later
 

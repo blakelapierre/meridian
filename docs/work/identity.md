@@ -16,7 +16,7 @@ A harm line keeps one signature byte. It is not delivered to an archive.
 
 ## Next
 
-The signature is one byte. An archive does not keep the receipt.
+An archive does not keep the signature. Not in this build.
 
 ## Later
 

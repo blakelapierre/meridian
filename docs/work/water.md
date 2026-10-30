@@ -16,7 +16,7 @@ Z on a road opens a gate. Water steps through an open gate and is dammed by a sh
 
 ## Next
 
-An open gate lets a pool through. It does not lower the pool.
+An open gate does not lower the pool. Not in this build.
 
 ## Later
 

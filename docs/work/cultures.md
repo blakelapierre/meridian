@@ -16,7 +16,7 @@ A trainer stands by the table. Using them can mark a specialty, and a third is r
 
 ## Next
 
-The trainer does not raise a skill from nothing. They only refuse or mark a specialty.
+The trainer does not raise a skill from nothing. Not in this build.
 
 ## Later
 

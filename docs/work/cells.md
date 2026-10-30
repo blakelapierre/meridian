@@ -16,7 +16,7 @@ A hit waits for a quorum of your cell. Everyone in the cell counts as a yes, so 
 
 ## Next
 
-The other cell cannot vote no. A quorum of your own cell still passes.
+The other cell cannot vote no. Not in this build.
 
 ## Later
 

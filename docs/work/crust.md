@@ -14,7 +14,7 @@ An edit whose mode is slump is refused. Certified sand does not slump.
 
 ## Next
 
-The beach and the certified log still refuse slump. Nothing off the beach writes one either.
+Nothing off the beach writes a slump either. Not in this build.
 
 ## Later
 

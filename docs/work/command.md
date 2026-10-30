@@ -16,7 +16,7 @@ Nothing to run.
 
 ## Next
 
-Sitting gives no order. The table is a chair and not a company.
+Sitting gives no order. The table is a chair and not a company. Not in this build.
 
 ## Later
 

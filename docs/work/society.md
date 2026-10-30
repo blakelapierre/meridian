@@ -16,7 +16,7 @@ The first fellowship is a patron. A vein tap pays them 1 metal, counted on you, 
 
 ## Next
 
-The tithe is a count on you. It is not paid into the patron's hands.
+The tithe is a count on you. It is not paid into the patron's hands. Not in this build.
 
 ## Later
 

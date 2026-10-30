@@ -14,7 +14,7 @@ Holding still and pressing E on a live core starts a defuse. Moving cancels it. 
 
 ## Next
 
-Moving breaks a defuse. Firing does not.
+Firing does not break a defuse. Not in this build.
 
 ## Later
 

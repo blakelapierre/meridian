@@ -24,7 +24,7 @@ Lore has its own channel. If that channel is not open, the same packet falls bac
 
 ## Next
 
-The harm signature is not sent on the lore channel, even when an archive is linked.
+The harm byte is not sent on the lore channel. Not in this build.
 
 ## Later
 
