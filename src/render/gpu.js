@@ -117,9 +117,10 @@ vec3 sphereAlbedo(vec3 n, int i, vec3 fallback) {
 }
 
 float duneHeight(vec2 p) {
-  float roll = sin(p.x * 0.05) * cos(p.y * 0.041);
-  float wash = sin((p.x + p.y) * 0.08 + 1.3);
-  return 0.22 * roll + 0.12 * wash;
+  float roll = 0.5 * sin(p.x * 0.15) + 0.5 * cos(p.y * 0.13);
+  float wash = 0.5 * sin((p.x + p.y) * 0.17 + 1.3) + 0.5;
+  float n = clamp(0.55 * roll + 0.45 * wash, 0.0, 1.0);
+  return n * n * 5.4;
 }
 
 vec3 duneNormal(vec2 p) {
@@ -131,18 +132,36 @@ vec3 duneNormal(vec2 p) {
 }
 
 bool sandPlane(vec3 ro, vec3 rd, out float t, out vec3 p) {
-  if (rd.z > -1.0e-4) return false;
-  t = -ro.z / rd.z;
-  if (t < 0.02) t = 0.02;
-  for (int i = 0; i < 3; i++) {
-    p = ro + rd * t;
-    t = (duneHeight(p.xy) - ro.z) / rd.z;
-    if (t < 0.02) t = 0.02;
+  t = 0.08;
+  bool hit = false;
+  float tHit = 0.08;
+  p = ro;
+  for (int i = 0; i < 28; i++) {
+    vec3 q = ro + rd * t;
+    float dist = q.z - duneHeight(q.xy);
+    bool beach = dot(q.xy, q.xy) <= 65536.0;
+    bool close = !hit && beach && t > 0.02 && t < 160.0 && dist < 0.35;
+    if (close) {
+      hit = true;
+      tHit = t;
+      p = q;
+      p.z = q.z - dist;
+    }
+    float advance = clamp(dist * 0.5, 0.45, 3.2);
+    t += (!hit && beach && t < 160.0) ? advance : 0.0;
   }
-  if (t > 400.0) return false;
-  p = ro + rd * t;
-  p.z = duneHeight(p.xy);
-  return dot(p.xy, p.xy) <= 256.0 * 256.0;
+  if (!hit && rd.z < -0.02) {
+    float tf = -ro.z / rd.z;
+    vec3 q = ro + rd * tf;
+    if (tf > 0.02 && tf < 400.0 && dot(q.xy, q.xy) <= 65536.0) {
+      hit = true;
+      tHit = tf;
+      p = q;
+      p.z = duneHeight(q.xy);
+    }
+  }
+  t = tHit;
+  return hit;
 }
 
 bool boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t) {
@@ -280,7 +299,7 @@ void main() {
       bestT = sandT;
       bestP = sandP;
       bestN = duneNormal(sandP.xy);
-      float crest = clamp(sandP.z * 1.8 + 0.5, 0.0, 1.0);
+      float crest = clamp(sandP.z / 5.4, 0.0, 1.0);
       bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.55, 0.48, 0.32)) * mix(0.84, 1.06, crest);
       bestRef = 0.02;
       found = true;
