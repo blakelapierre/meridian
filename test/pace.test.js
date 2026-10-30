@@ -65,20 +65,24 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
 });
 
-test("throughput is pixels times frame rate times speed times acceleration", () => {
+test("throughput squares speed and acceleration", () => {
   const refresh = 33;
   const seen = visualThroughput(100, 33, refresh, 2, 3);
-  assert.ok(Math.abs(seen - 100 * (1000 / 33) * 2 * 3) < 1);
+  assert.ok(Math.abs(seen - 100 * (1000 / 33) * 4 * 9) < 1);
   assert.equal(visualThroughput(100, 33, refresh, 2, 0), 0);
   assert.ok(visualThroughput(480 * 270, 80, refresh, 1, 1) > visualThroughput(96 * 68, 33, refresh, 1, 1));
 });
 
 test("rapid acceleration holds vsync and a steady pace may use 12fps", () => {
   const refresh = 33;
-  assert.ok(Math.abs(visualThroughput(100, 33, refresh, 2, 1) - 2 * visualThroughput(100, 33, refresh, 1, 1)) < 1);
+  assert.ok(Math.abs(visualThroughput(100, 33, refresh, 2, 1) - 4 * visualThroughput(100, 33, refresh, 1, 1)) < 1);
   assert.ok(motionLimit(0, refresh) > 70);
   assert.ok(motionLimit(4.4, refresh, 0) > 70);
+  assert.ok(motionLimit(4.4, refresh, 1) > motionLimit(4.4, refresh, 4));
   assert.ok(motionLimit(4.4, refresh, 12) < 40);
+  const mild = motionLimit(1, refresh, 0) - motionLimit(1, refresh, 1);
+  const hard = motionLimit(1, refresh, 4) - motionLimit(1, refresh, 8);
+  assert.ok(mild < hard);
   assert.ok(cameraAccel(0, 4, 0.5) === 8);
   assert.ok(cameraSpeed({ x: 0, y: 0, yaw: 0, pitch: 0 }, { x: 4.4, y: 0, yaw: 0, pitch: 0 }, 1) > 4);
   const pose = { x: 0, y: 0, yaw: 0, pitch: 0, zoom: 0 };
@@ -115,6 +119,7 @@ test("a moving camera is pulled to at least 12fps in one step", () => {
   for (let i = 0; i < 6; i += 1) seen = pace.step({ gap: 16, ...box, still: false, speed: 0.2 });
   const before = seen.scale;
   for (let i = 0; i < 6; i += 1) seen = pace.step({ gap: 200, ...box, still: false, speed: 0.2 });
+  assert.ok(seen.scale < before);
   assert.ok(seen.scale < before * 0.7);
   const parked = createPicturePace();
   let held = parked.step({ gap: 200, ...box, still: true });
@@ -129,6 +134,8 @@ test("movement snaps toward vsync and will not stay under 12fps", () => {
   for (let i = 0; i < 6; i += 1) seen = pace.step({ gap: 200, ...box, still: true });
   const before = seen.scale;
   seen = pace.step({ gap: 200, ...box, still: false });
+  assert.ok(seen.scale < before);
+  for (let i = 0; i < 6; i += 1) seen = pace.step({ gap: 200, ...box, still: false });
   assert.ok(seen.scale < before * 0.7);
   let slow = seen.scale;
   for (let i = 0; i < 8; i += 1) slow = pace.step({ gap: 120, ...box, still: false }).scale;
