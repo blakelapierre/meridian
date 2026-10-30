@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=66";
 import { createFps } from "../render/fps.js";
-import { cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, viewStill } from "../render/pace.js?v=73";
+import { cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, viewStill } from "../render/pace.js?v=74";
 import {
   authority,
   bandage,

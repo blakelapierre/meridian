@@ -36,7 +36,7 @@ export function cameraSpeed(previous, next, dt) {
 
 export function motionLimit(speed, refreshMs) {
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
-  const pace = Math.min(1, Math.max(0, speed / 4.4));
+  const pace = Math.min(1, Math.max(0, speed / 4.4)) ** 2;
   return (1000 / 12) * (1 - pace) + refresh * pace;
 }
 
@@ -44,7 +44,7 @@ export function visualThroughput(pixels, frameMs, refreshMs, speed = 1) {
   if (!(pixels > 0) || !(frameMs > 0)) return 0;
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
   const fps = Math.min(1000 / frameMs, 1000 / refresh);
-  return pixels * fps * Math.max(speed, 0);
+  return pixels * fps * Math.max(speed, 0) ** 2;
 }
 
 export function createPicturePace() {
@@ -94,6 +94,8 @@ export function createPicturePace() {
       const size = sized();
       const score = visualThroughput(size.width * size.height, ms, refresh, still ? 1 : Math.max(speed, 0.05));
       const limit = still ? Infinity : motionLimit(speed, refresh);
+      const ease = Math.min(1, Math.max(0, speed / 4.4)) ** 2;
+      const growBy = 1.04 + (1 - ease) * 0.14;
       if (!still && ms > limit) {
         scale = Math.max(0.08, scale * Math.max(0.86, Math.sqrt(limit / ms)));
         direction = 1;
@@ -103,7 +105,8 @@ export function createPicturePace() {
         else if (lastScore > 0 && score < lastScore * 0.98) direction = -direction;
         else if (!still) direction = 1;
         lastScore = score;
-        if (direction !== 0) scale = Math.max(0.08, Math.min(1, scale * (direction > 0 ? 1.04 : 0.96)));
+        if (direction > 0) scale = Math.max(0.08, Math.min(1, scale * growBy));
+        else if (direction < 0) scale = Math.max(0.08, Math.min(1, scale * 0.96));
       }
       skip = true;
       const next = pictureSize(scale, displayW, displayH);
