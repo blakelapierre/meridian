@@ -99,7 +99,9 @@ export function createPicturePace() {
         return scale + (next - scale) * 0.5;
       };
       if (wasStill && !still && gap > target) {
-        scale = ease(scale * Math.sqrt(target / gap));
+        const aim = scale * Math.sqrt(target / gap);
+        const floorMiss = target + 0.5 >= 1000 / 12 && gap > 1000 / 12;
+        scale = floorMiss ? Math.max(0.08, Math.min(1, aim)) : ease(aim);
         wasStill = false;
         return pack(0);
       }
@@ -112,8 +114,11 @@ export function createPicturePace() {
       }
       wasStill = false;
       const shown = visualThroughput(sized().width * sized().height, gap, refresh, Math.max(speed, 0.05), accel);
-      if (gap > target) scale = ease(scale * Math.sqrt(target / gap));
-      else if (gap < target * 0.9) scale = ease(scale * 1.12);
+      if (gap > target) {
+        const aim = scale * Math.sqrt(target / gap);
+        const floorMiss = !vsync && gap > 1000 / 12 && target + 0.5 >= 1000 / 12;
+        scale = floorMiss ? Math.max(0.08, Math.min(scale, aim)) : ease(aim);
+      } else if (gap < target * 0.9) scale = ease(scale * 1.12);
       const next = pictureSize(scale, displayW, displayH);
       return { scale, refresh, info: shown, width: next.width, height: next.height };
     },
@@ -201,6 +206,34 @@ export function easePixels(current, target, dt) {
     width: current.width + (target.width - current.width) * step,
     height: current.height + (target.height - current.height) * step,
   };
+}
+
+export function inFront(origin, dir, point, range = 56) {
+  if (!origin || !dir || !point) return false;
+  const dx = (point[0] || 0) - origin[0];
+  const dy = (point[1] || 0) - origin[1];
+  const dz = (point[2] || 0) - origin[2];
+  const dist = Math.hypot(dx, dy, dz);
+  if (dist < 0.35 || dist > range) return false;
+  const len = Math.hypot(dir[0] || 0, dir[1] || 0, dir[2] || 0) || 1;
+  return (dx * dir[0] + dy * dir[1] + dz * dir[2]) / (dist * len) > 0.25;
+}
+
+export function watchScene(memory, samples = []) {
+  const seen = new Set();
+  let moving = false;
+  for (const sample of samples) {
+    if (!sample?.id) continue;
+    seen.add(sample.id);
+    if (sample.live) moving = true;
+    const key = sample.key || "";
+    if (memory.has(sample.id) && memory.get(sample.id) !== key) moving = true;
+    memory.set(sample.id, key);
+  }
+  for (const id of memory.keys()) {
+    if (!seen.has(id)) memory.delete(id);
+  }
+  return moving;
 }
 
 export function paceWord(mode, { still = false, arrived = false, holding = true } = {}) {
