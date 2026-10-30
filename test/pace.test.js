@@ -81,6 +81,8 @@ test("rapid acceleration holds vsync and a steady pace may use 12fps", () => {
   assert.ok(motionLimit(4.4, refresh, 12) < 40);
   assert.ok(cameraAccel(0, 4, 0.5) === 8);
   assert.ok(cameraSpeed({ x: 0, y: 0, yaw: 0, pitch: 0 }, { x: 4.4, y: 0, yaw: 0, pitch: 0 }, 1) > 4);
+  const pose = { x: 0, y: 0, yaw: 0, pitch: 0, zoom: 0 };
+  assert.ok(cameraSpeed(pose, { ...pose, zoom: 0.5 }, 0.5) > cameraSpeed(pose, pose, 0.5));
   const box = { displayW: 1280, displayH: 720 };
   const pace = createPicturePace();
   let seen = pace.step({ gap: 33, ...box, still: false, speed: 5, accel: 12 });

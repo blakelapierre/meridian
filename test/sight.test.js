@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { blendOrigin, maxZoom, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../src/sim/sight.js";
+import { blendOrigin, easeFollow, maxZoom, rangeRead, relaxOrbit, stepFollow, stepZoom, zoomFov } from "../src/sim/sight.js";
+
+test("the wheel sets follow distance and height instead of zooming", () => {
+  const out = stepFollow({ distance: 3.4, height: 0 }, 1);
+  assert.ok(out.distance > 3.4);
+  assert.ok(out.height > 0);
+  const inn = stepFollow(out, -1);
+  assert.ok(inn.distance < out.distance);
+  assert.ok(inn.height < out.height);
+  const eased = easeFollow({ distance: 3.4, height: 0 }, out, 0.05);
+  assert.ok(eased.distance > 3.4 && eased.distance < out.distance);
+});
 
 test("releasing the right mouse brings the orbit back behind the body", () => {
   const held = relaxOrbit(1.2, -0.4, 0.05, true);
