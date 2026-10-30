@@ -6,11 +6,15 @@ The focused view aims at vsync. A hidden tab paints about once a second. Extra f
 
 ## This pass
 
-Moving still targets the play resolution. The dim ring on the chart is not a sharper center in the world picture.
+The center of the picture keeps the second reflection bounce. The edge drops it. The buffer is still one resolution.
 
 ## Proves
 
 `test/pace.test.js`.
+
+## Next
+
+The edge always drops the second bounce, even when the picture is still.
 
 ## Later
 

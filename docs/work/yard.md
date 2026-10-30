@@ -6,11 +6,15 @@ The crate starts as 30 metal, 8 stone, and one solar fin. The footing anchors pi
 
 ## This pass
 
-Z on a door opens and shuts it. An open door is a thin post. M still places it.
+F places a floor for 2 stone. The floor does not yet support a post.
 
 ## Proves
 
 `test/build.test.js` still expects the salvaged metal. The fallen wall's spoil is asserted there too.
+
+## Next
+
+A floor does not count as support for a post.
 
 ## Later
 

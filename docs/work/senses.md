@@ -6,11 +6,15 @@ The map is a picture that stays. Looking paints sand, pits, stone, and wood. The
 
 ## This pass
 
-Outside the sense ring the chart is dimmed. Inside it, the ground you have seen stays as it was.
+The chart has two fogs. Inside half the sense radius is clear. Between that and the rim is a told tint. Outside the rim is the heavier dim.
 
 ## Proves
 
 `test/lore.test.js` for the tiers. The chart reads the label from the mark name.
+
+## Next
+
+The two fogs are on the chart only. The world picture has one light.
 
 ## Later
 

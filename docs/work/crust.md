@@ -6,11 +6,15 @@ The beach is a crust field. A dig writes air, sample `500`, inside the brush. Th
 
 ## This pass
 
-The line shows spoil as what you hold over the cap, for example `2/4`. A dig at the cap still says `full`.
+An edit whose mode is slump is refused. Certified sand does not slump.
 
 ## Proves
 
 `test/fill.test.js`.
+
+## Next
+
+The beach and the certified log still refuse slump. Nothing off the beach writes one either.
 
 ## Later
 

@@ -8,11 +8,15 @@ The line is a hitscan against the dummy when it connects. A miss becomes a bolt.
 
 ## This pass
 
-A bounce happens once. The next time the bolt meets the ground, it stays there.
+T plants a mission marker. A bolt in the air is pulled toward it. Nobody else fires.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+A mission pulls your own bolt. Another person in the cell cannot add fire to it.
 
 ## Later
 

@@ -10,11 +10,15 @@ Integrity starts at 100. Standing on the live dummy clubs it down. Eight seconds
 
 ## This pass
 
-The same bandage also splints the worse leg by 20, if it is hurt. It still spends one fiber.
+B uses a stick, if you have one and a leg is hurt, and does not spend fiber. You wake with one stick. Fiber still bandages when a stick is not used.
 
 ## Proves
 
 `test/hearth.test.js` covers the bruise and the down timer. `test/body.test.js` covers the limp factor.
+
+## Next
+
+A splint does not lower pain. The next cycle can take 5 pain with the stick.
 
 ## Later
 

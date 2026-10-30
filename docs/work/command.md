@@ -8,11 +8,15 @@ There is no war table, no overhead, and no company wallet. The AI clients are pe
 
 ## This pass
 
-You still cannot sit, and dominion is closed, so the empty wallet is not a table.
+Using the table while you are beside it and not in a strike sits you down. Walking stands you up. There is still no order to give.
 
 ## Proves
 
 Nothing to run.
+
+## Next
+
+Sitting gives no order. The table is a chair and not a company.
 
 ## Later
 

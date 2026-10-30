@@ -8,11 +8,15 @@ Metal pays for walls, the hearth, and the fin. Spoil is a crate you can see. Whe
 
 ## This pass
 
-Standing on a road is a little faster, about 15%. It still does not carry goods.
+V places a cart on a road and loads one metal. The cart rolls along the road and puts the metal down at the end.
 
 ## Proves
 
 The salvage path in `src/sim/build.js`. A pure test is not required for the metal number beyond the crate rules already in `test/build.test.js`.
+
+## Next
+
+A cart that reaches a gap puts the metal back at once. It does not wait.
 
 ## Later
 

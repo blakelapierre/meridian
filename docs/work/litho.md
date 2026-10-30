@@ -8,11 +8,15 @@ Nothing on the beach answers when you dig. A pit stays a pit. Off the beach, a p
 
 ## This pass
 
-`resonance` still summons nothing. Twenty digs only change the word on the line.
+Off the beach, while the resonance word is showing, a swarm sphere stands near you. It does not bite. The beach has none.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+The swarm does not flee and does not bite.
 
 ## Later
 

@@ -8,11 +8,15 @@ Hands are the default. A strike is a contract you walk into. Leaving the volume 
 
 ## This pass
 
-Dominion is not a clock you can be on. The line is `hands` or `strike` and nothing else.
+Sitting at the table names the clock `dominion`. Standing returns it to `hands`. It is not a second map.
 
 ## Proves
 
 `test/concept.test.js`.
+
+## Next
+
+Dominion while you sit is a word. The map under it is the same map.
 
 ## Later
 

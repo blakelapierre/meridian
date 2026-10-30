@@ -6,11 +6,15 @@
 
 ## This pass
 
-Z opens a door as well as turning a wall or a fin. The reload count stays on the line.
+G throws smoke when you are out of stone and you still have a smoke. The smoke sits where it was thrown.
 
 ## Proves
 
 `test/fill.test.js`.
+
+## Next
+
+A bolt that enters a smoke from outside is not stopped. Only a shot that starts inside it is.
 
 ## Later
 

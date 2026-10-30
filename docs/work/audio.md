@@ -20,11 +20,15 @@ K toggles the listener. The line says `muted` while it is off. The first cue als
 
 ## This pass
 
-Loudness falls off between 40 m and 80 m, and stays at a quarter past that. The sea is unchanged.
+A shot behind you is half as loud. Distance falloff is unchanged.
 
 ## Proves
 
 `test/audio.test.js` for the cue table and the stride gate. The context itself is not required in Node.
+
+## Next
+
+A shot behind you is half as loud, not silent.
 
 ## Later
 
