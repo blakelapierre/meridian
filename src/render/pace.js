@@ -28,7 +28,7 @@ export function coverLevel(targetW, targetH, rays) {
 }
 
 export function createPicturePace() {
-  let octave = 4;
+  let octave = 2;
   let finest = 0;
   let climbWait = 0;
   let sinceProbe = 0;
