@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=66";
 import { createFps } from "../render/fps.js";
-import { createPacer, createPicturePace, paceWord, pictureSize, viewStill } from "../render/pace.js?v=71";
+import { createPacer, createPicturePace, paceWord, pictureSize, viewStill } from "../render/pace.js?v=72";
 import {
   authority,
   bandage,
@@ -2237,7 +2237,7 @@ if (params.get("still") !== "1") {
     const displayH = Math.max(2, Math.floor(boxH));
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
-      : picture.step({ gap: decision.gap, displayW, displayH });
+      : picture.step({ gap: decision.gap, displayW, displayH, still });
     const trace = { width: paced.width, height: paced.height };
     canvas.dataset.traceW = String(trace.width);
     canvas.dataset.traceH = String(trace.height);
