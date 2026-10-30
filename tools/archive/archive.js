@@ -71,9 +71,8 @@ function showFail(error) {
 }
 
 function $(id) {
-  const node = document.querySelector(id);
-  if (!node) throw new Error(`missing ${id}`);
-  return node;
+  const selector = String(id).startsWith("#") ? id : `#${id}`;
+  return document.querySelector(selector);
 }
 
 function persist() {
@@ -211,15 +210,17 @@ function paint() {
   const tip = tipOf(chain).block;
   const behind = Math.max(0, terrain.log.seq - tip.seq);
   const status = $("status");
-  status.dataset.live = "1";
-  status.textContent = names.length
-    ? `linked ${names.join(" ")}`
-    : pending.length
-      ? `connecting ${pending.length}`
-      : "waiting for a player";
+  if (status) {
+    if (status.dataset) status.dataset.live = "1";
+    status.textContent = names.length
+      ? `linked ${names.join(" ")}`
+      : pending.length
+        ? `connecting ${pending.length}`
+        : "waiting for a player";
+  }
   const perf = $("perf");
   if (perf) {
-    perf.dataset.live = "1";
+    if (perf.dataset) perf.dataset.live = "1";
     perf.textContent = [
       `hash ${hashRate.toLocaleString("en-US")} / s`,
       `tried ${hashTotal.toLocaleString("en-US")}`,
@@ -351,7 +352,8 @@ async function seek() {
   paint();
 }
 
-$("claim").addEventListener("click", () => {
+const claim = $("claim");
+if (claim) claim.addEventListener("click", () => {
   const crate = claimCrate(ledger);
   $("note").textContent = crate
     ? `Claimed ${crate.metal} metal and ${crate.fiber} fiber on this receipt. A quorum still has to accept it. Nothing was minted here.`
@@ -359,7 +361,8 @@ $("claim").addEventListener("click", () => {
   paint();
 });
 
-$("receipt").addEventListener("click", async () => {
+const receipt = $("receipt");
+if (receipt) receipt.addEventListener("click", async () => {
   const signed = signReceipt(identity, ledger, Date.now());
   const text = JSON.stringify(signed);
   $("out").textContent = text;
