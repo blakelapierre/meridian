@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill, visualThroughput } from "../src/render/pace.js";
+import { cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, traceInterval, tuneRays, viewStill, visualThroughput } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -87,6 +87,12 @@ test("rapid acceleration holds vsync and a steady pace may use 12fps", () => {
   const grown = seen.scale;
   for (let i = 0; i < 8; i += 1) seen = pace.step({ gap: 50, ...box, still: false, speed: 5, accel: 12 });
   assert.ok(seen.scale <= grown);
+});
+
+test("the trace rate follows acceleration, and the screen can still refresh", () => {
+  assert.ok(traceInterval(false, 12, 16) <= 20);
+  assert.ok(Math.abs(traceInterval(false, 0, 16) - 1000 / 12) < 1);
+  assert.ok(traceInterval(true, 0, 16) >= 125);
 });
 
 test("a moving camera is pulled to at least 12fps in one step", () => {
