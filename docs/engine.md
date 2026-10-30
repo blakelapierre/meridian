@@ -32,7 +32,7 @@ The demo only intersects spheres. Meridian's `cast` keeps that loop and adds two
 
 Bodies, the dummy, and projectiles stay spheres. A standing character is drawn as a sphere of radius **0.35 m** until a capsule intersection exists. That sphere is the picture. It is not the merge collider.
 
-The GPU path follows the pin: sphere color from the hit normal, four reflection steps, and a sun shadow. A hit in the light asks whether a body or a box stands between it and the sun, and that patch is darkened. The picture size is chosen to raise visual throughput: pixels times the square of the frame rate actually shown, capped at the display. A frame under about 8 fps is discounted further. The canvas bitmap is that size, stretched with hard pixels. The corner counter shows the score as `info`. Orbit trails from that pen are not drawn.
+The GPU path follows the pin: sphere color from the hit normal, four reflection steps, and a sun shadow. A hit in the light asks whether a body or a box stands between it and the sun, and that patch is darkened. The picture size is chosen to raise visual throughput. The score is pixels times a motion weight: about 20 fps is fully weighted, 12 fps still counts, and under 12 the weight collapses, so a 2 fps frame does not win on resolution. A measured frame slower than 12 fps steps the picture down at once. The canvas bitmap is that size, stretched with hard pixels. The corner counter shows the score as `info`. Orbit trails from that pen are not drawn.
 
 ### Physics
 
