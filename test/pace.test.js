@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill, visualThroughput } from "../src/render/pace.js";
+import { cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill, visualThroughput } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -72,19 +72,20 @@ test("throughput is pixels times the frames you can see", () => {
   assert.ok(visualThroughput(200 * 100, 33, refresh) > visualThroughput(200 * 100, 16, refresh) * 0.99);
 });
 
-test("throughput multiplies by camera speed, and a brisk move holds vsync", () => {
+test("rapid acceleration holds vsync and a steady pace may use 12fps", () => {
   const refresh = 33;
   assert.ok(Math.abs(visualThroughput(100, 33, refresh, 2) - 4 * visualThroughput(100, 33, refresh, 1)) < 1);
   assert.ok(motionLimit(0, refresh) > 70);
-  assert.ok(motionLimit(2.2, refresh) > 65);
-  assert.ok(motionLimit(4.4, refresh) < 40);
+  assert.ok(motionLimit(4.4, refresh, 0) > 70);
+  assert.ok(motionLimit(4.4, refresh, 12) < 40);
+  assert.ok(cameraAccel(0, 4, 0.5) === 8);
   assert.ok(cameraSpeed({ x: 0, y: 0, yaw: 0, pitch: 0 }, { x: 4.4, y: 0, yaw: 0, pitch: 0 }, 1) > 4);
   const box = { displayW: 1280, displayH: 720 };
   const pace = createPicturePace();
-  let seen = pace.step({ gap: 33, ...box, still: false, speed: 5 });
-  for (let i = 0; i < 8; i += 1) seen = pace.step({ gap: 50, ...box, still: false, speed: 5 });
+  let seen = pace.step({ gap: 33, ...box, still: false, speed: 5, accel: 12 });
+  for (let i = 0; i < 8; i += 1) seen = pace.step({ gap: 50, ...box, still: false, speed: 5, accel: 12 });
   const grown = seen.scale;
-  for (let i = 0; i < 8; i += 1) seen = pace.step({ gap: 50, ...box, still: false, speed: 5 });
+  for (let i = 0; i < 8; i += 1) seen = pace.step({ gap: 50, ...box, still: false, speed: 5, accel: 12 });
   assert.ok(seen.scale <= grown);
 });
 
