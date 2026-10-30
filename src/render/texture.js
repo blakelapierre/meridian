@@ -3,6 +3,8 @@ export const TEX_TILE = 128;
 export const ATLAS_TILES = ATLAS / TEX_TILE;
 export const SAND_TILE = 32;
 export const WOOD_TILE = 33;
+export const GRASS_TILE = 34;
+export const ROCK_TILE = 35;
 
 export function makeTexture(width, height, fill) {
   const data = new Uint8Array(width * height * 4);
@@ -38,6 +40,26 @@ function texNoise(x, y) {
   return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
 }
 
+function wrapCoord(value, period) {
+  const span = Math.max(1, period);
+  return ((value % span) + span) % span;
+}
+
+function periodicNoise(x, y, period) {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const fx = x - x0;
+  const fy = y - y0;
+  const w = (value) => wrapCoord(value, period);
+  const a = texHash(w(x0), w(y0));
+  const b = texHash(w(x0 + 1), w(y0));
+  const c = texHash(w(x0), w(y0 + 1));
+  const d = texHash(w(x0 + 1), w(y0 + 1));
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+}
+
 export function rectFor(tile) {
   const col = tile % ATLAS_TILES;
   const row = (tile / ATLAS_TILES) | 0;
@@ -67,18 +89,44 @@ export function blitTexture(atlas, tile, tex) {
 
 let sand;
 let wood;
+let grass;
+let rock;
 let dummy;
 
 export function sandTexture() {
   if (!sand) {
     sand = makeTexture(128, 128, (x, y) => {
-      const grain = texNoise(x / 9, y / 9);
-      const speckle = texNoise(x / 3, y / 3);
-      const mix = grain * 0.75 + speckle * 0.25;
-      return [118 + mix * 90, 96 + mix * 70, 58 + mix * 36, 255];
+      const grain = periodicNoise(x / 8, y / 8, 16);
+      const speckle = periodicNoise(x / 2, y / 2, 64);
+      const mix = grain * 0.7 + speckle * 0.3;
+      return [118 + mix * 80, 96 + mix * 62, 58 + mix * 32, 255];
     });
   }
   return sand;
+}
+
+export function grassTexture() {
+  if (!grass) {
+    grass = makeTexture(128, 128, (x, y) => {
+      const clump = periodicNoise(x / 8, y / 8, 16);
+      const blade = periodicNoise(x / 2, y / 6, 64);
+      const mix = clump * 0.55 + blade * 0.45;
+      return [46 + mix * 40, 92 + mix * 70, 34 + mix * 24, 255];
+    });
+  }
+  return grass;
+}
+
+export function rockTexture() {
+  if (!rock) {
+    rock = makeTexture(128, 128, (x, y) => {
+      const face = periodicNoise(x / 8, y / 8, 16);
+      const crack = Math.abs(periodicNoise(x / 4, y / 8, 32) - 0.5);
+      const mix = face * 0.75 + (1 - crack) * 0.25;
+      return [92 + mix * 50, 88 + mix * 44, 80 + mix * 36, 255];
+    });
+  }
+  return rock;
 }
 
 export function woodTexture() {

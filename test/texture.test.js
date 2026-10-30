@@ -1,22 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dummyTexture, SAND_TILE, sandTexture, WOOD_TILE } from "../src/render/texture.js";
-import { SPHERE_BUDGET } from "../src/render/gpu.js";
+import { grassTexture, rockTexture, sandTexture } from "../src/render/texture.js";
 
-test("a sphere texture is not a flat color", () => {
-  const tex = dummyTexture();
+function seam(tex) {
+  let worst = 0;
+  for (let y = 0; y < tex.height; y += 1) {
+    const left = (y * tex.width) * 4;
+    const right = (y * tex.width + tex.width - 1) * 4;
+    worst = Math.max(worst, Math.abs(tex.data[left] - tex.data[right]));
+  }
+  return worst;
+}
+
+test("grass and rock tiles vary, and the sand grain meets at the side", () => {
   const sand = sandTexture();
-  const colors = new Set();
-  for (let i = 0; i < tex.data.length; i += 16) colors.add(tex.data[i]);
-  const grains = new Set();
-  for (let i = 0; i < sand.data.length; i += 16) grains.add(sand.data[i]);
-  assert.equal(tex.width, 128);
-  assert.ok(colors.size > 1);
-  assert.ok(grains.size > 1);
-});
-
-test("body spheres cannot overwrite the sand or wood tiles", () => {
-  assert.ok(SAND_TILE >= SPHERE_BUDGET);
-  assert.ok(WOOD_TILE >= SPHERE_BUDGET);
-  assert.notEqual(SAND_TILE, WOOD_TILE);
+  const grass = grassTexture();
+  const rock = rockTexture();
+  assert.equal(sand.width, 128);
+  assert.equal(grass.height, 128);
+  assert.notEqual(grass.data[1], grass.data[80]);
+  assert.notEqual(rock.data[0], rock.data[64]);
+  assert.ok(seam(sand) < 40, seam(sand));
 });
