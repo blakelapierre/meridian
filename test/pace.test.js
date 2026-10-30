@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coverLevel, createPacer, easePixels, fitPixels, nativePixels, nextScale, noteRayRate, paceWord, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill } from "../src/render/pace.js";
+import { coverLevel, createPacer, easePixels, fitPixels, nativePixels, nextScale, noteRayRate, paceOctave, paceWord, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -63,6 +63,15 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: true, arrived: true, holding: false }), "vsync recover");
   assert.equal(paceWord("vsync", { still: true, arrived: true, holding: true }), "vsync native");
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
+});
+
+test("a moving view gives up resolution to hold vsync, and a still view does not", () => {
+  assert.equal(paceOctave(0, { gap: 200, refresh: 16, still: false }), 3);
+  assert.equal(paceOctave(2, { gap: 50, refresh: 16, still: false }), 4);
+  assert.equal(paceOctave(3, { gap: 16, refresh: 16, still: false }), 3);
+  assert.equal(paceOctave(3, { gap: 8, refresh: 16, still: false }), 3);
+  assert.equal(paceOctave(3, { gap: 8, refresh: 16, still: false, climb: true }), 2);
+  assert.equal(paceOctave(4, { gap: 200, refresh: 16, still: true }), 3);
 });
 
 test("resolution climbs one octave toward the window and steps back when a frame misses", () => {
