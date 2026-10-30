@@ -5,7 +5,7 @@ Decisions that have to be true before the first client commit. Player rules stay
 
 Implementation has started under these locks: `src/` holds the engine port, sim, net, and render code for the Atoll slice, and `test/` holds the Node test suite. See the README status table.
 
-**Running tests.** `npm install`, then `npm test` (Node's built-in `node --test`). Five two-browser tests (`link`, `dig-link`, `shot-link`, `view`) need a headless Chromium; set `MERIDIAN_CHROME` to its path, otherwise they skip. As of 29 Oct 2026: 57 tests, 52 pass, 5 skip without Chromium.
+**Running tests.** `npm install`, then `npm test` (Node's built-in `node --test`). Five two-browser tests (in `link`, `dig-link`, `shot-link`, `view`) need a headless Chromium; set `MERIDIAN_CHROME` to its path, otherwise they skip. As of 30 Oct 2026: 148 tests, 143 pass, 5 skip without Chromium.
 
 Note: `src/render/gpu.js` adds a WebGL2 ray pass with the software raycaster as fallback. §1 still lists WebGL as forbidden as the *primary* path; reconcile §1 with that commit.
 
