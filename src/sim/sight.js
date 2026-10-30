@@ -77,6 +77,21 @@ export function stepZoom(state, direction, skill, optic = "none") {
   return next;
 }
 
+export function stepFollow(state, direction) {
+  const sign = direction < 0 ? -1 : 1;
+  const distance = Math.min(FAR, Math.max(CLOSE, (state.distance ?? 3.4) + sign * 0.7));
+  const height = Math.min(5, Math.max(-0.35, (state.height ?? 0) + sign * 0.35));
+  return { distance, height };
+}
+
+export function easeFollow(current, target, dt) {
+  const k = 1 - Math.exp(-Math.max(0, dt) * 5);
+  return {
+    distance: current.distance + ((target.distance ?? current.distance) - current.distance) * k,
+    height: current.height + ((target.height ?? current.height) - current.height) * k,
+  };
+}
+
 export function rangeRead(distance, skill, optic = "none") {
   if (distance == null || !Number.isFinite(distance)) return null;
   const trained = Math.max(0, Math.min(140, skill));

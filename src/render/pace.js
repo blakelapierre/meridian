@@ -31,7 +31,10 @@ export function cameraSpeed(previous, next, dt) {
   if (!previous || !next || !(dt > 0)) return 0;
   const travel = Math.hypot((next.x || 0) - (previous.x || 0), (next.y || 0) - (previous.y || 0)) / dt;
   const turn = Math.hypot((next.yaw || 0) - (previous.yaw || 0), (next.pitch || 0) - (previous.pitch || 0)) / dt;
-  return travel + turn * 4;
+  const dolly = Math.abs((next.distance || 0) - (previous.distance || 0)) / dt;
+  const lift = Math.abs((next.height || 0) - (previous.height || 0)) / dt;
+  const zoom = Math.abs((next.zoom || 0) - (previous.zoom || 0)) / dt;
+  return travel + turn * 4 + dolly + lift * 2 + zoom * 8;
 }
 
 export function traceInterval(still, accel, refreshMs) {
@@ -199,6 +202,8 @@ export function viewStill(previous, next) {
   if (Math.abs(next.pitch - previous.pitch) > 0.004) return false;
   if (Math.abs((next.distance || 0) - (previous.distance || 0)) > 0.02) return false;
   if (Math.abs((next.orbit || 0) - (previous.orbit || 0)) > 0.004) return false;
+  if (Math.abs((next.height || 0) - (previous.height || 0)) > 0.015) return false;
+  if (Math.abs((next.zoom || 0) - (previous.zoom || 0)) > 0.004) return false;
   return Math.hypot(next.x - previous.x, next.y - previous.y) <= 0.03;
 }
 

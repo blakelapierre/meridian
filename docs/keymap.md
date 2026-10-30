@@ -21,7 +21,7 @@ Slice keys. Later screens do not get to steal these. Hands are first person: the
 | 2 | Secondary | — | — | — |
 | 3 | Tool (bit or hammer) | — | — | — |
 | 4 | Select utility. Press again to cycle the four strike slots | — | — | — |
-| Wheel | Next or previous among 1–4 | — | — | — |
+| Wheel | Follow distance and height. Scroll out to sit farther and higher | same | same | same |
 | G | Throw the selected utility | — | — | — |
 | B | — | — | — | Buy menu. Hidden outside the window |
 | Tab | Cycle people. Shift goes backward | same | same | same |

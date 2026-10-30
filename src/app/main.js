@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=68";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=78";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=79";
 import {
   authority,
   bandage,
@@ -59,7 +59,7 @@ import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
 import { paintChart } from "../render/chart.js?v=66";
-import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
+import { blendDir, blendOrigin, CLOSE, easeFollow, OPTICS, rangeRead, relaxOrbit, stepFollow, zoomFov } from "../sim/sight.js?v=8";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
@@ -260,6 +260,8 @@ let easedPixels = null;
 let orbitYaw = 0;
 let orbitPitch = 0;
 let cameraDistance = CHASE;
+let follow = { distance: CHASE, height: 0 };
+let followAim = { distance: CHASE, height: 0 };
 let rightDown = false;
 let rightMoved = false;
 let optics = "none";
@@ -617,14 +619,7 @@ function playerPress(code) {
 }
 
 function turnWheel(direction) {
-  const before = zoom.level;
-  const wasFirst = zoom.first;
-  zoom = stepZoom(zoom, direction, skills.eyesight.value + skills.focus.value * 0.5, optics);
-  cameraDistance = zoom.distance;
-  if ((zoom.first && !wasFirst) || zoom.level > before) {
-    grantUse(skills, "eyesight", { tick, gap: 30 });
-    grantUse(skills, "focus", { tick, gap: 45 });
-  }
+  followAim = stepFollow(followAim, direction);
 }
 
 function useRightClick() {
@@ -718,6 +713,8 @@ function cameraAim(sample = {}) {
 }
 
 function aimCamera(sample, dt) {
+  follow = easeFollow(follow, followAim, dt);
+  cameraDistance = follow.distance;
   const eased = relaxOrbit(orbitYaw, orbitPitch, dt, rightDown);
   orbitYaw = eased.yaw;
   orbitPitch = eased.pitch;
@@ -734,6 +731,7 @@ function aimCamera(sample, dt) {
     followId ? false : !!sample.crouch,
     aim.third ? aim.distance : CLOSE,
   );
+  behind[2] += follow.height;
   const blend = aim.third ? zoom.blend : 1;
   let ideal = blendOrigin(behind, eyes, blend);
   let idealLook = blendDir(lookDirection(aim.yaw, aim.pitch), lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch), blend);
@@ -741,6 +739,7 @@ function aimCamera(sample, dt) {
     ? frameCamera(feet, selection.point, aim.distance || CHASE)
     : null;
   if (framing) {
+    framing.origin[2] += follow.height;
     ideal = blendOrigin(framing.origin, eyes, blend);
     idealLook = blendDir(framing.dir, lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch), blend);
   }
@@ -2228,8 +2227,10 @@ if (params.get("still") !== "1") {
       y: player.position[1],
       yaw,
       pitch,
-      distance: cameraDistance,
+      distance: follow.distance,
+      height: follow.height,
       orbit: orbitYaw,
+      zoom: (zoom.level || 0) + (zoom.blend || 0),
       busy: rightDown || keys.has("KeyW") || keys.has("KeyA") || keys.has("KeyS") || keys.has("KeyD") || keys.has("KeyZ") || keys.has("KeyC"),
     };
     const speed = cameraSpeed(stillPose, stillSample, dt);
