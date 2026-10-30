@@ -35,36 +35,68 @@ export function nextSlot(slot, code, chosen) {
   return { slot: slot === "bit" ? "hammer" : "bit", chosen: true };
 }
 
+// The first minute. Each step has a goal in metres (x east, y north) the page marks on screen
+// with its distance, a radius that counts as arrived, and the slot it hands the player.
+// Positions follow content/atoll.json: dummy (10, -125), pad (0, -125), gate volume from y -110.
+export const TOUR_START = { x: 0, y: -133, yaw: 0 };
 export const TOUR = [
-  { id: "walk", desktop: "Click the picture, then hold W to walk. Move the mouse to look.", touch: "Drag the left side to walk. Drag the right side to look.", done: "Walked" },
-  { id: "shoot", desktop: "Press 1 for the line. Aim at the red dummy and click.", touch: "Tap 1 Line. Aim at the red dummy and tap Fire.", done: "Hit the dummy" },
-  { id: "dig", desktop: "Press 3 for the bit. Look down at the sand and hold the mouse.", touch: "Tap 3 Tool. Look down at the sand and hold Fire.", done: "Dug a pit" },
-  { id: "map", desktop: "Press M for the map.", touch: "Tap M Map.", done: "Opened the map" },
+  { id: "walk", goal: [0, -125, 0], radius: 4, name: "marker",
+    desktop: "Click the picture, then hold W to walk to the yellow marker.",
+    touch: "Drag the left side to walk to the yellow marker.", done: "Made it" },
+  { id: "shoot", goal: [10, -125, 1.3], name: "dummy", slot: "line", face: true,
+    desktop: "Put the white dot on the red dummy and click to shoot.",
+    touch: "Drag the right side to put the dot on the red dummy, then tap Fire.", done: "Hit the dummy" },
+  { id: "dig", slot: "bit", pitch: -1.1,
+    desktop: "Hold the mouse button to dig the sand at your feet.",
+    touch: "Hold Fire to dig the sand at your feet.", done: "Dug a pit" },
+  { id: "gate", goal: [0, -106, 0], radius: 7, name: "gate", face: true,
+    desktop: "Hold W to walk to the gate marker, then press E to join the strike.",
+    touch: "Walk to the gate marker, then tap E Use to join the strike.", done: "Joined the strike" },
 ];
+export const TOUR_KEY = "meridian-tour-2";
 
 export function createTour(done = []) {
-  return { index: TOUR.findIndex((step) => !done.includes(step.id)), confirm: "", confirmUntil: 0 };
+  return { index: TOUR.findIndex((step) => !done.includes(step.id)), confirm: "", confirmUntil: 0, skip: false };
 }
 
-// facts: { walked: metres, hits, digs, mapOpen }. Returns true when a step just finished.
+// The angle in radians between the look direction and the direction to the goal (yaw 0 is north).
+export function goalOffset(from, yaw, goal) {
+  const bearing = Math.atan2(goal[0] - from[0], goal[1] - from[1]);
+  let off = bearing - yaw;
+  while (off > Math.PI) off -= 2 * Math.PI;
+  while (off < -Math.PI) off += 2 * Math.PI;
+  return off;
+}
+
+// facts: { position, yaw, hits, nearShots, digs, joined }. Returns true when a step just finished.
+// Generous: a shot within about 8 degrees of the dummy counts, and a skip always counts.
 export function stepTour(tour, facts, now) {
   if (tour.index < 0) return false;
   const step = TOUR[tour.index];
-  const met = step.id === "walk" ? facts.walked >= 3
-    : step.id === "shoot" ? facts.hits > 0
+  const near = step.goal && facts.position
+    ? Math.hypot(step.goal[0] - facts.position[0], step.goal[1] - facts.position[1]) <= (step.radius || 0)
+    : false;
+  const met = tour.skip
+    || (step.id === "walk" ? near
+    : step.id === "shoot" ? facts.hits > 0 || facts.nearShots > 0
     : step.id === "dig" ? facts.digs > 0
-    : facts.mapOpen;
+    : facts.joined);
   if (!met) return false;
-  tour.confirm = step.done;
+  tour.confirm = tour.skip ? "Skipped" : step.done;
+  tour.skip = false;
   tour.confirmUntil = now + 2500;
   tour.index += 1;
   if (tour.index >= TOUR.length) tour.index = -1;
   return true;
 }
 
+export function tourStep(tour) {
+  return tour && tour.index >= 0 ? TOUR[tour.index] : null;
+}
+
 export function tourLine(tour, touch, now) {
   const tick = tour.confirmUntil > now && tour.confirm ? `✓ ${tour.confirm}. ` : "";
-  if (tour.index < 0) return tick ? `${tick}That is the first minute. F3 shows the debug panels.` : "";
+  if (tour.index < 0) return tick ? `${tick}That is the first minute. The world is yours.` : "";
   const step = TOUR[tour.index];
   return `${tick}${tour.index + 1}/${TOUR.length} ${touch ? step.touch : step.desktop}`;
 }

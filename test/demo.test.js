@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createTour, demoMode, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, TOUR } from "../src/app/demo.js";
+import { createTour, demoMode, goalOffset, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR, TOUR_START } from "../src/app/demo.js";
 
 const q = (search) => new URLSearchParams(search);
 
@@ -45,29 +45,46 @@ test("3 takes the bit out first, then swaps bit and hammer", () => {
   assert.equal(nextSlot("hammer", "Digit1", true).slot, "line");
 });
 
-test("the tour walks, shoots, digs, and maps with a confirmation for each", () => {
+test("the tour walks to the marker, shoots, digs, and joins at the gate", () => {
   const tour = createTour();
-  const facts = { walked: 0, hits: 0, digs: 0, mapOpen: false };
-  assert.match(tourLine(tour, false, 0), /^1\/4 .*W/);
+  const facts = { position: [TOUR_START.x, TOUR_START.y, 0], yaw: 0, hits: 0, nearShots: 0, digs: 0, joined: false };
+  assert.match(tourLine(tour, false, 0), /^1\/4 .*W.*marker/);
   assert.match(tourLine(tour, true, 0), /Drag the left side/);
-  facts.walked = 4;
+  assert.equal(stepTour(tour, facts, 0), false, "the spawn is not the marker");
+  const start = TOUR[0].goal;
+  assert.ok(Math.hypot(start[0] - TOUR_START.x, start[1] - TOUR_START.y) < 10, "the marker is a few steps away");
+  assert.ok(Math.abs(goalOffset([TOUR_START.x, TOUR_START.y], TOUR_START.yaw, start)) < 0.2, "the spawn faces the marker");
+  facts.position = [1, -127.5, 0];
   assert.equal(stepTour(tour, facts, 100), true);
-  assert.match(tourLine(tour, false, 200), /^✓ Walked\. 2\/4 /);
+  assert.match(tourLine(tour, false, 200), /^✓ Made it\. 2\/4 .*dummy/);
+  assert.equal(tourStep(tour).slot, "line", "the shoot step hands over the line");
   assert.doesNotMatch(tourLine(tour, false, 5000), /✓/);
   facts.digs = 1;
   assert.equal(stepTour(tour, facts, 300), false, "shoot comes before dig");
-  facts.hits = 1;
-  stepTour(tour, facts, 400);
-  stepTour(tour, facts, 500);
-  facts.mapOpen = true;
-  stepTour(tour, facts, 600);
+  facts.nearShots = 1;
+  assert.equal(stepTour(tour, facts, 400), true, "a near miss counts");
+  assert.equal(tourStep(tour).slot, "bit");
+  assert.equal(stepTour(tour, facts, 500), true);
+  assert.equal(tourStep(tour).id, "gate");
+  assert.equal(stepTour(tour, facts, 600), false);
+  facts.joined = true;
+  assert.equal(stepTour(tour, facts, 700), true);
   assert.equal(tour.index, -1);
-  assert.deepEqual(tourDone(tour), TOUR.map((step) => step.id));
-  assert.match(tourLine(tour, false, 700), /Opened the map/);
-  assert.equal(tourLine(tour, false, 9000), "");
+  assert.deepEqual(tourDone(tour), ["walk", "shoot", "dig", "gate"]);
+  assert.match(tourLine(tour, false, 800), /Joined the strike/);
   assert.equal(createTour(tourDone(tour)).index, -1);
 });
 
+test("skip moves on from any step and goal offsets point the right way", () => {
+  const tour = createTour();
+  tour.skip = true;
+  assert.equal(stepTour(tour, { position: [0, -200, 0] }, 0), true);
+  assert.match(tourLine(tour, false, 10), /Skipped/);
+  assert.equal(tour.index, 1);
+  assert.ok(goalOffset([0, 0], 0, [10, 0]) > 1.5, "east is to the right of north");
+  assert.ok(goalOffset([0, 0], 0, [-10, 0]) < -1.5);
+  assert.ok(Math.abs(goalOffset([0, 0], Math.PI / 2, [10, 0])) < 1e-9);
+});
 test("the view loads the demo pieces with fresh cache keys", () => {
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   const view = readFileSync(new URL("../tools/view/index.html", import.meta.url), "utf8");
