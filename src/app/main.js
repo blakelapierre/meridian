@@ -1,5 +1,6 @@
 import { paintFrame } from "../engine/frame.js";
-import { mountTouch } from "./touch.js?v=2";
+import { mountTouch, wantsTouch } from "./touch.js?v=3";
+import { createTour, demoMode, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine } from "./demo.js?v=1";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
@@ -150,6 +151,10 @@ if (bootBus) {
   };
 }
 const quiet = params.get("quiet") === "1";
+const demo = demoMode(params, location.hostname);
+document.documentElement.classList.toggle("demo", demo);
+const touchy = wantsTouch(window);
+const digDemo = params.get("dig") === "1";
 const followId = params.get("follow");
 const agendaName = params.get("ai");
 const extra = quiet || Boolean(followId) || Boolean(agendaName);
@@ -169,17 +174,21 @@ const catalogHex = await Promise.all([
   fetch(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.arrayBuffer()),
   fetch(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
 ]).then(([atollBytes, catalogBytes]) => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
+const lighthouseConfig = await fetch(new URL("../../content/lighthouse.json?v=1", import.meta.url))
+  .then((response) => (response.ok ? response.json() : null))
+  .catch(() => null);
+const signalUrl = lighthouseUrl(params, location.hostname, lighthouseConfig);
 const home = agent ? AGENDAS[agendaName].home : null;
 const spawn = home
   ? { x: home[0] * 100, y: home[1] * 100, z: 0 }
   : params.get("gate") === "1"
-  ? { x: 0, y: -11200, z: 0 }
+  ? { x: 0, y: -10900, z: 0 }
   : params.get("look") === "dummy" ? atoll.placements.accuracyPad : atoll.placements.spawnFeet;
 const player = createPlayer([spawn.x / 100, spawn.y / 100, spawn.z / 100]);
 const world = createPlayerWorld(player);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
-const keepSlot = followId || params.get("look") || params.get("gate") || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
+const keepSlot = followId || params.get("look") || params.get("gate") || digDemo || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
 const keptStore = browserStore();
 if (freshBoot) {
   forgetKept(keptStore);
@@ -224,8 +233,16 @@ let slot = params.get("look") === "dummy" ? "line" : "bit";
 let raising = null;
 let work = null;
 const fps = createFps();
-let yaw = params.get("autobit") === "1" ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : 0);
-let pitch = params.get("autobit") === "1" ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
+let slotChosen = false;
+const tourKey = "meridian-tour";
+const tour = (demo || params.get("tour") === "1") && params.get("tour") !== "0" && !followId && !agendaName
+  ? createTour(params.get("tour") === "1" ? [] : (() => { try { return JSON.parse(localStorage.getItem(tourKey) || "[]"); } catch { return []; } })())
+  : null;
+const tourFacts = { walked: 0, hits: 0, digs: 0, mapOpen: false };
+let tourLast = null;
+let shotFlash = { text: "", until: 0 };
+let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : 0);
+let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
 let tick = (0.87 / (Math.PI * 2)) * DAY_TICKS;
 let trigger = false;
@@ -264,7 +281,6 @@ let mapZoom = 1;
 let mapFollow = true;
 let mapCenter = [0, -150];
 let mapDrag = null;
-let lookRelease = false;
 const friends = new Map();
 const seenPeople = new Map();
 const vitals = createVitals();
@@ -498,7 +514,12 @@ addEventListener("keydown", (event) => {
   if (event.code === "Tab") cycleEdge = event.shiftKey ? -1 : 1;
   if (event.code === "Backquote") objectEdge = event.shiftKey ? -1 : 1;
   if (event.code === "KeyQ" && !followId) autoRun = !autoRun;
+  if (event.code === "F3") {
+    event.preventDefault();
+    document.documentElement.classList.toggle("demo");
+  }
   if (event.code === "KeyM") {
+    tourFacts.mapOpen = true;
     mapMode = mapMode === "small" ? "full" : mapMode === "full" ? "none" : "small";
     showChart();
   }
@@ -609,11 +630,6 @@ addEventListener("keydown", (event) => {
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
 canvas.addEventListener("mousedown", (event) => {
-  if (event.button === 0 && document.pointerLockElement === canvas) {
-    lookRelease = true;
-    document.exitPointerLock();
-    return;
-  }
   if (event.button === 2) {
     rightDown = true;
     rightMoved = false;
@@ -632,12 +648,9 @@ addEventListener("mouseup", (event) => {
   useRightClick();
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+// A click while the cursor is held fires. Esc gives the cursor back.
 canvas.addEventListener("click", () => {
-  if (lookRelease) {
-    lookRelease = false;
-    return;
-  }
-  canvas.requestPointerLock();
+  if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
 });
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
@@ -690,8 +703,7 @@ function input() {
 }
 
 function playerPress(code) {
-  if (code === "Digit1") slot = "line";
-  if (code === "Digit3") slot = slot === "bit" ? "hammer" : "bit";
+  if (code === "Digit1" || code === "Digit3") ({ slot, chosen: slotChosen } = nextSlot(slot, code, slotChosen));
   if (code === "KeyE") {
     if (entryState.prompt) useEdge = true;
     else selectEdge = true;
@@ -730,7 +742,10 @@ function applyAgenda(command) {
   yaw = command.yaw;
   if (command.pitch != null) pitch = command.pitch;
   if (command.slot === "line") playerPress("Digit1");
-  else if ((command.slot === "bit" || command.slot === "hammer") && slot !== command.slot) playerPress("Digit3");
+  else if ((command.slot === "bit" || command.slot === "hammer") && slot !== command.slot) {
+    playerPress("Digit3");
+    if (slot !== command.slot) playerPress("Digit3");
+  }
   if (command.identify) playerPress("KeyE");
   trigger = !!command.hold;
   if (command.shot) shotQueued = true;
@@ -1345,6 +1360,34 @@ function paintNet() {
   ].filter(Boolean).join("\n");
 }
 
+function paintHint() {
+  const node = document.querySelector("#hint");
+  if (!node) return;
+  const now = performance.now();
+  if (tour) {
+    if (tourLast) tourFacts.walked += Math.hypot(player.position[0] - tourLast[0], player.position[1] - tourLast[1]);
+    tourLast = [player.position[0], player.position[1]];
+    tourFacts.digs = digs;
+    if (stepTour(tour, tourFacts, now)) {
+      try { localStorage.setItem(tourKey, JSON.stringify(tourDone(tour))); } catch {}
+    }
+  }
+  let line = tour ? tourLine(tour, touchy, now) : "";
+  if (!line && demo) {
+    if (entryState.prompt && !entryState.joined) line = touchy ? `Tap E Use to join ${entryState.prompt}.` : `Press E to join ${entryState.prompt}.`;
+    else if (!touchy && document.pointerLockElement !== canvas) line = "Click the picture to look. Esc gives the cursor back.";
+  }
+  if (node.textContent !== line) node.textContent = line;
+  node.hidden = !line;
+  canvas.dataset.hint = line;
+  canvas.dataset.tour = tour ? String(tour.index) : "";
+  const fx = document.querySelector("#shotfx");
+  if (fx && shotFlash.until && now > shotFlash.until) {
+    fx.className = "";
+    shotFlash.until = 0;
+  }
+}
+
 function publish() {
   const voxel = terrain.voxel();
   const tip = tipOf(worldChain).block;
@@ -1414,6 +1457,7 @@ function publish() {
   const autoNote = autoRun ? " · auto" : "";
   if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   paintNet();
+  paintHint();
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -1422,7 +1466,8 @@ function publish() {
   const glide = canvas.dataset.speed ? ` · ${canvas.dataset.speed}m/s${canvas.dataset.accel ? ` · a ${canvas.dataset.accel}` : ""}` : "";
   const buf = canvas.dataset.traceW ? ` · buf ${canvas.dataset.traceW}×${canvas.dataset.traceH}` : "";
   const gazeNote = canvas.dataset.gaze ? ` · gaze ${canvas.dataset.gaze}m` : "";
-  if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}${buf}${gazeNote}${info}${glide}`;
+  if (counter && document.documentElement.classList.contains("demo")) counter.textContent = `${rate} fps`;
+  else if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}${buf}${gazeNote}${info}${glide}`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = shown === null ? "" : String(shown);
@@ -1509,13 +1554,23 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   return scene;
 }
 
+function flashShot(text) {
+  shotFlash = { text, until: performance.now() + (text === "reload" ? 500 : 350) };
+  const node = document.querySelector("#shotfx");
+  if (!node) return;
+  node.textContent = text;
+  node.className = `on ${text}`;
+}
+
 function fire(sample) {
   if (shotLock > 0) {
     report = "lock";
+    flashShot("reload");
     return;
   }
   if (reloadBeat > 0) {
     report = "reload";
+    flashShot("reload");
     return;
   }
   const scene = sceneFor(sample, canvas.width, canvas.height);
@@ -1570,6 +1625,8 @@ function fire(sample) {
     bonds.delete(selection.id);
   }
   if (!shot.hitbox) bolts.push(startBolt(eye, shot.dir));
+  if (shot.hitbox) tourFacts.hits += 1;
+  flashShot(shot.hitbox ? `hit ${shot.hitbox}` : "miss");
   const look = lookDirection(sample.yaw, sample.pitch);
   const facing = look[0] * shot.dir[0] + look[1] * shot.dir[1] + look[2] * shot.dir[2];
   hear("shot", (shot.hitbox ? 1 : 0.35) * crackGain(Math.hypot(player.position[0] - atoll.placements.dummy.x / 100, player.position[1] - atoll.placements.dummy.y / 100)) * frontGain(facing), Math.max(-1, Math.min(1, shot.dir[0])));
@@ -1750,14 +1807,26 @@ function witnessed() {
 }
 
 function ensureRoom() {
+  if (!roomReady && !signalUrl) {
+    roomReady = Promise.reject(new Error("solo"));
+    roomReady.catch(() => {});
+  }
   if (!roomReady) {
     const room = createRoom({
-      url: params.get("signal") || "ws://127.0.0.1:8787",
+      url: signalUrl,
       me: meId,
       role: "player",
       catalog: catalogHex,
     });
-    roomReady = room.start().then(() => room);
+    // A lighthouse that does not answer in 3 s means solo. Try again in 30 s.
+    roomReady = Promise.race([
+      room.start().then(() => room),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("lighthouse timeout")), 3000)),
+    ]);
+    roomReady.catch(() => {
+      room.close();
+      setTimeout(() => { roomReady = null; }, 30000);
+    });
   }
   return roomReady;
 }
@@ -1844,12 +1913,17 @@ async function link() {
   }));
 }
 
+const meetPlayers = !peer && !followId && !agendaName && params.get("solo") !== "1" && Boolean(signalUrl);
+
 async function seekArchives() {
   try {
     const room = await ensureRoom();
     const peers = await room.list();
     for (const found of peers) {
       if (found.role === "archive" && acceptHello(catalogHex, found.catalog)) openLink(found.pubkey, false, "archive");
+      // On a shared lighthouse, meet the other players in the cell. The lower id offers.
+      else if (meetPlayers && found.role === "player" && found.pubkey !== meId && acceptHello(catalogHex, found.catalog)
+        && links.filter((item) => item.role === "player").length < 8) openLink(found.pubkey, meId < found.pubkey, "player");
     }
   } catch {
     // No lighthouse means no archive. Digs stay solo.
