@@ -34,6 +34,14 @@ export function cameraSpeed(previous, next, dt) {
   return travel + turn * 4;
 }
 
+export function traceInterval(still, accel, refreshMs) {
+  const refresh = Math.min(Math.max(refreshMs || 16, 1000 / 120), 1000 / 20);
+  const surge = Math.min(1, Math.max(0, accel) / 8);
+  if (surge >= 0.5) return refresh;
+  if (still) return Math.max(refresh, 125);
+  return Math.max(refresh, 1000 / 12);
+}
+
 export function cameraAccel(previous, next, dt) {
   if (!(dt > 0)) return 0;
   return Math.abs((next || 0) - (previous || 0)) / dt;

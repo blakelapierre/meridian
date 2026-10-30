@@ -4,9 +4,9 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=66";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=67";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, viewStill } from "../render/pace.js?v=76";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, paceWord, pictureSize, traceInterval, viewStill } from "../render/pace.js?v=77";
 import {
   authority,
   bandage,
@@ -1280,7 +1280,8 @@ function publish() {
   const cadence = Number(canvas.dataset.cadence) > 0 ? ` · ${Math.round(1000 / Number(canvas.dataset.cadence))}Hz` : "";
   const info = Number(canvas.dataset.info) > 0 ? ` · info ${Number(canvas.dataset.info) >= 1e6 ? `${(Number(canvas.dataset.info) / 1e6).toFixed(1)}M` : Number(canvas.dataset.info) >= 1e3 ? `${Math.round(Number(canvas.dataset.info) / 1e3)}k` : Math.round(Number(canvas.dataset.info))}` : "";
   const glide = canvas.dataset.speed ? ` · ${canvas.dataset.speed}m/s${canvas.dataset.accel ? ` · a ${canvas.dataset.accel}` : ""}` : "";
-  if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}${info}${glide}`;
+  const buf = canvas.dataset.traceW ? ` · buf ${canvas.dataset.traceW}×${canvas.dataset.traceH}` : "";
+  if (counter) counter.textContent = `${rate} fps${cadence} · ${canvas.width}×${canvas.height}${buf}${info}${glide}`;
   canvas.dataset.walls = String(walls);
   canvas.dataset.metal = String(yard.metal);
   canvas.dataset.voxel = shown === null ? "" : String(shown);
@@ -1316,8 +1317,8 @@ function markTarget(scene) {
   el.dataset.edge = screen.x < 0 || screen.x > 1 || screen.y < 0 || screen.y > 1 ? "edge" : "";
 }
 
-function paint(sample) {
-  const scene = sceneFor(sample, canvas.width, canvas.height);
+function paint(sample, width = canvas.width, height = canvas.height) {
+  const scene = sceneFor(sample, width, height);
   scene.prints = prints;
   scene.work = work;
   scene.time = tick / 30;
@@ -1335,7 +1336,7 @@ function paint(sample) {
   canvas.dataset.center = `${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)}`;
   showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
   if (painter) {
-    const drew = painter.paint(scene);
+    const drew = painter.paint(scene, width, height);
     if (!drew) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
     return scene;
   }
@@ -1756,6 +1757,9 @@ if (params.get("still") !== "1") {
     setInterval(() => { seekArchives(); }, 3000);
   }
   const pacer = createPacer();
+  let issued = false;
+  let blend = 1;
+  let lastTrace = 0;
   let last = performance.now();
   let bank = 0;
   const frame = (now) => {
@@ -2244,7 +2248,8 @@ if (params.get("still") !== "1") {
     const displayH = Math.max(2, Math.floor(boxH));
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
-      : picture.step({ gap: decision.gap, displayW, displayH, still, speed, accel });
+      : picture.step({ gap: issued ? decision.gap : 0, displayW, displayH, still, speed, accel });
+    issued = false;
     const trace = { width: paced.width, height: paced.height };
     canvas.dataset.traceW = String(trace.width);
     canvas.dataset.traceH = String(trace.height);
@@ -2252,8 +2257,8 @@ if (params.get("still") !== "1") {
     canvas.dataset.detail = "0";
     canvas.style.imageRendering = trace.width >= displayW - 4 ? "auto" : "pixelated";
     if (painter) {
-      if (canvas.width !== trace.width) canvas.width = trace.width;
-      if (canvas.height !== trace.height) canvas.height = trace.height;
+      if (canvas.width !== displayW) canvas.width = displayW;
+      if (canvas.height !== displayH) canvas.height = displayH;
     } else {
       fitCanvas(canvas, viewScale, easedPixels);
     }
@@ -2266,18 +2271,25 @@ if (params.get("still") !== "1") {
     const late = !extra && active && decision.gap > (paced.refresh || decision.refresh) * 1.35;
     const paceLabel = late ? "behind" : paceWord(decision.mode, { still, arrived, holding: decision.holding });
     canvas.dataset.pace = paceLabel;
-    if (params.get("nopaint") !== "1" && decision.paint) {
+    const interval = extra ? Math.max(decision.interval || 1000, 250) : traceInterval(still, accel, paced.refresh || decision.refresh);
+    canvas.dataset.traceMs = String(Math.round(interval));
+    const due = extra ? decision.paint : active ? now - lastTrace >= interval * 0.85 : decision.paint;
+    if (params.get("nopaint") !== "1" && due) {
       const started = performance.now();
-      paint(sample);
+      paint(sample, trace.width, trace.height);
       const paintMs = performance.now() - started;
-      if (!extra) {
-        lastPaintMs = paintMs;
-      }
+      if (!extra) lastPaintMs = paintMs;
       pacer.note(paintMs, active, still);
-      canvas.dataset.fps = String(fps.paint(now));
-      const fpsNode = document.querySelector("#fps");
-      if (fpsNode) fpsNode.style.color = String(canvas.dataset.pace || "").includes("recover") ? "#fc8" : "#9f9";
+      lastTrace = now;
+      issued = true;
+      blend = 0;
     }
+    const fade = Math.min(0.12, Math.max(0.03, interval / 1000));
+    blend = Math.min(1, blend + dt / fade);
+    if (painter && painter.present) painter.present(blend);
+    canvas.dataset.fps = String(fps.paint(now));
+    const fpsNode = document.querySelector("#fps");
+    if (fpsNode) fpsNode.style.color = String(canvas.dataset.pace || "").includes("recover") ? "#fc8" : "#9f9";
     if (!extra && paceBus) {
       const spare = decision.holding && paced.scale > 0.98 && lastPaintMs > 0 && lastPaintMs < decision.refresh * 0.55;
       paceBus.postMessage({ role: "primary", holding: spare });
