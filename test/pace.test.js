@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coverLevel, createPacer, createPicturePace, easePixels, fitPixels, nativePixels, nextScale, noteRayRate, paceWord, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill, visualThroughput } from "../src/render/pace.js";
+import { coverLevel, createPacer, createPicturePace, easePixels, fitPixels, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, tuneRays, viewStill, visualThroughput } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -65,32 +65,31 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
 });
 
-test("a playable rate beats a high resolution slideshow", () => {
-  const speck = visualThroughput(6 * 4, 33, 33);
-  const playable = visualThroughput(160 * 90, 50, 33);
-  const slideshow = visualThroughput(1920 * 1080, 500, 33);
-  assert.ok(playable > speck * 10);
-  assert.ok(playable > slideshow);
-  assert.ok(visualThroughput(480 * 270, 50, 33) > slideshow);
+test("vsync outranks a much larger slower picture", () => {
+  const refresh = 33;
+  const atVsync = visualThroughput(320 * 180, 33, refresh);
+  const bigger = visualThroughput(640 * 360, 66, refresh);
+  const slideshow = visualThroughput(1280 * 720, 500, refresh);
+  assert.ok(atVsync > bigger);
+  assert.ok(atVsync > slideshow);
 });
 
-test("the picture moves toward the size with the highest throughput", () => {
+test("resolution approaches vsync in small steps", () => {
   const box = { displayW: 1280, displayH: 720 };
-  const cost = (level) => {
-    const size = sizeAt(level, box.displayW, box.displayH);
-    return 18 + size.width * size.height * 0.01;
-  };
   const picture = createPicturePace();
-  let last = null;
-  for (let i = 0; i < 80; i += 1) {
-    const gap = last ? cost(last.octave) : cost(2);
-    last = picture.step({ gap, ...box });
+  let last = picture.step({ gap: 33, ...box });
+  let prev = last.scale;
+  for (let i = 0; i < 40; i += 1) {
+    const size = pictureSize(last.scale, box.displayW, box.displayH);
+    const ms = 12 + size.width * size.height * 0.00005;
+    last = picture.step({ gap: ms, ...box });
+    assert.ok(Math.abs(last.scale - prev) / prev <= 0.11);
+    prev = last.scale;
   }
-  const size = sizeAt(last.octave, box.displayW, box.displayH);
-  const fps = 1000 / cost(last.octave);
-  assert.ok(size.width * size.height > 24);
-  assert.ok(fps > 10);
-  assert.ok(fps < 40);
+  const size = pictureSize(last.scale, box.displayW, box.displayH);
+  const ms = 12 + size.width * size.height * 0.00005;
+  assert.ok(ms < 55);
+  assert.ok(ms > 15);
 });
 
 test("resolution climbs one octave toward the window and steps back when a frame misses", () => {

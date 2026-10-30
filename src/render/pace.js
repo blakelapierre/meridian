@@ -31,110 +31,81 @@ export function visualThroughput(pixels, frameMs, refreshMs) {
   if (!(pixels > 0) || !(frameMs > 0)) return 0;
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
   const shown = Math.min(1000 / frameMs, 1000 / refresh);
-  // 12 fps is barely playable, 20 fps is the preferred floor. Under 12 the weight collapses.
-  let motion;
-  if (shown < 12) motion = 12 * (shown / 12) ** 4;
-  else if (shown < 20) motion = 12 + (shown - 12) * 2;
-  else motion = shown + 8;
+  const refreshHz = 1000 / refresh;
+  const ratio = Math.min(1, shown / refreshHz);
+  const motion = refreshHz * ratio * ratio;
   return pixels * motion * motion;
 }
 
+export function pictureSize(scale, displayW, displayH) {
+  const span = Math.max(0.05, Math.min(1, scale || 0));
+  let width = Math.max(2, Math.round(displayW * span));
+  let height = Math.max(2, Math.round(displayH * span));
+  const long = Math.max(displayW, displayH);
+  const edge = Math.max(width, height);
+  if (long >= 96 && edge < 96) {
+    const lift = 96 / edge;
+    width = Math.round(width * lift);
+    height = Math.round(height * lift);
+  }
+  width = Math.max(2, Math.min(displayW, Math.round(width / 4) * 4));
+  height = Math.max(2, Math.min(displayH, Math.round(height / 4) * 4));
+  return { width, height };
+}
+
 export function createPicturePace() {
-  let octave = 2;
+  let scale = 0.5;
   let period = 1000 / 60;
   let periodSamples = 0;
   let bucket = [];
   let dwell = 0;
-  let history = [];
-  let hold = 0;
-  const dwellFrames = 5;
-  function predict(pixels) {
-    if (!history.length) return null;
-    const distinct = new Set(history.map((sample) => sample.pixels)).size;
-    const last = history[history.length - 1];
-    if (distinct < 2) return last.ms * (pixels / last.pixels);
-    let count = 0;
-    let sx = 0;
-    let sy = 0;
-    let sxx = 0;
-    let sxy = 0;
-    for (const sample of history) {
-      count += 1;
-      sx += sample.pixels;
-      sy += sample.ms;
-      sxx += sample.pixels * sample.pixels;
-      sxy += sample.pixels * sample.ms;
-    }
-    const den = count * sxx - sx * sx;
-    if (Math.abs(den) < 1) return last.ms * (pixels / last.pixels);
-    const slope = Math.max(0, (count * sxy - sx * sy) / den);
-    const overhead = Math.max(0, (sy - slope * sx) / count);
-    return Math.max(1, overhead + slope * pixels);
-  }
+  let slow = 0;
   return {
-    get octave() {
-      return octave;
+    get scale() {
+      return scale;
     },
     step({ gap = 0, displayW = 960, displayH = 540 } = {}) {
-      const size = sizeAt(octave, displayW, displayH);
-      const pixels = Math.max(1, size.width * size.height);
       if (gap >= 8 && gap <= 50) {
         period = periodSamples ? period * 0.85 + gap * 0.15 : gap;
         periodSamples += 1;
       }
       const refresh = periodSamples < 4 ? Math.max(period, 1000 / 30) : period;
-      if (!(gap > 0)) return { octave, detail: 0, refresh, info: 0 };
-      if (dwell === 0) {
-        dwell = 1;
-        return { octave, detail: 0, refresh, info: 0 };
+      const infoOf = (ms) => {
+        const size = pictureSize(scale, displayW, displayH);
+        return visualThroughput(size.width * size.height, ms, refresh);
+      };
+      if (!(gap > 0)) {
+        const size = pictureSize(scale, displayW, displayH);
+        return { scale, refresh, info: 0, width: size.width, height: size.height };
       }
+      if (gap > refresh * 1.15) {
+        slow += 1;
+        if (slow < 2) {
+          const size = pictureSize(scale, displayW, displayH);
+          return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
+        }
+        const correction = Math.sqrt(refresh / gap);
+        scale = Math.max(0.05, Math.min(1, scale * Math.max(0.94, correction)));
+        dwell = 0;
+        bucket = [];
+        const size = pictureSize(scale, displayW, displayH);
+        return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
+      }
+      slow = 0;
       bucket.push(gap);
       dwell += 1;
-      if (dwell <= dwellFrames) {
-        return { octave, detail: 0, refresh, info: visualThroughput(pixels, gap, refresh) };
+      if (dwell < 6) {
+        const size = pictureSize(scale, displayW, displayH);
+        return { scale, refresh, info: infoOf(gap), width: size.width, height: size.height };
       }
       const ordered = [...bucket].sort((a, b) => a - b);
       const ms = ordered[ordered.length >> 1];
       bucket = [];
       dwell = 0;
-      history.push({ pixels, ms });
-      if (history.length > 8) history.shift();
-      const info = visualThroughput(pixels, ms, refresh);
-      if (ms > 1000 / 12 && octave < 8) {
-        octave = Math.min(8, octave + (ms > 1000 / 6 ? 2 : 1));
-        hold = 0;
-        return { octave, detail: 0, refresh, info };
-      }
-      if (hold > 0) {
-        hold -= 1;
-        return { octave, detail: 0, refresh, info };
-      }
-      const distinct = new Set(history.map((sample) => sample.pixels)).size;
-      let best = octave;
-      let bestInfo = -1;
-      if (distinct < 2) best = octave > 0 ? octave - 1 : Math.min(8, octave + 1);
-      else {
-        let slowest = octave;
-        for (let step = -1; step <= 1; step += 1) {
-          const candidate = octave + step;
-          if (candidate < 0 || candidate > 8) continue;
-          const box = sizeAt(candidate, displayW, displayH);
-          const guess = predict(box.width * box.height);
-          if (guess > 1000 / 12) {
-            if (candidate > slowest) slowest = candidate;
-            continue;
-          }
-          const score = visualThroughput(box.width * box.height, guess, refresh);
-          if (score > bestInfo) {
-            bestInfo = score;
-            best = candidate;
-          }
-        }
-        if (bestInfo < 0) best = slowest;
-      }
-      if (best === octave) hold = 4;
-      octave = best;
-      return { octave, detail: 0, refresh, info };
+      const correction = Math.sqrt(refresh / Math.max(ms, 1));
+      scale = Math.max(0.05, Math.min(1, scale * Math.max(0.94, Math.min(1.06, correction))));
+      const size = pictureSize(scale, displayW, displayH);
+      return { scale, refresh, info: infoOf(ms), width: size.width, height: size.height };
     },
   };
 }
