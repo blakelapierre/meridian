@@ -11,9 +11,9 @@ Pre-alpha. Not a playable game yet.
 | Area | State |
 |---|---|
 | Specs (`docs/`) | Written and locked for the Atoll slice |
-| `src/` | About 2,800 lines of browser JS: engine port (raycaster, N-body tick), sim (crust brush and chunk hash, strike, damage, shots and certs, op log, support/collapse, hearth/corpse), net (identity, room, positions, shots, terrain), render (software and WebGL2 ray pass) |
-| `tools/` | Dev static server, signaling "lighthouse", and browser harnesses (`view`, `link`, `dig`, `shot`) |
-| Tests | 57 Node tests; 52 unit tests pass, 5 two-browser tests need headless Chromium and skip without it |
+| `src/` | About 10,100 lines of browser JS across 86 modules: engine port (raycaster, N-body tick), sim (crust brush and chunk hash, strike, damage, shots and certs, op log, support/collapse, hearth/corpse), net (identity, room, positions, shots, terrain, archive), render (software and WebGL2 ray pass) |
+| `tools/` | Dev static server, signaling "lighthouse", launcher page, and browser harnesses (`view`, `link`, `dig`, `shot`, `archive`, `bench`) |
+| Tests | 148 Node tests in 53 files; 143 pass, 5 two-browser tests need headless Chromium and skip without it (as of 30 Oct 2026) |
 | Network phases | P0 Link and parts of P2 (signed, witnessed shots) and P3 (dig op hash) are exercised by browser tests; nothing beyond one island yet |
 
 ## Run it
@@ -24,6 +24,8 @@ npm test                      # unit tests; browser tests skip without Chromium
 MERIDIAN_CHROME=/path/to/chrome-headless-shell npm test   # include the browser tests
 npm start                     # dev server on :8080, signaling on :8787
 ```
+
+`npm start` is the only process. It serves files on port 8080 and the lighthouse on `ws://127.0.0.1:8787`. Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) for what this build should show, and how to tell a pass from a fail. Neither socket decides a hit, a dig, or a death.
 
 ## Docs
 
@@ -43,7 +45,5 @@ On conflict: the concept wins on fantasy, the game spec wins on rules, the crust
 Funding options (GitHub Sponsors and others) are being set up. This section will link to them once they are live. Until then, stars, issues, and review of the [WebRTC spec](docs/implementation-webrtc.md) help the most.
 
 License: [MIT](LICENSE).
-
-`npm start` is the only process. It serves files on port 8080 and the lighthouse on `ws://127.0.0.1:8787`. Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) for what this build should show, and how to tell a pass from a fail. Neither socket decides a hit, a dig, or a death.
 
 Public repository: https://github.com/blakelapierre/meridian
