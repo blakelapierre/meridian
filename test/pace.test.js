@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, inFront, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, traceInterval, tuneRays, viewStill, visualThroughput, watchScene } from "../src/render/pace.js";
+import { STILL_BUDGET_MS, stillScale, cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, inFront, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, traceInterval, tuneRays, viewStill, visualThroughput, watchScene } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -205,4 +205,45 @@ test("resolution climbs one octave toward the window and steps back when a frame
   assert.equal(fitPixels(1_000_000, 16, 900_000), 16000);
   assert.equal(fitPixels(60_000_000, 16, 900_000), 900000);
   assert.ok(noteRayRate(0, 16000, 8) > noteRayRate(0, 16000, 20));
+});
+
+test("a still camera never climbs while a trace is over budget", () => {
+  assert.ok(stillScale(0.5, STILL_BUDGET_MS + 1) < 0.5);
+  assert.ok(stillScale(1, 700) < 1);
+  assert.ok(stillScale(1, 700) >= 0.5);
+  assert.equal(stillScale(0.6, STILL_BUDGET_MS), 0.6);
+});
+
+test("a still climb is capped by measured trace time", () => {
+  const next = stillScale(0.5, 200);
+  assert.ok(next > 0.5);
+  assert.ok(next <= 0.5 * Math.sqrt(STILL_BUDGET_MS / 200) + 1e-9);
+  assert.ok(Math.abs(stillScale(0.5, 16) - 0.56) < 1e-9);
+  assert.equal(stillScale(0.95, 16), 1);
+});
+
+test("a stalled still picture steps down until traces fit the budget", () => {
+  const box = { displayW: 1280, displayH: 800 };
+  const pace = createPicturePace();
+  let seen = pace.step({ gap: 16, ...box, still: true });
+  for (let i = 0; i < 40; i += 1) seen = pace.step({ gap: 80, ...box, still: true });
+  assert.ok(seen.scale > 0.98);
+  // Cost model: trace ms grows with pixel count, 700 ms at full size (the stall seen at the gate).
+  let scale = seen.scale;
+  for (let i = 0; i < 20; i += 1) {
+    const ms = 700 * scale * scale;
+    const prev = scale;
+    scale = pace.step({ gap: ms, ...box, still: true }).scale;
+    if (ms > STILL_BUDGET_MS) assert.ok(scale < prev);
+  }
+  assert.ok(700 * scale * scale <= STILL_BUDGET_MS * 1.05);
+  assert.ok(scale > 0.5);
+});
+
+test("exposure is 1 at noon and rises toward night", async () => {
+  const { exposureFor } = await import("../src/render/gpu.js");
+  assert.equal(exposureFor([0, 0, 1]), 1);
+  assert.ok(exposureFor([1, 0, 0.05]) > 1);
+  assert.ok(Math.abs(exposureFor([0, 0, -1]) - 2.4) < 1e-9);
+  assert.ok(exposureFor([0, 0, -1]) > exposureFor([1, 0, 0.1]));
 });

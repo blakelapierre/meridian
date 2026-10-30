@@ -47,16 +47,35 @@ function texture(gl, width) {
 }
 
 export const SPHERE_BUDGET = MAX_SPHERES;
-export const NEAR_METERS = 18;
 
-export function farPixels(width, height) {
-  const w = Math.max(2, width | 0);
-  const h = Math.max(2, height | 0);
-  return {
-    width: Math.max(2, Math.floor(w / 4)),
-    height: Math.max(2, Math.floor(h / 4)),
-  };
+// Exposure follows sun height: 1 at noon, rising toward 2.4 at night so dusk and night stay readable.
+export function exposureFor(sun) {
+  const z = Array.isArray(sun) ? sun[2] / (Math.hypot(sun[0], sun[1], sun[2]) || 1) : 1;
+  const day = Math.min(1, Math.max(0, (z + 0.1) / 0.5));
+  return 2.4 + (1 - 2.4) * day;
 }
+// Shared GLSL for perception-driven foveation; mirrors falloff/refreshPeriod/blockLevel in src/sim/perception.js.
+// Angles are measured in camera space, so only the field of view and aspect are needed.
+export const FOVEA_GLSL = `
+uniform vec2 uGaze;
+uniform vec4 uFovea;
+uniform float uRefine;
+uniform float uTanHalf;
+uniform float uView;
+vec3 camDir(vec2 uv) {
+  return normalize(vec3((uv.x * 2.0 - 1.0) * uView * uTanHalf, (1.0 - uv.y * 2.0) * uTanHalf, 1.0));
+}
+float fovT(vec2 uv) {
+  float a = acos(clamp(dot(camDir(uv), camDir(uGaze)), -1.0, 1.0));
+  return smoothstep(uFovea.x, uFovea.x + uFovea.y, a);
+}
+float fovPeriod(float t) {
+  return floor(1.0 + (max(1.0, uFovea.z) - 1.0) * t + 0.5);
+}
+float fovBlock(float t) {
+  return exp2(max(0.0, floor(uFovea.w * t + 0.5) - uRefine));
+}
+`;
 
 export function fitCanvas(canvas, scale = 1, pixels = null) {
   const boxW = canvas.clientWidth || window.innerWidth || 960;
@@ -118,11 +137,11 @@ uniform int uDigs;
 uniform int uPrints;
 uniform vec4 uWork;
 uniform float uTime;
-uniform float uMaxDist;
-uniform vec2 uGaze;
-uniform float uGamma;
-uniform float uGazeReach;
-uniform float uSpread;
+uniform float uFrame;
+uniform float uFull;
+${FOVEA_GLSL}
+uniform float uExposure;
+uniform float uFoot;
 in vec2 vRay;
 uniform sampler2D uSphereTex;
 uniform sampler2D uSphereColor;
@@ -135,18 +154,24 @@ uniform sampler2D uTexRects;
 uniform sampler2D uAtlas;
 out vec4 fragColor;
 
-vec3 tiled(int tile, vec2 uv, vec3 fallback) {
+float gFoot = 0.0;
+// gFoot is meters covered by one pixel at the hit, so the atlas lod follows distance and grazing angle.
+vec3 tiled(int tile, vec2 uv, float perMeter, vec3 fallback) {
   vec4 rect = texelFetch(uTexRects, ivec2(tile, 0), 0);
   if (rect.w < 0.5) return fallback;
-  float pad = 0.5 / ${ATLAS}.0;
+  float texels = rect.z * ${ATLAS}.0;
+  float lod = clamp(log2(max(gFoot * perMeter * texels, 1.0e-4)), 0.0, 3.0);
+  float pad = (0.5 * exp2(lod) + 0.5) / ${ATLAS}.0;
   vec2 st = rect.xy + vec2(pad) + fract(uv) * (rect.z - pad * 2.0);
-  return texture(uAtlas, st).rgb;
+  vec3 near = textureLod(uAtlas, st, lod).rgb;
+  vec3 mean = textureLod(uAtlas, rect.xy + rect.z * 0.5, 3.0).rgb;
+  return mix(near, mean, smoothstep(2.0, 3.0, lod) * 0.5);
 }
 
 vec3 sphereAlbedo(vec3 n, int i, vec3 fallback) {
   float u = atan(n.z, n.x) * 0.15915494309189535 + 0.5;
   float v = asin(clamp(n.y, -1.0, 1.0)) * 0.3183098861837907 + 0.5;
-  return tiled(i, vec2(u, v), fallback);
+  return tiled(i, vec2(u, v), 0.25, fallback);
 }
 
 float hash21(vec2 p) {
@@ -202,9 +227,9 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
   float rockW = clamp(smoothstep(0.2, 0.5, slope) + smoothstep(0.62, 0.92, crest) * 0.8, 0.0, 1.0);
   float grassW = (1.0 - rockW) * smoothstep(0.1, 0.34, crest) * (1.0 - smoothstep(0.58, 0.86, crest));
   grassW *= 1.0 - smoothstep(0.16, 0.46, slope);
-  vec3 sandC = tiled(${SAND_TILE}, p * 0.16, vec3(0.55, 0.48, 0.32));
-  vec3 grassC = tiled(${GRASS_TILE}, p * 0.14, vec3(0.22, 0.4, 0.16));
-  vec3 rockC = tiled(${ROCK_TILE}, p * 0.12, vec3(0.4, 0.38, 0.34));
+  vec3 sandC = tiled(${SAND_TILE}, p * 0.16, 0.16, vec3(0.55, 0.48, 0.32));
+  vec3 grassC = tiled(${GRASS_TILE}, p * 0.14, 0.14, vec3(0.22, 0.4, 0.16));
+  vec3 rockC = tiled(${ROCK_TILE}, p * 0.12, 0.12, vec3(0.4, 0.38, 0.34));
   sandC *= 0.88 + valueNoise(p * 0.23) * 0.22;
   grassC *= 0.86 + valueNoise(p * 0.31 + 4.0) * 0.26;
   rockC *= 0.84 + valueNoise(p * 0.19 + 9.0) * 0.28;
@@ -296,6 +321,55 @@ bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   return dot(p.xy, p.xy) <= 65536.0;
 }
 
+// Bounce rays march the same dunes as primary rays, coarsely: 16 steps then 5 halvings.
+bool sandCoarse(vec3 ro, vec3 rd, out float t, out vec3 p) {
+  t = 0.0;
+  p = ro;
+  if (rd.z > 0.05 && ro.z > 5.6) return false;
+  float tFar = islandExit(ro, rd);
+  if (rd.z < -1.0e-4) tFar = min(tFar, max(-ro.z / rd.z, 0.0) + 4.0);
+  tFar = clamp(tFar, 0.0, 160.0);
+  if (rd.z >= 0.0 && ro.z > 5.6) return false;
+  float lo = 0.02;
+  float prev = ro.z - duneHeight(ro.xy);
+  if (prev <= 0.0) return false;
+  float stride = max(tFar / 16.0, 0.25);
+  float hi = -1.0;
+  for (int i = 1; i <= 16; i++) {
+    float s = float(i) * stride;
+    if (s > tFar) break;
+    vec3 q = ro + rd * s;
+    if (q.z - duneHeight(q.xy) <= 0.0) { hi = s; break; }
+    lo = s;
+  }
+  if (hi < 0.0) return false;
+  for (int k = 0; k < 5; k++) {
+    float mid = 0.5 * (lo + hi);
+    vec3 m = ro + rd * mid;
+    if (m.z - duneHeight(m.xy) > 0.0) lo = mid; else hi = mid;
+  }
+  t = hi;
+  p = ro + rd * hi;
+  p.z = duneHeight(p.xy);
+  return dot(p.xy, p.xy) <= 65536.0;
+}
+
+// Colors are authored as display values. Decode, expose, ACES (Narkowicz fit), encode sRGB.
+vec3 srgbToLinear(vec3 c) {
+  c = max(c, vec3(0.0));
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 linearToSrgb(vec3 c) {
+  c = clamp(c, 0.0, 1.0);
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
+vec3 aces(vec3 x) {
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+vec3 present(vec3 c) {
+  return linearToSrgb(aces(srgbToLinear(c) * uExposure));
+}
+
 bool boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t) {
   float tMin = 0.0;
   float tMax = 1.0e30;
@@ -378,19 +452,21 @@ vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
   return vec3(0.0, 0.0, sign(q.z));
 }
 
-float gazeAxis(float b, float c, float g) {
-  if (g > 0.98) return b;
-  float d = b - c;
-  float side = d < 0.0 ? c : 1.0 - c;
-  if (side < 1.0e-4) return b;
-  return c + sign(d) * pow(abs(d / side), 1.0 / g) * side;
-}
-
 void main() {
-  float sharpen = uGamma < 0.2 ? 1.0 : uGamma;
-  vec2 sceneUV = vec2(gazeAxis(vRay.x, uGaze.x, sharpen), gazeAxis(vRay.y, uGaze.y, sharpen));
-  float uu = sceneUV.x;
-  float vv = sceneUV.y;
+  // Foveated progressive tracing: the gaze region traces every frame at full resolution;
+  // the periphery traces one pixel per cell, every few frames, and stays in the accumulation target between.
+  if (uFull < 0.5) {
+    float ft = fovT(vRay);
+    float cell = fovBlock(ft);
+    vec2 pix = floor(gl_FragCoord.xy);
+    if (any(greaterThan(mod(pix, cell), vec2(0.5)))) discard;
+    float period = fovPeriod(ft);
+    vec2 cid = floor(pix / cell);
+    float phase = floor(fract(sin(dot(cid, vec2(12.9898, 78.233))) * 43758.5453) * period);
+    if (mod(uFrame + phase, period) > 0.5) discard;
+  }
+  float uu = vRay.x;
+  float vv = vRay.y;
   float halfAngle = tan(uFov * 0.008726646259971648) * uPlane;
   float px = (uu * 2.0 - 1.0) * uAspect * halfAngle;
   float py = (1.0 - vv * 2.0) * halfAngle;
@@ -398,13 +474,8 @@ void main() {
   vec3 ro = uOrigin;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
-  float cover = 1.0;
-  float limit = uMaxDist;
-  if (uMaxDist > 0.0) {
-    float gazeD = length(vec2((uu - uGaze.x) * uAspect, vv - uGaze.y));
-    float fade = smoothstep(uSpread, uSpread + 0.18, gazeD);
-    limit = mix(max(uGazeReach, uMaxDist), uMaxDist, fade);
-  }
+  float firstT = 4000.0;
+  float limit = 0.0;
   for (int bounce = 0; bounce < 5; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
@@ -418,14 +489,8 @@ void main() {
     vec3 sandP = ro;
     bool sand = false;
     if (bounce == 0) sand = sandPlane(ro, rd, limit, sandT, sandP);
-    else if (rd.z < -1.0e-4) {
-      sandT = -ro.z / rd.z;
-      if (sandT > 0.02 && sandT < 800.0) {
-        sandP = ro + rd * sandT;
-        sandP.z = duneHeight(sandP.xy);
-        sand = dot(sandP.xy, sandP.xy) <= 65536.0;
-      }
-    }
+    else sand = sandCoarse(ro, rd, sandT, sandP);
+    gFoot = (sand ? sandT : 8.0) * uFoot / max(abs(rd.z), 0.25) * float(bounce + 1);
     bool openMouth = false;
     float mouthFloor = 0.0;
     if (bounce == 0 && uDigs > 0) {
@@ -446,7 +511,7 @@ void main() {
         bestT = t;
         bestP = p;
         bestN = vec3(0.0, 0.0, 1.0);
-        bestRgb = withPrints(tiled(${SAND_TILE}, p.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, p.xy, bounce);
+        bestRgb = withPrints(tiled(${SAND_TILE}, p.xy * 0.35, 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, p.xy, bounce);
         bestRef = 0.02;
         found = true;
       }
@@ -455,7 +520,7 @@ void main() {
       bestT = sandT;
       bestP = vec3(sandP.xy, mouthFloor);
       bestN = vec3(0.0, 0.0, 1.0);
-      bestRgb = withPrints(tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, sandP.xy, bounce);
+      bestRgb = withPrints(tiled(${SAND_TILE}, sandP.xy * 0.35, 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, sandP.xy, bounce);
       bestRef = 0.02;
       found = true;
     } else if (sand && !openMouth && sandT < bestT) {
@@ -474,9 +539,10 @@ void main() {
       bestT = t;
       bestP = ro + rd * t;
       bestN = boxNormal(bestP, bmin, bmax);
+      gFoot = t * uFoot / max(abs(dot(bestN, rd)), 0.25) * float(bounce + 1);
       vec4 col = texelFetch(uBoxColor, ivec2(i, 0), 0);
       vec2 woodUv = abs(bestN.z) > 0.5 ? bestP.xy : (abs(bestN.x) > 0.5 ? bestP.yz : bestP.xz);
-      bestRgb = tiled(${WOOD_TILE}, woodUv * 0.5, col.rgb);
+      bestRgb = tiled(${WOOD_TILE}, woodUv * 0.5, 0.5, col.rgb);
       bestRef = col.a;
       found = true;
     }
@@ -487,6 +553,7 @@ void main() {
       bestT = t;
       bestP = ro + rd * t;
       bestN = normalize(bestP - sphere.xyz);
+      gFoot = t * uFoot * float(bounce + 1);
       vec4 col = texelFetch(uSphereColor, ivec2(i, 0), 0);
       bestRgb = sphereAlbedo(bestN, i, col.rgb);
       bestRef = col.a;
@@ -514,15 +581,11 @@ void main() {
       if (mark && boxHit(ro, rd, vec3(uWork.x - wide, uWork.y - deep, 0.0), vec3(uWork.x + wide, uWork.y + deep, rise), gt) && gt < bestT) workT = gt;
     }
     bool ghost = workT < 1.0e20;
-    if (uMaxDist > 0.0 && bounce == 0 && workT > limit && (!found || bestT > limit)) {
-      fragColor = vec4(0.0);
-      return;
-    }
     if (!found && !ghost) {
       accum += thru * skyColor(rd);
       break;
     }
-    if (uMaxDist > 0.0 && bounce == 0) cover = clamp((limit - min(bestT, workT)) / 6.0, 0.0, 1.0);
+    if (bounce == 0) firstT = min(bestT, workT);
     if (found) {
       if (dot(bestN, rd) > 0.0) bestN = -bestN;
       if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
@@ -567,14 +630,24 @@ void main() {
       }
     }
     float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
-    if (uMaxDist > 0.0 && mirror < 0.2) mirror = 0.0;
+    // One material rule everywhere: faint mirrors take a cheap sky tint instead of a traced bounce.
+    if (found && mirror < 0.2) {
+      vec3 rr = reflect(rd, bestN);
+      float up = clamp(rr.z * 0.85 + 0.2, 0.0, 1.0);
+      float day = smoothstep(-0.02, 0.25, normalize(uSun).z);
+      vec3 tint = mix(vec3(0.62, 0.68, 0.74), vec3(0.30, 0.50, 0.84), up) * mix(0.12, 1.0, day);
+      bestRgb = mix(bestRgb, tint, mirror);
+      mirror = 0.0;
+    }
     accum += thru * bestRgb * (1.0 - mirror);
     thru *= mirror;
     if (thru <= 0.001) break;
     rd = normalize(reflect(rd, bestN));
     ro = bestP + bestN * 0.05;
   }
-  fragColor = vec4(accum, uMaxDist > 0.0 ? cover : 1.0);
+  // Alpha carries log depth (0 near, 1 at 4 km) for future reprojection.
+  float depthCode = clamp(log2(1.0 + firstT) / 12.0, 0.0, 1.0);
+  fragColor = vec4(present(accum), depthCode);
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
   const fs = compile(gl, gl.FRAGMENT_SHADER, frag);
@@ -609,8 +682,9 @@ void main() {
     atlasTex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE7);
     gl.bindTexture(gl.TEXTURE_2D, atlasTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 3);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     blitTexture(atlasData, SAND_TILE, sandTexture());
@@ -622,6 +696,7 @@ void main() {
     rectData.set(rectFor(GRASS_TILE), GRASS_TILE * 4);
     rectData.set(rectFor(ROCK_TILE), ROCK_TILE * 4);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ATLAS, ATLAS, 0, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
+    gl.generateMipmap(gl.TEXTURE_2D);
   } catch {
     return null;
   }
@@ -661,8 +736,8 @@ void main() {
   const hold = [0, 1, 2].map(() => {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
@@ -705,9 +780,27 @@ uniform sampler2D uNewer;
 uniform float uMix;
 in vec2 vUV;
 out vec4 fragColor;
+// Edge-aware upscale: bilinear, then a sharpen that is clamped to the 2x2 source texels,
+// so edges stay crisp without nearest-neighbour stairs or ringing.
+vec4 upscale(sampler2D tex, vec2 uv) {
+  vec2 size = vec2(textureSize(tex, 0));
+  vec2 st = uv * size - 0.5;
+  vec2 base = (floor(st) + 0.5) / size;
+  vec2 dx = vec2(1.0 / size.x, 0.0);
+  vec2 dy = vec2(0.0, 1.0 / size.y);
+  vec4 a = texture(tex, base);
+  vec4 b = texture(tex, base + dx);
+  vec4 c = texture(tex, base + dy);
+  vec4 d = texture(tex, base + dx + dy);
+  vec4 lin = texture(tex, uv);
+  vec4 lo = min(min(a, b), min(c, d));
+  vec4 hi = max(max(a, b), max(c, d));
+  vec4 blur = (a + b + c + d) * 0.25;
+  return clamp(lin + (lin - blur) * 0.9, lo, hi);
+}
 void main() {
-  vec4 past = texture(uOlder, vUV);
-  vec4 next = texture(uNewer, vUV);
+  vec4 past = upscale(uOlder, vUV);
+  vec4 next = upscale(uNewer, vUV);
   fragColor = mix(past, next, uMix);
 }`);
   let blitProgram = null;
@@ -722,43 +815,37 @@ void main() {
   const blitOlder = blitProgram ? gl.getUniformLocation(blitProgram, "uOlder") : null;
   const blitNewer = blitProgram ? gl.getUniformLocation(blitProgram, "uNewer") : null;
   const blitMix = blitProgram ? gl.getUniformLocation(blitProgram, "uMix") : null;
-  const stackFs = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
+  // Resolve: fill each peripheral cell from its traced corner pixel into a full picture.
+  const resolveFs = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
-uniform sampler2D uFar;
-uniform sampler2D uNear;
-uniform vec2 uGaze;
-uniform float uGamma;
+uniform sampler2D uAccum;
+${FOVEA_GLSL}
 in vec2 vUV;
 out vec4 fragColor;
-float gazeUnaxis(float s, float c, float g) {
-  if (g > 0.98) return s;
-  float d = s - c;
-  float side = d < 0.0 ? c : 1.0 - c;
-  if (side < 1.0e-4) return s;
-  return c + sign(d) * pow(abs(d / side), g) * side;
-}
 void main() {
-  float g = uGamma < 0.2 ? 1.0 : uGamma;
   vec2 ray = vec2(vUV.x, 1.0 - vUV.y);
-  vec2 packed = vec2(gazeUnaxis(ray.x, uGaze.x, g), gazeUnaxis(ray.y, uGaze.y, g));
-  vec2 nearUV = vec2(packed.x, 1.0 - packed.y);
-  vec4 farColor = texture(uFar, vUV);
-  vec4 nearColor = texture(uNear, clamp(nearUV, 0.0, 1.0));
-  fragColor = vec4(mix(farColor.rgb, nearColor.rgb, nearColor.a), 1.0);
+  float cell = fovBlock(fovT(ray));
+  vec2 pix = floor(gl_FragCoord.xy);
+  fragColor = vec4(texelFetch(uAccum, ivec2(pix - mod(pix, cell)), 0).rgb, 1.0);
 }`);
-  let stackProgram = null;
-  if (blitVs && stackFs) {
-    stackProgram = gl.createProgram();
-    gl.attachShader(stackProgram, blitVs);
-    gl.attachShader(stackProgram, stackFs);
-    gl.bindAttribLocation(stackProgram, 0, "aPos");
-    gl.linkProgram(stackProgram);
-    if (!gl.getProgramParameter(stackProgram, gl.LINK_STATUS)) stackProgram = null;
+  let resolveProgram = null;
+  if (blitVs && resolveFs) {
+    resolveProgram = gl.createProgram();
+    gl.attachShader(resolveProgram, blitVs);
+    gl.attachShader(resolveProgram, resolveFs);
+    gl.bindAttribLocation(resolveProgram, 0, "aPos");
+    gl.linkProgram(resolveProgram);
+    if (!gl.getProgramParameter(resolveProgram, gl.LINK_STATUS)) resolveProgram = null;
   }
-  const stackFar = stackProgram ? gl.getUniformLocation(stackProgram, "uFar") : null;
-  const stackNear = stackProgram ? gl.getUniformLocation(stackProgram, "uNear") : null;
-  const stackGaze = stackProgram ? gl.getUniformLocation(stackProgram, "uGaze") : null;
-  const stackGamma = stackProgram ? gl.getUniformLocation(stackProgram, "uGamma") : null;
+  const setFovea = (prog, fovea, camera, full) => {
+    const u = (name) => gl.getUniformLocation(prog, name);
+    gl.uniform2f(u("uGaze"), fovea.x, fovea.y);
+    gl.uniform4f(u("uFovea"), fovea.fovea, fovea.falloff, fovea.period, fovea.block);
+    gl.uniform1f(u("uRefine"), fovea.refine);
+    gl.uniform1f(u("uTanHalf"), Math.tan(((camera.fov || 70) * Math.PI) / 360));
+    gl.uniform1f(u("uView"), camera.aspect || 1);
+    if (full !== undefined) gl.uniform1f(u("uFull"), full ? 1 : 0);
+  };
   const makeTarget = (filter) => {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -768,9 +855,11 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
   };
-  const farSlot = makeTarget(gl.LINEAR);
-  const nearSlot = makeTarget(gl.NEAREST);
-  const draw = (scene, mode, count, maxDist = 0) => {
+  const accumSlot = makeTarget(gl.NEAREST);
+  let frame = 0;
+  let stillFrames = 0;
+  let forceFull = true;
+  const draw = (scene, mode, count, fovea = null) => {
       sphereData.fill(0);
       sphereColor.fill(0);
       boxMin.fill(0);
@@ -861,6 +950,7 @@ void main() {
         gl.activeTexture(gl.TEXTURE7);
         gl.bindTexture(gl.TEXTURE_2D, atlasTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ATLAS, ATLAS, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
+        gl.generateMipmap(gl.TEXTURE_2D);
         atlasDirty = false;
       }
       gl.uniform1i(u("uSphereTex"), 0);
@@ -891,13 +981,11 @@ void main() {
       const work = scene.work;
       gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
       gl.uniform1f(u("uTime"), scene.time || 0);
-      gl.uniform1f(u("uMaxDist"), maxDist || 0);
-      const gaze = scene.gaze;
-      const sharpen = maxDist > 0 && gaze ? gaze.gamma : 1;
-      gl.uniform2f(u("uGaze"), gaze ? gaze.x : 0.5, gaze ? gaze.y : 0.5);
-      gl.uniform1f(u("uGamma"), sharpen || 1);
-      gl.uniform1f(u("uGazeReach"), gaze ? gaze.reach : maxDist || 0);
-      gl.uniform1f(u("uSpread"), gaze ? gaze.spread : 0.22);
+      gl.uniform1f(u("uFrame"), frame);
+      setFovea(prog, fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, refine: 0 }, scene.camera, !fovea || forceFull);
+      gl.uniform1f(u("uExposure"), exposureFor(sun));
+      const halfTan = Math.tan(((scene.camera.fov || 70) * Math.PI) / 360);
+      gl.uniform1f(u("uFoot"), (2 * halfTan) / Math.max(2, rh));
       if (prog === pointProgram) {
         const n = Math.max(0, Math.min(count | 0, rayUVs.length / 2));
         const w = Math.max(1, canvas.width);
@@ -927,9 +1015,9 @@ void main() {
         viewSize = null;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.disable(gl.BLEND);
-        return draw(scene, "full", 0, 0);
+        return draw(scene, "full", 0, null);
       };
-      if (!blitProgram || !stackProgram) return single();
+      if (!blitProgram || !resolveProgram) return single();
       let index = 0;
       for (let i = 0; i < hold.length; i += 1) {
         if (i !== newest && i !== prior) {
@@ -938,49 +1026,47 @@ void main() {
         }
       }
       const slot = hold[index];
-      const far = farPixels(tw, th);
-      if (!fitHold(farSlot, far.width, far.height) || !fitHold(nearSlot, tw, th) || !fitHold(slot, tw, th)) return single();
+      const sized = accumSlot.w === tw && accumSlot.h === th;
+      if (!fitHold(accumSlot, tw, th) || !fitHold(slot, tw, th)) return single();
+      if (!sized) forceFull = true;
+      const base = scene.fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, still: false };
+      stillFrames = base.still ? stillFrames + 1 : 0;
+      // Each full peripheral cycle of a stable view halves the peripheral cell size.
+      const fovea = { ...base, refine: Math.floor(stillFrames / Math.max(1, base.period)) };
       releaseHold();
       gl.disable(gl.BLEND);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, farSlot.fbo);
-      viewSize = { w: far.width, h: far.height };
-      if (!draw(scene, "full", 0, 0)) {
-        viewSize = null;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        return false;
-      }
-      gl.bindFramebuffer(gl.FRAMEBUFFER, nearSlot.fbo);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, accumSlot.fbo);
       viewSize = { w: tw, h: th };
-      if (!draw(scene, "full", 0, NEAR_METERS)) {
+      const drew = draw(scene, "full", 0, fovea);
+      forceFull = false;
+      frame = (frame + 1) % 3600;
+      if (!drew) {
         viewSize = null;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         return false;
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, slot.fbo);
       gl.viewport(0, 0, tw, th);
-      gl.useProgram(stackProgram);
-      const gaze = scene.gaze || { x: 0.5, y: 0.5, gamma: 1 };
-      gl.uniform2f(stackGaze, gaze.x, gaze.y);
-      gl.uniform1f(stackGamma, gaze.gamma || 1);
+      gl.useProgram(resolveProgram);
+      setFovea(resolveProgram, fovea, scene.camera);
       gl.activeTexture(gl.TEXTURE11);
-      gl.bindTexture(gl.TEXTURE_2D, farSlot.tex);
-      gl.uniform1i(stackFar, 11);
-      gl.activeTexture(gl.TEXTURE12);
-      gl.bindTexture(gl.TEXTURE_2D, nearSlot.tex);
-      gl.uniform1i(stackNear, 12);
+      gl.bindTexture(gl.TEXTURE_2D, accumSlot.tex);
+      gl.uniform1i(gl.getUniformLocation(resolveProgram, "uAccum"), 11);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.activeTexture(gl.TEXTURE11);
       gl.bindTexture(gl.TEXTURE_2D, null);
-      gl.activeTexture(gl.TEXTURE12);
-      gl.bindTexture(gl.TEXTURE_2D, null);
       viewSize = null;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       if (newest >= 0) prior = newest;
       newest = index;
       return true;
+    },
+    // Force the next paint to trace every pixel (teleports, cuts).
+    invalidate() {
+      forceFull = true;
     },
     present(amount = 1) {
       if (!blitProgram || newest < 0) return false;

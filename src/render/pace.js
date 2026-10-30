@@ -65,6 +65,19 @@ export function visualThroughput(pixels, frameMs, refreshMs, speed = 1, accel = 
   return pixels * fps * Math.max(speed, 0) ** 2 * Math.max(accel, 0) ** 2;
 }
 
+// A still camera refines progressively: each trace may cost at most STILL_BUDGET_MS.
+// Trace cost grows with pixel count (scale squared), so the next scale is capped at
+// scale * sqrt(budget / measured). Over budget it steps down at once and never climbs.
+export const STILL_BUDGET_MS = 250;
+
+export function stillScale(scale, frameMs, budgetMs = STILL_BUDGET_MS) {
+  const now = Math.max(0.08, Math.min(1, scale || 0.08));
+  if (!(frameMs > 0)) return now;
+  const room = Math.sqrt(budgetMs / frameMs);
+  if (frameMs > budgetMs) return Math.max(0.08, now * Math.max(room, 0.5));
+  return Math.min(1, now * Math.min(1.12, room));
+}
+
 export function createPicturePace() {
   let scale = 0.4;
   let period = 1000 / 60;
@@ -106,7 +119,7 @@ export function createPicturePace() {
         return pack(0);
       }
       if (still) {
-        scale = Math.min(1, scale * 1.12);
+        scale = stillScale(scale, gap);
         wasStill = true;
         const size = pictureSize(scale, displayW, displayH);
         const info = visualThroughput(size.width * size.height, gap, refresh, speed, accel);
@@ -305,6 +318,89 @@ export function createPacer() {
       checks = 0;
       scale = nextScale(scale, average, refresh, still);
       return scale;
+    },
+  };
+}
+
+// Foveated tracing budgets by traced pixels, not picture size: the periphery is traced sparsely,
+// so the picture can be larger for the same cost. Rate is traced pixels per millisecond, measured.
+export const STILL_FRAME_MS = 1000 / 15;
+
+export function budgetScale(rate, frameMs, displayW, displayH, fraction) {
+  if (!(rate > 0) || !(frameMs > 0)) return 0.4;
+  const share = Math.max(0.01, Math.min(1, fraction || 1));
+  const full = Math.max(1, displayW * displayH * share);
+  return Math.max(0.08, Math.min(1, Math.sqrt((rate * frameMs) / full)));
+}
+
+export function fixedCost(samples) {
+  if (samples.length < 3) return 0;
+  let mx = 0;
+  let my = 0;
+  for (const [x, y] of samples) {
+    mx += x;
+    my += y;
+  }
+  mx /= samples.length;
+  my /= samples.length;
+  let cov = 0;
+  let vx = 0;
+  let low = Infinity;
+  for (const [x, y] of samples) {
+    cov += (x - mx) * (y - my);
+    vx += (x - mx) ** 2;
+    low = Math.min(low, y);
+  }
+  if (!(vx > 0)) return 0;
+  const slope = Math.max(0, cov / vx);
+  return Math.max(0, Math.min(low * 0.95, my - slope * mx));
+}
+
+// Feedback on traced pixels per frame: over budget it drops at once (never stalls twice),
+// under budget it climbs 12% a frame, or 50% when it has more than twice the room. Fixed per-frame overhead is absorbed by the feedback.
+export function createTraceBudget(start = 40000) {
+  let pixels = start;
+  let rate = 0;
+  const recent = [];
+  let smallCost = Infinity;
+  return {
+    get pixels() {
+      return pixels;
+    },
+    get rate() {
+      return rate;
+    },
+    note(tracedPixels, ms, budgetMs) {
+      if (!(tracedPixels > 0) || !(ms > 0.1) || !(budgetMs > 0)) return pixels;
+      // Fixed per-frame cost (scene build, resolve, UI) does not shrink with pixels. Fit
+      // ms = fixed + pixels / rate over recent frames and steer only the part that scales with pixels.
+      // Frame timings are noisy, so every estimate is a median over recent frames.
+      recent.push([tracedPixels, ms]);
+      if (recent.length > 60) recent.shift();
+      const median = (list) => {
+        const sorted = [...list].sort((a, b) => a - b);
+        return sorted[Math.floor(sorted.length / 2)];
+      };
+      // Frames at a tiny trace size are almost all fixed cost: a lower bound on the fixed part.
+      const small = recent.filter(([p]) => p <= 2000).map(([, m]) => m);
+      const fixed = Math.min(
+        median(recent.slice(-5).map(([, m]) => m)) * 0.95,
+        Math.max(fixedCost(recent), small.length ? median(small.slice(-15)) * 0.9 : 0),
+      );
+      const perPixel = median(recent.slice(-5).map(([p, m]) => Math.max(0.1, m - fixed) / p));
+      rate = 1 / perPixel;
+      let room = Math.max(budgetMs - fixed, budgetMs * 0.25) * rate / tracedPixels;
+      // A real stall (two slow frames running, the latest over twice the budget) cuts at once from that frame alone; ordinary jitter goes through the medians.
+      const prior = recent.length > 1 ? recent[recent.length - 2][1] : 0;
+      const stall = ms > budgetMs * 2 && prior > budgetMs * 1.5 ? Math.max(budgetMs - fixed, budgetMs * 0.25) / Math.max(0.1, ms - fixed) : Infinity;
+      const factor = Math.min(stall < 1 ? Math.max(0.25, stall) : Infinity,
+        room < 1 ? Math.max(0.5, room) : Math.min(room < 2 ? 1.12 : 1.5, room));
+      pixels = Math.max(500, Math.min(4e6, tracedPixels * factor));
+      return pixels;
+    },
+    scale({ displayW, displayH, fraction }) {
+      const share = Math.max(0.01, Math.min(1, fraction || 1));
+      return Math.max(0.08, Math.min(1, Math.sqrt(pixels / Math.max(1, displayW * displayH * share))));
     },
   };
 }

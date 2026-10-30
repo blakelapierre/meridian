@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { farPixels, NEAR_METERS, SPHERE_BUDGET } from "../src/render/gpu.js";
+import { SPHERE_BUDGET } from "../src/render/gpu.js";
 import { chaseOrigin, createCameraSpring, playerParts, rayMisses, stepCamera, stepLook } from "../src/sim/body.js";
 import { lookDirection } from "../src/sim/hands.js";
 import { buildScene } from "../src/render/scene.js";
@@ -77,13 +77,11 @@ test("the painter can hold the dummy and five bodies", () => {
   assert.ok(SPHERE_BUDGET >= 1 + 5 * 3);
 });
 
-test("distance is a quarter of the close picture on each axis", () => {
-  assert.equal(NEAR_METERS, 18);
-  assert.deepEqual(farPixels(960, 540), { width: 240, height: 135 });
-  assert.deepEqual(farPixels(5, 4), { width: 2, height: 2 });
+test("the painter is one foveated pass with no near/far split", () => {
   const src = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
-  assert.match(src, /uniform float uMaxDist/);
-  assert.match(src, /farPixels\(tw, th\)/);
-  assert.match(src, /float gazeAxis/);
-  assert.match(src, /uGazeReach/);
+  assert.doesNotMatch(src, /uMaxDist|NEAR_METERS|farPixels|stackFs/);
+  assert.match(src, /float fovT/);
+  assert.match(src, /float fovPeriod/);
+  assert.match(src, /float fovBlock/);
+  assert.match(src, /resolveFs/);
 });
