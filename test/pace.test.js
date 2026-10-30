@@ -65,12 +65,13 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
 });
 
-test("visual throughput prefers a real picture at 12fps over a speck at 30", () => {
+test("a playable rate beats a high resolution slideshow", () => {
   const speck = visualThroughput(6 * 4, 33, 33);
-  const picture = visualThroughput(160 * 90, 80, 33);
-  const slideshow = visualThroughput(960 * 540, 250, 33);
-  assert.ok(picture > speck * 10);
-  assert.ok(picture > slideshow);
+  const playable = visualThroughput(160 * 90, 50, 33);
+  const slideshow = visualThroughput(1920 * 1080, 500, 33);
+  assert.ok(playable > speck * 10);
+  assert.ok(playable > slideshow);
+  assert.ok(visualThroughput(480 * 270, 50, 33) > slideshow);
 });
 
 test("the picture moves toward the size with the highest throughput", () => {

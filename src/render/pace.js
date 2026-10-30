@@ -31,7 +31,11 @@ export function visualThroughput(pixels, frameMs, refreshMs) {
   if (!(pixels > 0) || !(frameMs > 0)) return 0;
   const refresh = Math.min(Math.max(refreshMs || 0, 1000 / 120), 1000 / 20);
   const shown = Math.min(1000 / frameMs, 1000 / refresh);
-  const motion = shown < 8 ? shown * (shown / 8) : shown;
+  // 12 fps is barely playable, 20 fps is the preferred floor. Under 12 the weight collapses.
+  let motion;
+  if (shown < 12) motion = 12 * (shown / 12) ** 4;
+  else if (shown < 20) motion = 12 + (shown - 12) * 2;
+  else motion = shown + 8;
   return pixels * motion * motion;
 }
 
@@ -96,6 +100,11 @@ export function createPicturePace() {
       history.push({ pixels, ms });
       if (history.length > 8) history.shift();
       const info = visualThroughput(pixels, ms, refresh);
+      if (ms > 1000 / 12 && octave < 8) {
+        octave = Math.min(8, octave + (ms > 1000 / 6 ? 2 : 1));
+        hold = 0;
+        return { octave, detail: 0, refresh, info };
+      }
       if (hold > 0) {
         hold -= 1;
         return { octave, detail: 0, refresh, info };
@@ -105,17 +114,23 @@ export function createPicturePace() {
       let bestInfo = -1;
       if (distinct < 2) best = octave > 0 ? octave - 1 : Math.min(8, octave + 1);
       else {
+        let slowest = octave;
         for (let step = -1; step <= 1; step += 1) {
           const candidate = octave + step;
           if (candidate < 0 || candidate > 8) continue;
           const box = sizeAt(candidate, displayW, displayH);
           const guess = predict(box.width * box.height);
+          if (guess > 1000 / 12) {
+            if (candidate > slowest) slowest = candidate;
+            continue;
+          }
           const score = visualThroughput(box.width * box.height, guess, refresh);
           if (score > bestInfo) {
             bestInfo = score;
             best = candidate;
           }
         }
+        if (bestInfo < 0) best = slowest;
       }
       if (best === octave) hold = 4;
       octave = best;
