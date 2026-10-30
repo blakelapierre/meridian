@@ -65,16 +65,17 @@ test("a still view that misses vsync says recover instead of native", () => {
   assert.equal(paceWord("vsync", { still: false, holding: true }), "vsync");
 });
 
-test("throughput is pixels times the frames you can see", () => {
+test("throughput is pixels times frame rate times speed times acceleration", () => {
   const refresh = 33;
-  assert.ok(Math.abs(visualThroughput(100, 33, refresh) - 100 * (1000 / 33)) < 1);
-  assert.ok(visualThroughput(480 * 270, 80, refresh) > visualThroughput(96 * 68, 33, refresh));
-  assert.ok(visualThroughput(200 * 100, 33, refresh) > visualThroughput(200 * 100, 16, refresh) * 0.99);
+  const seen = visualThroughput(100, 33, refresh, 2, 3);
+  assert.ok(Math.abs(seen - 100 * (1000 / 33) * 2 * 3) < 1);
+  assert.equal(visualThroughput(100, 33, refresh, 2, 0), 0);
+  assert.ok(visualThroughput(480 * 270, 80, refresh, 1, 1) > visualThroughput(96 * 68, 33, refresh, 1, 1));
 });
 
 test("rapid acceleration holds vsync and a steady pace may use 12fps", () => {
   const refresh = 33;
-  assert.ok(Math.abs(visualThroughput(100, 33, refresh, 2) - 4 * visualThroughput(100, 33, refresh, 1)) < 1);
+  assert.ok(Math.abs(visualThroughput(100, 33, refresh, 2, 1) - 2 * visualThroughput(100, 33, refresh, 1, 1)) < 1);
   assert.ok(motionLimit(0, refresh) > 70);
   assert.ok(motionLimit(4.4, refresh, 0) > 70);
   assert.ok(motionLimit(4.4, refresh, 12) < 40);
@@ -122,25 +123,18 @@ test("movement snaps toward vsync and will not stay under 12fps", () => {
   assert.ok(slow < seen.scale);
 });
 
-test("a still camera can keep walking toward higher throughput", () => {
+test("a still camera climbs to the native picture", () => {
   const box = { displayW: 1600, displayH: 900 };
   const pace = createPicturePace();
-  const cost = (level) => {
-    const size = pictureSize(level, box.displayW, box.displayH);
-    const pixels = size.width * size.height;
-    return 10 + (pixels * pixels) / 5e9;
-  };
-  let seen = pace.step({ gap: cost(0.4), ...box });
+  let seen = pace.step({ gap: 16, ...box, still: true });
   let prev = seen.scale;
-  for (let i = 0; i < 80; i += 1) {
-    seen = pace.step({ gap: cost(seen.scale), ...box, still: true });
-    assert.ok(Math.abs(seen.scale - prev) / prev <= 0.2);
+  for (let i = 0; i < 40; i += 1) {
+    seen = pace.step({ gap: 80, ...box, still: true, speed: 0, accel: 0 });
+    assert.ok(seen.scale + 1e-6 >= prev);
+    assert.ok(seen.scale <= prev * 1.2 + 1e-6);
     prev = seen.scale;
   }
-  const size = pictureSize(seen.scale, box.displayW, box.displayH);
-  assert.ok(size.width * size.height > 96 * 68);
-  const ms = cost(seen.scale);
-  assert.ok(1000 / ms > 8);
+  assert.ok(seen.scale > 0.98);
 });
 
 test("resolution climbs one octave toward the window and steps back when a frame misses", () => {
