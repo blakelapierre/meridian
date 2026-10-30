@@ -47,6 +47,13 @@ function texture(gl, width) {
 }
 
 export const SPHERE_BUDGET = MAX_SPHERES;
+
+// Exposure follows sun height: 1 at noon, rising toward 2.4 at night so dusk and night stay readable.
+export function exposureFor(sun) {
+  const z = Array.isArray(sun) ? sun[2] / (Math.hypot(sun[0], sun[1], sun[2]) || 1) : 1;
+  const day = Math.min(1, Math.max(0, (z + 0.1) / 0.5));
+  return 2.4 + (1 - 2.4) * day;
+}
 export const NEAR_METERS = 18;
 
 export function farPixels(width, height) {
@@ -123,6 +130,8 @@ uniform vec2 uGaze;
 uniform float uGamma;
 uniform float uGazeReach;
 uniform float uSpread;
+uniform float uExposure;
+uniform float uFoot;
 in vec2 vRay;
 uniform sampler2D uSphereTex;
 uniform sampler2D uSphereColor;
@@ -135,18 +144,24 @@ uniform sampler2D uTexRects;
 uniform sampler2D uAtlas;
 out vec4 fragColor;
 
-vec3 tiled(int tile, vec2 uv, vec3 fallback) {
+float gFoot = 0.0;
+// gFoot is meters covered by one pixel at the hit, so the atlas lod follows distance and grazing angle.
+vec3 tiled(int tile, vec2 uv, float perMeter, vec3 fallback) {
   vec4 rect = texelFetch(uTexRects, ivec2(tile, 0), 0);
   if (rect.w < 0.5) return fallback;
-  float pad = 0.5 / ${ATLAS}.0;
+  float texels = rect.z * ${ATLAS}.0;
+  float lod = clamp(log2(max(gFoot * perMeter * texels, 1.0e-4)), 0.0, 3.0);
+  float pad = (0.5 * exp2(lod) + 0.5) / ${ATLAS}.0;
   vec2 st = rect.xy + vec2(pad) + fract(uv) * (rect.z - pad * 2.0);
-  return texture(uAtlas, st).rgb;
+  vec3 near = textureLod(uAtlas, st, lod).rgb;
+  vec3 mean = textureLod(uAtlas, rect.xy + rect.z * 0.5, 3.0).rgb;
+  return mix(near, mean, smoothstep(2.0, 3.0, lod) * 0.5);
 }
 
 vec3 sphereAlbedo(vec3 n, int i, vec3 fallback) {
   float u = atan(n.z, n.x) * 0.15915494309189535 + 0.5;
   float v = asin(clamp(n.y, -1.0, 1.0)) * 0.3183098861837907 + 0.5;
-  return tiled(i, vec2(u, v), fallback);
+  return tiled(i, vec2(u, v), 0.25, fallback);
 }
 
 float hash21(vec2 p) {
@@ -202,9 +217,9 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
   float rockW = clamp(smoothstep(0.2, 0.5, slope) + smoothstep(0.62, 0.92, crest) * 0.8, 0.0, 1.0);
   float grassW = (1.0 - rockW) * smoothstep(0.1, 0.34, crest) * (1.0 - smoothstep(0.58, 0.86, crest));
   grassW *= 1.0 - smoothstep(0.16, 0.46, slope);
-  vec3 sandC = tiled(${SAND_TILE}, p * 0.16, vec3(0.55, 0.48, 0.32));
-  vec3 grassC = tiled(${GRASS_TILE}, p * 0.14, vec3(0.22, 0.4, 0.16));
-  vec3 rockC = tiled(${ROCK_TILE}, p * 0.12, vec3(0.4, 0.38, 0.34));
+  vec3 sandC = tiled(${SAND_TILE}, p * 0.16, 0.16, vec3(0.55, 0.48, 0.32));
+  vec3 grassC = tiled(${GRASS_TILE}, p * 0.14, 0.14, vec3(0.22, 0.4, 0.16));
+  vec3 rockC = tiled(${ROCK_TILE}, p * 0.12, 0.12, vec3(0.4, 0.38, 0.34));
   sandC *= 0.88 + valueNoise(p * 0.23) * 0.22;
   grassC *= 0.86 + valueNoise(p * 0.31 + 4.0) * 0.26;
   rockC *= 0.84 + valueNoise(p * 0.19 + 9.0) * 0.28;
@@ -294,6 +309,55 @@ bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   p = ro + rd * hi;
   p.z = duneHeight(p.xy);
   return dot(p.xy, p.xy) <= 65536.0;
+}
+
+// Bounce rays march the same dunes as primary rays, coarsely: 16 steps then 5 halvings.
+bool sandCoarse(vec3 ro, vec3 rd, out float t, out vec3 p) {
+  t = 0.0;
+  p = ro;
+  if (rd.z > 0.05 && ro.z > 5.6) return false;
+  float tFar = islandExit(ro, rd);
+  if (rd.z < -1.0e-4) tFar = min(tFar, max(-ro.z / rd.z, 0.0) + 4.0);
+  tFar = clamp(tFar, 0.0, 160.0);
+  if (rd.z >= 0.0 && ro.z > 5.6) return false;
+  float lo = 0.02;
+  float prev = ro.z - duneHeight(ro.xy);
+  if (prev <= 0.0) return false;
+  float stride = max(tFar / 16.0, 0.25);
+  float hi = -1.0;
+  for (int i = 1; i <= 16; i++) {
+    float s = float(i) * stride;
+    if (s > tFar) break;
+    vec3 q = ro + rd * s;
+    if (q.z - duneHeight(q.xy) <= 0.0) { hi = s; break; }
+    lo = s;
+  }
+  if (hi < 0.0) return false;
+  for (int k = 0; k < 5; k++) {
+    float mid = 0.5 * (lo + hi);
+    vec3 m = ro + rd * mid;
+    if (m.z - duneHeight(m.xy) > 0.0) lo = mid; else hi = mid;
+  }
+  t = hi;
+  p = ro + rd * hi;
+  p.z = duneHeight(p.xy);
+  return dot(p.xy, p.xy) <= 65536.0;
+}
+
+// Colors are authored as display values. Decode, expose, ACES (Narkowicz fit), encode sRGB.
+vec3 srgbToLinear(vec3 c) {
+  c = max(c, vec3(0.0));
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 linearToSrgb(vec3 c) {
+  c = clamp(c, 0.0, 1.0);
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
+vec3 aces(vec3 x) {
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+vec3 present(vec3 c) {
+  return linearToSrgb(aces(srgbToLinear(c) * uExposure));
 }
 
 bool boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t) {
@@ -399,6 +463,7 @@ void main() {
   vec3 accum = vec3(0.0);
   float thru = 1.0;
   float cover = 1.0;
+  float firstT = 4000.0;
   float limit = uMaxDist;
   if (uMaxDist > 0.0) {
     float gazeD = length(vec2((uu - uGaze.x) * uAspect, vv - uGaze.y));
@@ -418,14 +483,8 @@ void main() {
     vec3 sandP = ro;
     bool sand = false;
     if (bounce == 0) sand = sandPlane(ro, rd, limit, sandT, sandP);
-    else if (rd.z < -1.0e-4) {
-      sandT = -ro.z / rd.z;
-      if (sandT > 0.02 && sandT < 800.0) {
-        sandP = ro + rd * sandT;
-        sandP.z = duneHeight(sandP.xy);
-        sand = dot(sandP.xy, sandP.xy) <= 65536.0;
-      }
-    }
+    else sand = sandCoarse(ro, rd, sandT, sandP);
+    gFoot = (sand ? sandT : 8.0) * uFoot / max(abs(rd.z), 0.25) * float(bounce + 1);
     bool openMouth = false;
     float mouthFloor = 0.0;
     if (bounce == 0 && uDigs > 0) {
@@ -446,7 +505,7 @@ void main() {
         bestT = t;
         bestP = p;
         bestN = vec3(0.0, 0.0, 1.0);
-        bestRgb = withPrints(tiled(${SAND_TILE}, p.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, p.xy, bounce);
+        bestRgb = withPrints(tiled(${SAND_TILE}, p.xy * 0.35, 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, p.xy, bounce);
         bestRef = 0.02;
         found = true;
       }
@@ -455,7 +514,7 @@ void main() {
       bestT = sandT;
       bestP = vec3(sandP.xy, mouthFloor);
       bestN = vec3(0.0, 0.0, 1.0);
-      bestRgb = withPrints(tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, sandP.xy, bounce);
+      bestRgb = withPrints(tiled(${SAND_TILE}, sandP.xy * 0.35, 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, sandP.xy, bounce);
       bestRef = 0.02;
       found = true;
     } else if (sand && !openMouth && sandT < bestT) {
@@ -474,9 +533,10 @@ void main() {
       bestT = t;
       bestP = ro + rd * t;
       bestN = boxNormal(bestP, bmin, bmax);
+      gFoot = t * uFoot / max(abs(dot(bestN, rd)), 0.25) * float(bounce + 1);
       vec4 col = texelFetch(uBoxColor, ivec2(i, 0), 0);
       vec2 woodUv = abs(bestN.z) > 0.5 ? bestP.xy : (abs(bestN.x) > 0.5 ? bestP.yz : bestP.xz);
-      bestRgb = tiled(${WOOD_TILE}, woodUv * 0.5, col.rgb);
+      bestRgb = tiled(${WOOD_TILE}, woodUv * 0.5, 0.5, col.rgb);
       bestRef = col.a;
       found = true;
     }
@@ -487,6 +547,7 @@ void main() {
       bestT = t;
       bestP = ro + rd * t;
       bestN = normalize(bestP - sphere.xyz);
+      gFoot = t * uFoot * float(bounce + 1);
       vec4 col = texelFetch(uSphereColor, ivec2(i, 0), 0);
       bestRgb = sphereAlbedo(bestN, i, col.rgb);
       bestRef = col.a;
@@ -522,7 +583,8 @@ void main() {
       accum += thru * skyColor(rd);
       break;
     }
-    if (uMaxDist > 0.0 && bounce == 0) cover = clamp((limit - min(bestT, workT)) / 6.0, 0.0, 1.0);
+    if (bounce == 0) firstT = min(bestT, workT);
+    if (uMaxDist > 0.0 && bounce == 0) cover = smoothstep(0.0, 1.0, clamp((limit - min(bestT, workT)) / 8.0, 0.0, 1.0));
     if (found) {
       if (dot(bestN, rd) > 0.0) bestN = -bestN;
       if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
@@ -567,14 +629,24 @@ void main() {
       }
     }
     float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
-    if (uMaxDist > 0.0 && mirror < 0.2) mirror = 0.0;
+    // Same rule in the near and far passes: faint mirrors take a cheap sky tint instead of a traced bounce.
+    if (found && mirror < 0.2) {
+      vec3 rr = reflect(rd, bestN);
+      float up = clamp(rr.z * 0.85 + 0.2, 0.0, 1.0);
+      float day = smoothstep(-0.02, 0.25, normalize(uSun).z);
+      vec3 tint = mix(vec3(0.62, 0.68, 0.74), vec3(0.30, 0.50, 0.84), up) * mix(0.12, 1.0, day);
+      bestRgb = mix(bestRgb, tint, mirror);
+      mirror = 0.0;
+    }
     accum += thru * bestRgb * (1.0 - mirror);
     thru *= mirror;
     if (thru <= 0.001) break;
     rd = normalize(reflect(rd, bestN));
     ro = bestP + bestN * 0.05;
   }
-  fragColor = vec4(accum, uMaxDist > 0.0 ? cover : 1.0);
+  // Far pass alpha carries log depth (0 near, 1 at 4 km) for the depth-aware upscale.
+  float depthCode = clamp(log2(1.0 + firstT) / 12.0, 0.0, 1.0);
+  fragColor = vec4(present(accum), uMaxDist > 0.0 ? cover : depthCode);
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
   const fs = compile(gl, gl.FRAGMENT_SHADER, frag);
@@ -609,8 +681,9 @@ void main() {
     atlasTex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE7);
     gl.bindTexture(gl.TEXTURE_2D, atlasTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 3);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     blitTexture(atlasData, SAND_TILE, sandTexture());
@@ -622,6 +695,7 @@ void main() {
     rectData.set(rectFor(GRASS_TILE), GRASS_TILE * 4);
     rectData.set(rectFor(ROCK_TILE), ROCK_TILE * 4);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ATLAS, ATLAS, 0, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
+    gl.generateMipmap(gl.TEXTURE_2D);
   } catch {
     return null;
   }
@@ -661,8 +735,8 @@ void main() {
   const hold = [0, 1, 2].map(() => {
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
@@ -705,9 +779,27 @@ uniform sampler2D uNewer;
 uniform float uMix;
 in vec2 vUV;
 out vec4 fragColor;
+// Edge-aware upscale: bilinear, then a sharpen that is clamped to the 2x2 source texels,
+// so edges stay crisp without nearest-neighbour stairs or ringing.
+vec4 upscale(sampler2D tex, vec2 uv) {
+  vec2 size = vec2(textureSize(tex, 0));
+  vec2 st = uv * size - 0.5;
+  vec2 base = (floor(st) + 0.5) / size;
+  vec2 dx = vec2(1.0 / size.x, 0.0);
+  vec2 dy = vec2(0.0, 1.0 / size.y);
+  vec4 a = texture(tex, base);
+  vec4 b = texture(tex, base + dx);
+  vec4 c = texture(tex, base + dy);
+  vec4 d = texture(tex, base + dx + dy);
+  vec4 lin = texture(tex, uv);
+  vec4 lo = min(min(a, b), min(c, d));
+  vec4 hi = max(max(a, b), max(c, d));
+  vec4 blur = (a + b + c + d) * 0.25;
+  return clamp(lin + (lin - blur) * 0.9, lo, hi);
+}
 void main() {
-  vec4 past = texture(uOlder, vUV);
-  vec4 next = texture(uNewer, vUV);
+  vec4 past = upscale(uOlder, vUV);
+  vec4 next = upscale(uNewer, vUV);
   fragColor = mix(past, next, uMix);
 }`);
   let blitProgram = null;
@@ -742,9 +834,23 @@ void main() {
   vec2 ray = vec2(vUV.x, 1.0 - vUV.y);
   vec2 packed = vec2(gazeUnaxis(ray.x, uGaze.x, g), gazeUnaxis(ray.y, uGaze.y, g));
   vec2 nearUV = vec2(packed.x, 1.0 - packed.y);
-  vec4 farColor = texture(uFar, vUV);
+  vec2 fsize = vec2(textureSize(uFar, 0));
+  vec2 st = vUV * fsize - 0.5;
+  vec2 f = fract(st);
+  vec2 base = (floor(st) + 0.5) / fsize;
+  vec4 s00 = texture(uFar, base);
+  vec4 s10 = texture(uFar, base + vec2(1.0 / fsize.x, 0.0));
+  vec4 s01 = texture(uFar, base + vec2(0.0, 1.0 / fsize.y));
+  vec4 s11 = texture(uFar, base + 1.0 / fsize);
+  // Depth-aware: the nearest surface among the four far texels is the reference;
+  // texels much deeper than it (sky behind a ridge) lose weight instead of smearing across the edge.
+  float ref = min(min(s00.a, s10.a), min(s01.a, s11.a));
+  vec4 w = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  vec4 dz = vec4(s00.a, s10.a, s01.a, s11.a) - ref;
+  w *= exp(-dz * dz * 900.0) + 1.0e-3;
+  vec3 farRgb = (s00.rgb * w.x + s10.rgb * w.y + s01.rgb * w.z + s11.rgb * w.w) / max(dot(w, vec4(1.0)), 1.0e-5);
   vec4 nearColor = texture(uNear, clamp(nearUV, 0.0, 1.0));
-  fragColor = vec4(mix(farColor.rgb, nearColor.rgb, nearColor.a), 1.0);
+  fragColor = vec4(mix(farRgb, nearColor.rgb, nearColor.a), 1.0);
 }`);
   let stackProgram = null;
   if (blitVs && stackFs) {
@@ -769,7 +875,7 @@ void main() {
     return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
   };
   const farSlot = makeTarget(gl.LINEAR);
-  const nearSlot = makeTarget(gl.NEAREST);
+  const nearSlot = makeTarget(gl.LINEAR);
   const draw = (scene, mode, count, maxDist = 0) => {
       sphereData.fill(0);
       sphereColor.fill(0);
@@ -861,6 +967,7 @@ void main() {
         gl.activeTexture(gl.TEXTURE7);
         gl.bindTexture(gl.TEXTURE_2D, atlasTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ATLAS, ATLAS, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
+        gl.generateMipmap(gl.TEXTURE_2D);
         atlasDirty = false;
       }
       gl.uniform1i(u("uSphereTex"), 0);
@@ -898,6 +1005,9 @@ void main() {
       gl.uniform1f(u("uGamma"), sharpen || 1);
       gl.uniform1f(u("uGazeReach"), gaze ? gaze.reach : maxDist || 0);
       gl.uniform1f(u("uSpread"), gaze ? gaze.spread : 0.22);
+      gl.uniform1f(u("uExposure"), exposureFor(sun));
+      const halfTan = Math.tan(((scene.camera.fov || 70) * Math.PI) / 360);
+      gl.uniform1f(u("uFoot"), (2 * halfTan) / Math.max(2, rh));
       if (prog === pointProgram) {
         const n = Math.max(0, Math.min(count | 0, rayUVs.length / 2));
         const w = Math.max(1, canvas.width);

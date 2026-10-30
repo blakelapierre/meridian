@@ -65,6 +65,19 @@ export function visualThroughput(pixels, frameMs, refreshMs, speed = 1, accel = 
   return pixels * fps * Math.max(speed, 0) ** 2 * Math.max(accel, 0) ** 2;
 }
 
+// A still camera refines progressively: each trace may cost at most STILL_BUDGET_MS.
+// Trace cost grows with pixel count (scale squared), so the next scale is capped at
+// scale * sqrt(budget / measured). Over budget it steps down at once and never climbs.
+export const STILL_BUDGET_MS = 250;
+
+export function stillScale(scale, frameMs, budgetMs = STILL_BUDGET_MS) {
+  const now = Math.max(0.08, Math.min(1, scale || 0.08));
+  if (!(frameMs > 0)) return now;
+  const room = Math.sqrt(budgetMs / frameMs);
+  if (frameMs > budgetMs) return Math.max(0.08, now * Math.max(room, 0.5));
+  return Math.min(1, now * Math.min(1.12, room));
+}
+
 export function createPicturePace() {
   let scale = 0.4;
   let period = 1000 / 60;
@@ -106,7 +119,7 @@ export function createPicturePace() {
         return pack(0);
       }
       if (still) {
-        scale = Math.min(1, scale * 1.12);
+        scale = stillScale(scale, gap);
         wasStill = true;
         const size = pictureSize(scale, displayW, displayH);
         const info = visualThroughput(size.width * size.height, gap, refresh, speed, accel);

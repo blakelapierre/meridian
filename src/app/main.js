@@ -6,9 +6,9 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas, NEAR_METERS } from "../render/gpu.js?v=70";
+import { createGpuPainter, fitCanvas, NEAR_METERS } from "../render/gpu.js?v=71";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=85";
+import { cameraAccel, cameraSpeed, createPacer, createPicturePace, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=86";
 import {
   authority,
   bandage,
@@ -250,7 +250,9 @@ let shotFlash = { text: "", until: 0 };
 let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : tourSpawn ? TOUR_START.yaw : 0);
 let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
-let tick = (0.87 / (Math.PI * 2)) * DAY_TICKS;
+// ?phase=<radians> sets the starting sun angle (0.87 is mid-morning, ~2.9 dusk, ~4.6 night) for repeatable screenshots.
+const phaseParam = Number(params.get("phase"));
+let tick = ((Number.isFinite(phaseParam) && params.get("phase") !== null ? phaseParam : 0.87) / (Math.PI * 2)) * DAY_TICKS;
 let trigger = false;
 let shotQueued = false;
 let cooldown = 0;
@@ -2696,7 +2698,7 @@ if (params.get("still") !== "1") {
     const paced = extra
       ? { scale: 0.4, refresh: decision.refresh, info: 0, ...pictureSize(0.4, displayW, displayH) }
       : picture.step({
-        gap: settled ? Math.max(decision.gap, 1) : burst || issued ? Math.max(traceCost, 1) : 0,
+        gap: settled ? Math.max(decision.gap, lastPaintMs || 0, 1) : burst || issued ? Math.max(traceCost, 1) : 0,
         displayW,
         displayH,
         still: settled,
