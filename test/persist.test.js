@@ -3,6 +3,7 @@ import test from "node:test";
 import { createIdentity } from "../src/net/identity.js";
 import { createSkills } from "../src/sim/skills.js";
 import { createSurvey } from "../src/sim/map.js";
+import { createPlate, samplePlate, stamp } from "../src/sim/plate.js";
 import {
   acceptSheet,
   applyCharacter,
@@ -10,11 +11,15 @@ import {
   encodeSheet,
   keepSheet,
   loadIdentity,
+  loadPlate,
   loadSheet,
   memoryStore,
   packBlock,
+  packPlate,
   saveIdentity,
+  savePlate,
   saveSheet,
+  unpackPlate,
   unpackStoredBlock,
 } from "../src/sim/persist.js";
 
@@ -74,4 +79,12 @@ test("a character and their key come back from the store", () => {
   const block = unpackStoredBlock(stored);
   assert.equal(block.prev[0], 4);
   assert.equal(block.ops[0].before[1], 2);
+  const plate = createPlate(32, 32, [0, 0]);
+  stamp(plate, 1, 1, [10, 20, 30, 255], 0.4);
+  const storePlate = memoryStore();
+  savePlate(storePlate, plate, "self");
+  const again = createPlate(32, 32, [0, 0]);
+  unpackPlate(again, loadPlate(storePlate, "self"));
+  assert.deepEqual(samplePlate(again, 1, 1).slice(0, 3), samplePlate(plate, 1, 1).slice(0, 3));
+  assert.equal(packPlate(createPlate(8, 8)).length > 0, true);
 });

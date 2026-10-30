@@ -76,11 +76,14 @@ import {
   hexBytes,
   keepFrame,
   loadIdentity,
+  loadPlate,
   loadSheet,
   loadWorld,
   saveIdentity,
+  savePlate,
   saveSheet,
   saveWorld,
+  unpackPlate,
 } from "../sim/persist.js";
 import { firstCrate } from "../sim/culture.js";
 import { createPools, drainPool, flowOnce, notePool } from "../sim/pool.js";
@@ -272,6 +275,7 @@ if (kept && keepSlot) {
     stamp(plate, cell.point[0], cell.point[1], GEO_COLOR[cell.kind] || GEO_COLOR.sand, 1.6);
   }
 }
+if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const jump = createJump();
 let ops = null;
@@ -389,6 +393,7 @@ function pushSheet() {
     seq: sheetSeq,
   });
   saveSheet(keptStore, body, keepSlot);
+  savePlate(keptStore, plate, keepSlot);
   const frame = encodeSheet(identity, body);
   for (const link of links) {
     if (link.role !== "archive" || link.ops.readyState !== "open") continue;
@@ -1213,6 +1218,10 @@ function publish() {
   const contract = entryState.joined ? "" : entryState.prompt;
   const strike = entryState.joined ? entryLine(entryState) : contract;
   const archives = links.filter((link) => link.role === "archive" && link.ops.readyState === "open").length;
+  const players = links.filter((link) => link.role !== "archive" && link.ops.readyState === "open").length;
+  const companyNote = archives + players
+    ? ` · with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}`
+    : " · alone";
   const official = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "";
   const chainNote = `block ${tip.height}${official ? ` ${official}` : ""}`;
   const seen = poses.size;
@@ -1226,7 +1235,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${archives ? " · archive" : ""}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${companyNote}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
