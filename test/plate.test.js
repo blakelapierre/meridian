@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GEO_COLOR, createPlate, dragCenter, hitGround, mapSpan, placeOnView, plateViewRect, revealLook, revealRange, samplePlate, stamp } from "../src/sim/plate.js";
+import { chaseOrigin } from "../src/sim/body.js";
 import { lookDirection } from "../src/sim/hands.js";
 
 test("the map image keeps earlier geography and updates a cell when it changes", () => {
@@ -24,11 +25,14 @@ test("looking around reveals a wedge that grows with mapping", () => {
 
 test("a look stamps the ground under the view, not a flat guess ahead of the feet", () => {
   const steep = revealLook({ x: 0, y: -150, yaw: 0, pitch: -1.2, skills: { mapping: 0 } });
-  const ahead = steep.filter((point) => point.y !== -150);
+  const ahead = steep.filter((point) => point.y !== -150 || point.x !== 0);
   assert.ok(ahead.length > 0);
-  assert.ok(ahead.every((point) => point.y - -150 < 1.2), ahead.map((point) => point.y));
+  assert.ok(ahead.some((point) => Math.hypot(point.x, point.y + 150) < 1.2));
+  assert.ok(ahead.every((point) => Math.hypot(point.x, point.y + 150) < revealRange({}) + 0.05), ahead);
   const level = revealLook({ x: 0, y: 0, yaw: 0, pitch: 0, skills: { mapping: 0 } });
-  assert.deepEqual(level, [{ x: 0, y: 0 }]);
+  const levelHits = level.filter((point) => point.x !== 0 || point.y !== 0);
+  assert.ok(levelHits.length > 0);
+  assert.ok(levelHits.every((point) => point.y > 0 && point.y < 8), levelHits);
   const behind = [0, -153.4, 2.2];
   const chase = revealLook({
     x: 0,
@@ -40,7 +44,23 @@ test("a look stamps the ground under the view, not a flat guess ahead of the fee
     skills: { mapping: 0 },
   });
   assert.ok(chase.length > 1);
-  assert.ok(chase.every((point) => Math.hypot(point.x, point.y + 150) < 2), chase);
+  assert.ok(chase.every((point) => Math.hypot(point.x, point.y + 150) < revealRange({}) + 0.05), chase);
+  const feet = [0, -150, 0];
+  const origin = chaseOrigin(feet, 0, 0);
+  const levelChase = revealLook({
+    x: feet[0],
+    y: feet[1],
+    yaw: 0,
+    pitch: 0,
+    origin,
+    dir: lookDirection(0, 0),
+    skills: { mapping: 0 },
+  });
+  const near = levelChase.filter((point) => point.x !== feet[0] || point.y !== feet[1]);
+  assert.ok(near.length > 0);
+  const closest = Math.min(...near.map((point) => Math.hypot(point.x - feet[0], point.y - feet[1])));
+  assert.ok(closest < 6, closest);
+  assert.ok(near.every((point) => point.y > origin[1]));
   const hill = hitGround([0, 0, 2], [0, 1, 0], (x, y) => (y > 6 ? 3 : 0), 16);
   assert.ok(hill.y > 5.5 && hill.y < 7, hill.y);
 });

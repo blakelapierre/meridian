@@ -21,6 +21,7 @@ import {
   saveSheet,
   unpackPlate,
   unpackStoredBlock,
+  forgetKept,
 } from "../src/sim/persist.js";
 
 test("a character and their key come back from the store", () => {
@@ -87,4 +88,19 @@ test("a character and their key come back from the store", () => {
   unpackPlate(again, loadPlate(storePlate, "self"));
   assert.deepEqual(samplePlate(again, 1, 1).slice(0, 3), samplePlate(plate, 1, 1).slice(0, 3));
   assert.equal(packPlate(createPlate(8, 8)).length > 0, true);
+});
+
+test("forgetting the keep wipes every meridian save and leaves the rest", () => {
+  const store = memoryStore({
+    "meridian-id-self": "a",
+    "meridian-sheet-self": "{}",
+    "meridian-plate-ai-surveyor": "b",
+    "meridian-world-self": "{}",
+    other: "stay",
+  });
+  assert.equal(forgetKept(store), 4);
+  assert.equal(store.get("meridian-id-self"), null);
+  assert.equal(store.get("meridian-plate-ai-surveyor"), null);
+  assert.equal(store.get("meridian-world-self"), null);
+  assert.equal(store.get("other"), "stay");
 });
