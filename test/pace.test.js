@@ -73,6 +73,18 @@ test("a steady 30Hz frame is vsync and the picture climbs", () => {
   assert.ok(held.refresh > 28 && held.refresh < 40);
 });
 
+test("a tiny picture spends down toward 12fps instead of staying microscopic", () => {
+  const picture = createPicturePace();
+  const box = { displayW: 1280, displayH: 720 };
+  for (let i = 0; i < 12; i += 1) picture.step({ gap: 200, ...box });
+  const stuck = picture.step({ gap: 50, ...box });
+  const size = sizeAt(stuck.octave, box.displayW, box.displayH);
+  assert.ok(Math.max(size.width, size.height) < 220);
+  let later = stuck;
+  for (let i = 0; i < 24; i += 1) later = picture.step({ gap: 50, ...box });
+  assert.ok(later.octave < stuck.octave);
+});
+
 test("resolution climbs back to the window after a late frame", () => {
   const picture = createPicturePace();
   const missed = picture.step({ gap: 200, refresh: 16 });
