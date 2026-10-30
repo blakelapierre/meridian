@@ -23,6 +23,7 @@ import {
   spoilCap,
 } from "../src/sim/rules.js";
 import { shellTilt } from "../src/sim/shell.js";
+import { liftCamera } from "../src/sim/body.js";
 import { swarmPoint } from "../src/sim/litho.js";
 
 test("the third pass of the notes is a set of small rules", () => {
@@ -66,6 +67,12 @@ test("the third pass of the notes is a set of small rules", () => {
   assert.equal(swarmPoint(0, -150, 20), null);
   assert.deepEqual(swarmPoint(0, -200, 20), [1.6, -200, 1.1]);
   assert.equal(swarmPoint(0, -200, 3), null);
+  const under = [1, 2, -3];
+  liftCamera(under, -1);
+  assert.equal(under[2], -0.55);
+  const clear = [1, 2, 2];
+  liftCamera(clear, 0);
+  assert.equal(clear[2], 2);
   assert.equal(dominionOpen(), false);
   const yard = createYard({ x: 0, y: 0 }, 10);
   assert.equal(tryPlaceRoad(yard, [1, 0]).ok, true);

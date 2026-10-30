@@ -50,7 +50,7 @@ import {
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, SKILL_NAMES } from "../sim/skills.js";
-import { chaseOrigin, createCameraSpring, frameCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js";
+import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
@@ -331,7 +331,7 @@ const shotFrames = [];
 
 addEventListener("keydown", (event) => {
   keys.add(event.code);
-  if (event.code === "KeyW" || event.code === "KeyA" || event.code === "KeyS" || event.code === "KeyD") seated = false;
+  if (event.code === "KeyW" || event.code === "KeyA" || event.code === "KeyS" || event.code === "KeyD" || event.code === "KeyZ" || event.code === "KeyC") seated = false;
   if (event.code === "Tab" || event.code === "Backquote") event.preventDefault();
   if (event.repeat) return;
   playerPress(event.code);
@@ -361,10 +361,10 @@ addEventListener("keydown", (event) => {
   if (event.code === "KeyR") {
     optics = OPTICS[(OPTICS.indexOf(optics) + 1) % OPTICS.length];
   }
-  if (event.code === "KeyC" && !event.repeat) {
+  if (event.code === "BracketLeft" && !event.repeat) {
     brush = brush === "dig" ? "fill" : brush === "fill" ? "smooth" : "dig";
   }
-  if (event.code === "KeyZ" && !event.repeat) turnEdge = true;
+  if (event.code === "BracketRight" && !event.repeat) turnEdge = true;
   if (event.code === "KeyY" && !event.repeat && selection?.kind === "player") {
     offerBond(bonds, selection.id);
     report = bonds.get(selection.id) === "both" ? "fellowship" : "offered";
@@ -505,7 +505,7 @@ function input() {
     yaw,
     pitch,
     forward: intent.forward,
-    strafe: (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0),
+    strafe: (keys.has("KeyC") ? 1 : 0) - (keys.has("KeyZ") ? 1 : 0),
     sprint: intent.sprint,
     crouch: keys.has("ControlLeft") || keys.has("ControlRight"),
     jump: keys.has("Space"),
@@ -552,7 +552,7 @@ function useRightClick() {
 }
 
 function applyAgenda(command) {
-  for (const code of ["KeyW", "KeyA", "KeyS", "KeyD"]) keys.delete(code);
+  for (const code of ["KeyW", "KeyA", "KeyS", "KeyD", "KeyZ", "KeyC"]) keys.delete(code);
   if (command.forward > 0) keys.add("KeyW");
   if (command.forward < 0) keys.add("KeyS");
   yaw = command.yaw;
@@ -653,8 +653,14 @@ function aimCamera(sample, dt) {
     const len = Math.hypot(idealLook[0], idealLook[1], idealLook[2]) || 1;
     idealLook = [idealLook[0] / len, idealLook[1] / len, idealLook[2] / len];
   }
+  liftCamera(ideal, columnFloor(terrain.log.crust, ideal[0], ideal[1]));
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
+  const landed = columnFloor(terrain.log.crust, cameraPos[0], cameraPos[1]);
+  if (cameraPos[2] < landed + 0.45) {
+    cameraPos[2] = landed + 0.45;
+    cameraSpring.vel[2] = Math.max(0, cameraSpring.vel[2]);
+  }
   cameraLook = stepLook(cameraSpring, idealLook, dt);
 }
 
@@ -802,6 +808,7 @@ function bindChart() {
 function showChart() {
   const chart = document.querySelector("#chart");
   if (chart) chart.classList.toggle("open", mapOpen);
+  document.documentElement.classList.toggle("mapped", mapOpen);
 }
 
 function sensedPeople() {
@@ -1544,6 +1551,10 @@ if (params.get("still") !== "1") {
         wall: yard.pieces.some((piece) => piece.id === "wall"),
       }));
     }
+    if (!followId && !agent) {
+      const turn = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
+      if (turn) yaw += turn * 2.1 * dt;
+    }
     const sample = input();
     if (seated) {
       sample.forward = 0;
@@ -1948,7 +1959,7 @@ if (params.get("still") !== "1") {
       y: player.position[1],
       yaw,
       pitch,
-      busy: rightDown || keys.has("KeyW") || keys.has("KeyA") || keys.has("KeyS") || keys.has("KeyD"),
+      busy: rightDown || keys.has("KeyW") || keys.has("KeyA") || keys.has("KeyS") || keys.has("KeyD") || keys.has("KeyZ") || keys.has("KeyC"),
     };
     if (viewStill(stillPose, stillSample)) stillFor += dt;
     else stillFor = 0;
