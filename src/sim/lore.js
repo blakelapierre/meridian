@@ -87,7 +87,7 @@ export function learnLore(survey, plate, offer, skills, stamp, colors) {
   if (skillValue(skills, "mapping") < 4) return learned;
   const cap = skillValue(skills, "mapping") >= 40 ? offer.ground.length : Math.min(4, offer.ground.length);
   for (const cell of offer.ground.slice(0, cap)) {
-    if (cell.kind === "pit" && skillValue(skills, "mining") < 8) continue;
+    if (cell.kind === "pit" && (skills?.prospect != null ? skillValue(skills, "prospect") : skillValue(skills, "mining")) < 8) continue;
     if (plate && stamp) stamp(plate, cell.point[0], cell.point[1], toldTint(colors[cell.kind] || colors.sand), 1.6);
     survey.ground.set(`lore:${cell.point[0]}:${cell.point[1]}`, cell);
     learned.ground += 1;

@@ -1,6 +1,15 @@
 export const SKILL_NAMES = ["appraisal", "jump", "run", "mapping", "tracking", "marksmanship", "mining", "building", "eyesight", "ranging"];
 
-export const SUBSKILLS = { mapping: ["topography"] };
+export const SUBSKILLS = {
+  mapping: ["topography"],
+  mining: ["prospect"],
+  building: ["bracing"],
+  eyesight: ["focus"],
+  ranging: ["measure"],
+  tracking: ["trailing"],
+  jump: ["landing"],
+  run: ["wind"],
+};
 
 export function skillRows() {
   const rows = [];
