@@ -6,7 +6,7 @@ import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=50";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=50";
 import { createFps } from "../render/fps.js";
-import { createPacer, easePixels, nativePixels, paceWord, playPixels, soldierTarget, viewStill } from "../render/pace.js";
+import { createPacer, easePixels, nativePixels, paceWord, playPixels, soldierTarget, viewStill } from "../render/pace.js?v=52";
 import {
   authority,
   bandage,
@@ -104,15 +104,16 @@ const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
 const quiet = params.get("quiet") === "1";
-const paceBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-pace");
-let primaryHolding = true;
-if (quiet && paceBus) {
-  paceBus.onmessage = (event) => {
-    if (event.data?.role === "primary") primaryHolding = event.data.holding !== false;
-  };
-}
 const followId = params.get("follow");
 const agendaName = params.get("ai");
+const extra = quiet || Boolean(followId) || Boolean(agendaName);
+const paceBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-pace");
+let primaryHolding = false;
+if (extra && paceBus) {
+  paceBus.onmessage = (event) => {
+    if (event.data?.role === "primary") primaryHolding = event.data.holding === true;
+  };
+}
 const agent = agendaName && AGENDAS[agendaName] ? createAgent(agendaName) : null;
 const keys = new Set();
 const peer = Boolean(params.get("id"));
@@ -1973,8 +1974,10 @@ if (params.get("still") !== "1") {
       playPixels(boxW, boxH),
     );
     easedPixels = easedPixels ? easePixels(easedPixels, targetPixels, dt) : targetPixels;
-    const decision = quiet && !document.hidden ? pacer.considerExtra(now, primaryHolding) : pacer.consider(now, active);
-    if (!quiet && paceBus) paceBus.postMessage({ role: "primary", holding: decision.holding });
+    const decision = extra && !document.hidden
+      ? pacer.considerExtra(now, primaryHolding)
+      : pacer.consider(now, extra ? false : active);
+    if (!extra && paceBus) paceBus.postMessage({ role: "primary", holding: decision.holding });
     viewScale = decision.scale;
     const native = nativePixels(boxW, boxH, window.devicePixelRatio || 1);
     const arrived = still && easedPixels && easedPixels.width >= native.width * 0.95 && easedPixels.height >= native.height * 0.95;

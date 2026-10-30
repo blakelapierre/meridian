@@ -66,22 +66,34 @@ test("the scroll distance moves the camera along the line behind the body", () =
   assert.equal(near[0], 0);
 });
 
-test("an extra frame paints every tick while the primary holds vsync and yields when it does not", () => {
+test("an extra frame slows to keep the primary at vsync and never slower than 1fps", () => {
   const extra = createPacer();
   let now = 0;
+  assert.equal(extra.considerExtra(now, true).paint, true);
+  extra.note(1, false, false);
   let painted = 0;
-  for (let frame = 0; frame < 12; frame += 1) {
+  for (let frame = 0; frame < 90; frame += 1) {
     now += 16;
-    if (extra.considerExtra(now, true).paint) painted += 1;
+    const decision = extra.considerExtra(now, true);
+    assert.ok(decision.interval <= 1000);
+    if (decision.paint) {
+      painted += 1;
+      extra.note(1, false, false);
+    }
   }
-  assert.equal(painted, 12);
-  assert.equal(extra.considerExtra(now + 16, true).mode, "free");
-  let yielded = 0;
-  for (let frame = 0; frame < 10; frame += 1) {
+  assert.ok(painted > 5, painted);
+  const fast = extra.considerExtra(now, true);
+  assert.ok(fast.interval < 200, fast.interval);
+  const before = now;
+  let nextPaint = 0;
+  for (let frame = 0; frame < 80; frame += 1) {
     now += 16;
     const decision = extra.considerExtra(now, false);
-    if (decision.paint) yielded += 1;
-    assert.equal(decision.mode, "yield");
+    assert.ok(decision.interval <= 1000);
+    if (decision.paint) {
+      extra.note(1, false, false);
+      if (!nextPaint) nextPaint = now;
+    }
   }
-  assert.ok(yielded < 10, yielded);
+  assert.ok(nextPaint > 0 && nextPaint - before <= 1000, nextPaint - before);
 });
