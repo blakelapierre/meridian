@@ -6,7 +6,7 @@ The map is a picture that stays. Looking paints sand, pits, stone, and wood. The
 
 ## This pass
 
-The chart has two fogs. Inside half the sense radius is clear. Between that and the rim is a told tint. Outside the rim is the heavier dim. The world picture has one light.
+Walking leaves footsteps. Tracking rises slowly from those steps. The map shows a longer path as the skill rises. From tracking 8 the steps stay on the chart picture. From tracking 18 other bodies leave a shorter path.
 
 ## Proves
 

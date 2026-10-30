@@ -123,6 +123,26 @@ export function noteNearby(survey, self, landmarks, skills = {}) {
   return survey;
 }
 
+export function pathKeep(tracking = 0) {
+  const trained = Math.max(0, Math.min(140, tracking));
+  if (trained < 1) return 0;
+  return Math.min(80, Math.round(2 + trained * 0.45));
+}
+
+export function pathStamp(tracking = 0) {
+  return tracking >= 8;
+}
+
+export function notePath(path, point, tracking = 0) {
+  const keep = pathKeep(tracking);
+  if (keep <= 0 || !point) return path;
+  const last = path[path.length - 1];
+  if (last && (point[0] - last[0]) ** 2 + (point[1] - last[1]) ** 2 < 1) return path;
+  path.push([point[0], point[1]]);
+  while (path.length > keep) path.shift();
+  return path;
+}
+
 export function abilityLine(skill = 0) {
   const ability = mapAbilities(skill);
   const parts = ["you"];

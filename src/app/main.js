@@ -4,7 +4,7 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=62";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=63";
 import { createFps } from "../render/fps.js";
 import { createPacer, coverLevel, nativePixels, paceWord, sizeAt, stepOctave, tuneRays, viewStill } from "../render/pace.js?v=60";
 import {
@@ -52,11 +52,11 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, SKILL_NAMES } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
-import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePlace, noteSurvey } from "../sim/map.js";
+import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp } from "../sim/map.js";
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
-import { paintChart } from "../render/chart.js?v=50";
+import { paintChart } from "../render/chart.js?v=63";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -199,6 +199,8 @@ let rightEdge = false;
 let autoRun = false;
 let mapOpen = params.get("quiet") !== "1" || params.has("ai");
 const trail = [];
+const selfPath = [];
+const tracks = new Map();
 const survey = createSurvey();
 const plate = createPlate();
 let mapZoom = 1;
@@ -863,6 +865,13 @@ function drawChart() {
     ground: [...survey.ground.values()],
     places: [...survey.places.values()],
   });
+  const tracking = skills.tracking.value;
+  for (const point of selfPath) plotted.marks.push({ kind: "path", id: "self", point });
+  if (tracking >= 18) {
+    for (const [id, line] of tracks) {
+      for (const point of line) plotted.marks.push({ kind: "track", id, point });
+    }
+  }
   paintChart(document.querySelector("#map"), document.querySelector("#fix"), {
     self: player.position,
     yaw,
@@ -1877,6 +1886,20 @@ if (params.get("still") !== "1") {
       const stride = hearStep(stepAt, player.position, !!sample.sprint);
       stepAt = stride.at;
       hear(stride.cue);
+      if (stride.cue) {
+        grantUse(skills, "tracking", { tick, gap: 40 });
+        notePath(selfPath, [player.position[0], player.position[1]], skills.tracking.value);
+        if (pathStamp(skills.tracking.value)) {
+          stamp(plate, player.position[0], player.position[1], [110, 86, 52, 230], 0.55);
+        }
+      }
+      if (skills.tracking.value >= 18) {
+        for (const other of otherActors()) {
+          const line = tracks.get(other.id) || [];
+          tracks.set(other.id, line);
+          notePath(line, [other.feet[0], other.feet[1]], skills.tracking.value - 16);
+        }
+      }
       if (mapOpen) grantUse(skills, "mapping", { tick, gap: 15 });
       const step = player.position;
       const lastFix = trail[trail.length - 1];
