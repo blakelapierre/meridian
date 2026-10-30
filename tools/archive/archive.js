@@ -25,8 +25,26 @@ import {
   noteVote,
   pubkeyHex,
 } from "../../src/sim/keeper.js";
+import {
+  acceptSheet,
+  browserStore,
+  bytesHex,
+  hexBytes,
+  keepFrame,
+  keepSheet,
+  loadIdentity,
+  loadWorld,
+  saveIdentity,
+  saveWorld,
+} from "../../src/sim/persist.js";
 
-const identity = createIdentity();
+const store = browserStore();
+const world = loadWorld(store);
+let identity = loadIdentity(store, "archive");
+if (!identity) {
+  identity = createIdentity();
+  saveIdentity(store, identity, "archive");
+}
 const roomId = `archive-${pubkeyHex(identity.pubkey).slice(0, 8)}`;
 const terrain = createTerrain({ identity, leader: false });
 const chain = createChain();
@@ -43,6 +61,40 @@ const room = createRoom({
 
 function $(id) {
   return document.querySelector(id);
+}
+
+function persist() {
+  saveWorld(store, world);
+}
+
+function rememberBytes(bytes) {
+  const kind = bytes[0];
+  if (kind === 15) {
+    const accepted = acceptSheet(bytes);
+    if (!accepted.ok) return;
+    if (keepSheet(world, accepted, bytesHex(bytes))) persist();
+    return;
+  }
+  if (kind !== 9 && kind !== 10 && kind !== 11 && kind !== 13) return;
+  if (keepFrame(world, bytes)) persist();
+}
+
+function replay(channel) {
+  if (!channel || channel.readyState !== "open") return;
+  for (const text of world.frames) {
+    try {
+      channel.send(hexBytes(text));
+    } catch {
+      return;
+    }
+  }
+  for (const sheet of Object.values(world.sheets)) {
+    try {
+      channel.send(hexBytes(sheet.frame));
+    } catch {
+      return;
+    }
+  }
 }
 
 let candidate = null;
@@ -95,6 +147,7 @@ function hunt() {
   if (found) {
     consider(found.block);
     const frame = encodeBlock(identity, found.block);
+    rememberBytes(frame);
     for (const link of links) {
       if (link.ops.readyState !== "open") continue;
       try {
@@ -121,6 +174,8 @@ function paint() {
     `keep ${keepOf(ledger)}`,
     crate ? `crate ready ${crate.metal} metal ${crate.fiber} fiber` : "crate not ready",
     `bounty $${(cents / 100).toFixed(2)}`,
+    `kept ${Object.keys(world.sheets).length}`,
+    `world ${world.frames.length}`,
   ].join(" · ");
 }
 
@@ -153,6 +208,7 @@ async function openPlayer(to) {
     channel.binaryType = "arraybuffer";
     channels[spec[0]] = channel;
   }
+  channels.ops.onopen = () => replay(channels.ops);
   links.push({ to, ops: channels.ops });
   channels.ops.onmessage = (event) => {
     const bytes = new Uint8Array(event.data);
@@ -161,6 +217,20 @@ async function openPlayer(to) {
       if (decoded.ok) consider(decoded.block);
     } else {
       terrain.receive(bytes);
+    }
+    rememberBytes(bytes);
+    if (bytes[0] === 15) {
+      const accepted = acceptSheet(bytes);
+      if (accepted.ok) {
+        const stored = world.sheets[bytesHex(accepted.pubkey)];
+        if (stored) {
+          try {
+            channels.ops.send(hexBytes(stored.frame));
+          } catch {
+            // The player sends the sheet again.
+          }
+        }
+      }
     }
     outgoing();
   };
@@ -210,6 +280,12 @@ $("receipt").addEventListener("click", async () => {
 });
 
 room.start().then(() => {
+  for (const text of world.frames) {
+    const bytes = hexBytes(text);
+    if (bytes[0] !== 11) continue;
+    const decoded = decodeBlock(bytes);
+    if (decoded.ok) consider(decoded.block);
+  }
   paint();
   seek();
   setInterval(seek, 3000);
