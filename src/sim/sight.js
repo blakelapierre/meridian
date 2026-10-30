@@ -1,3 +1,5 @@
+import { worldToScreen } from "../engine/cast.js";
+
 export const CLOSE = 1.2;
 export const FAR = 12;
 export const BASE_FOV = 70;
@@ -104,3 +106,66 @@ export function rangeRead(distance, skill, optic = "none") {
   const text = trained < 8 && optic === "none" ? `about ${Math.round(shown)} m` : `${shown.toFixed(digits)} m`;
   return { text, meters: shown };
 }
+
+function trained(value) {
+  return Math.max(0, Math.min(140, Number(value) || 0)) / 140;
+}
+
+// gamma 1 is a flat picture. Lower packs buffer pixels toward the gaze.
+// Matches gazeAxis / gazeUnaxis in src/render/gpu.js.
+export function gazePlan(eyesight = 0, focus = 0, closeMeters = 18) {
+  const eye = trained(eyesight);
+  const aim = trained(focus);
+  const gamma = Math.min(0.94, Math.max(0.58, 0.86 - aim * 0.22 + eye * 0.04));
+  const reach = closeMeters + eye * 42 + aim * 10;
+  const spread = Math.min(0.48, Math.max(0.12, 0.22 + eye * 0.2 - aim * 0.1));
+  return { gamma, reach, spread };
+}
+
+export function gazeAxis(b, c, gamma) {
+  const g = Math.max(0.35, Math.min(1, Number(gamma) || 1));
+  if (g > 0.98) return b;
+  const d = b - c;
+  const side = d < 0 ? c : 1 - c;
+  if (side < 1e-4) return b;
+  const u = d / side;
+  const mag = Math.abs(u) ** (1 / g);
+  return c + Math.sign(d) * mag * side;
+}
+
+export function gazeUnaxis(s, c, gamma) {
+  const g = Math.max(0.35, Math.min(1, Number(gamma) || 1));
+  if (g > 0.98) return s;
+  const d = s - c;
+  const side = d < 0 ? c : 1 - c;
+  if (side < 1e-4) return s;
+  const u = d / side;
+  const mag = Math.abs(u) ** g;
+  return c + Math.sign(d) * mag * side;
+}
+
+export function gazeOnScreen(camera, eye, look) {
+  let t = 24;
+  if (look && look[2] < -0.04) {
+    const ground = -(eye?.[2] || 0) / look[2];
+    if (ground > 0.5 && ground < 80) t = ground;
+  }
+  const point = [
+    (eye?.[0] || 0) + (look?.[0] || 0) * t,
+    (eye?.[1] || 0) + (look?.[1] || 0) * t,
+    (eye?.[2] || 0) + (look?.[2] || 0) * t,
+  ];
+  const screen = worldToScreen(point, camera);
+  if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return [0.5, 0.5];
+  return [
+    Math.min(0.92, Math.max(0.08, screen.x)),
+    Math.min(0.92, Math.max(0.08, screen.y)),
+  ];
+}
+
+export function gazeFor(camera, eye, look, eyesight, focus, closeMeters = 18) {
+  const plan = gazePlan(eyesight, focus, closeMeters);
+  const at = gazeOnScreen(camera, eye, look);
+  return { ...plan, x: at[0], y: at[1] };
+}
+
