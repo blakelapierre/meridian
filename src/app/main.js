@@ -276,6 +276,7 @@ if (kept && keepSlot) {
   }
 }
 if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
+const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0 };
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const jump = createJump();
 let ops = null;
@@ -354,6 +355,7 @@ function pump(link) {
 }
 
 function sendLore(frame) {
+  net.loreOut += 1;
   const open = openLinks().filter((link) => link.lore && link.lore.readyState === "open");
   if (!open.length) {
     sendOps(frame);
@@ -407,6 +409,7 @@ function pushSheet() {
 
 function sendOps(frame) {
   rememberKept(frame);
+  net.opsOut += 1;
   const open = openLinks();
   if (!open.length) {
     if (peer) shotFrames.push(frame);
@@ -1169,6 +1172,36 @@ function paintNotes() {
   }));
 }
 
+function paintNet() {
+  const node = document.querySelector("#net");
+  if (!node) return;
+  const open = links.filter((link) => link.ops?.readyState === "open");
+  const players = open.filter((link) => link.role !== "archive").length;
+  const archives = open.filter((link) => link.role === "archive").length;
+  const connecting = opening.size + links.filter((link) => link.ops && link.ops.readyState !== "open").length;
+  const ice = {};
+  let buffered = 0;
+  for (const link of links) {
+    const state = link.pc?.iceConnectionState || "new";
+    ice[state] = (ice[state] || 0) + 1;
+    buffered += link.ops?.bufferedAmount || 0;
+    buffered += link.lore?.bufferedAmount || 0;
+  }
+  const tip = tipOf(worldChain).block;
+  const behind = Math.max(0, terrain.log.seq - tip.seq);
+  const iceLine = Object.entries(ice).map(([name, count]) => `${name} ${count}`).join(" ") || "none";
+  const chainWord = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "empty";
+  node.textContent = [
+    players || archives ? `players ${players}    archives ${archives}` : "alone",
+    `links ${open.length} open    ${connecting} connecting`,
+    `ice ${iceLine}`,
+    `ops in ${net.opsIn} out ${net.opsOut}    snap in ${net.snapIn} out ${net.snapOut}`,
+    `lore in ${net.loreIn} out ${net.loreOut}    heard ${net.heard}`,
+    `block ${tip.height} ${chainWord}    behind ${behind}    dupes ${net.dupes}`,
+    `sheet ${sheetSeq}    poses ${poses.size}    buffered ${buffered}`,
+  ].join("\n");
+}
+
 function publish() {
   const voxel = terrain.voxel();
   const tip = tipOf(worldChain).block;
@@ -1235,7 +1268,8 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${companyNote}${seen ? ` · seen ${seen}` : ""} · ${chainNote} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  paintNet();
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -1425,7 +1459,11 @@ function onOps(bytes, from) {
     const decoded = decodeBlock(bytes);
     if (!decoded.ok) return;
     const accepted = acceptBlock(worldChain, decoded.block);
-    if (!accepted.ok || accepted.duplicate) return;
+    if (!accepted.ok || accepted.duplicate) {
+      if (accepted.duplicate) net.dupes += 1;
+      return;
+    }
+    net.blocks += 1;
     installTip(terrain.log.crust, worldChain, fromChain, ownKeys());
     if (accepted.tip) report = `block ${tipOf(worldChain).block.height}`;
     for (const link of openLinks()) {
@@ -1464,8 +1502,10 @@ function onOps(bytes, from) {
     for (const line of accepted.notes || []) {
       if (takeTold(notes, skillBag(), line)) told += 1;
     }
-    if (learned.ground || learned.places) loreNote = `heard ${learned.ground + learned.places}`;
-    else if (told) loreNote = "heard a note";
+    if (learned.ground || learned.places) {
+      net.heard += learned.ground + learned.places;
+      loreNote = `heard ${learned.ground + learned.places}`;
+    } else if (told) loreNote = "heard a note";
     return;
   }
   if (bytes[0] === 10) {
@@ -1564,16 +1604,23 @@ async function openLink(to, offer, role) {
     channel.binaryType = "arraybuffer";
     channels[spec[0]] = channel;
   }
-  const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore };
+  const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc };
   links.push(link);
   if (!ops) ops = channels.ops;
   channels.ops.onopen = () => {
     shareWalls(link);
     if (role === "archive") pushSheet();
   };
-  channels.lore.onmessage = (event) => onOps(new Uint8Array(event.data), to);
-  channels.ops.onmessage = (event) => onOps(new Uint8Array(event.data), to);
+  channels.lore.onmessage = (event) => {
+    net.loreIn += 1;
+    onOps(new Uint8Array(event.data), to);
+  };
+  channels.ops.onmessage = (event) => {
+    net.opsIn += 1;
+    onOps(new Uint8Array(event.data), to);
+  };
   channels.snap.onmessage = (event) => {
+    net.snapIn += 1;
     const pose = acceptPosition(poses.get(to) || null, new Uint8Array(event.data));
     if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]), 80 + skills.mapping.value / 10)) return;
     poses.set(to, pose);
@@ -1665,7 +1712,10 @@ function publishPose() {
     const known = poses.get(link.to);
     const reach = 80 + skills.mapping.value / 10;
     if (known && !inInterest(Math.hypot(known.x - player.position[0], known.y - player.position[1]), reach)) continue;
-    if (link.snap.readyState === "open") link.snap.send(packet);
+    if (link.snap.readyState === "open") {
+      net.snapOut += 1;
+      link.snap.send(packet);
+    }
   }
 }
 
