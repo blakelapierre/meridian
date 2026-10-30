@@ -1,6 +1,6 @@
 import { paintFrame } from "../engine/frame.js";
 import { mountTouch, wantsTouch } from "./touch.js?v=3";
-import { createTour, demoMode, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine } from "./demo.js?v=1";
+import { createTour, demoMode, goalOffset, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=2";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
@@ -179,10 +179,16 @@ const lighthouseConfig = await fetch(new URL("../../content/lighthouse.json?v=1"
   .catch(() => null);
 const signalUrl = lighthouseUrl(params, location.hostname, lighthouseConfig);
 const home = agent ? AGENDAS[agendaName].home : null;
+const tourWanted = (demo || params.get("tour") === "1") && params.get("tour") !== "0" && !followId && !agendaName;
+const tourSeen = params.get("tour") === "1" ? [] : (() => { try { return JSON.parse(localStorage.getItem(TOUR_KEY) || "[]"); } catch { return []; } })();
+// A brand-new player with no demo link starts a few steps from the marker, facing it.
+const tourSpawn = tourWanted && !tourSeen.length && !home && !peer && !params.get("gate") && !params.get("look") && !digDemo;
 const spawn = home
   ? { x: home[0] * 100, y: home[1] * 100, z: 0 }
   : params.get("gate") === "1"
   ? { x: 0, y: -10900, z: 0 }
+  : tourSpawn
+  ? { x: TOUR_START.x * 100, y: TOUR_START.y * 100, z: 0 }
   : params.get("look") === "dummy" ? atoll.placements.accuracyPad : atoll.placements.spawnFeet;
 const player = createPlayer([spawn.x / 100, spawn.y / 100, spawn.z / 100]);
 const world = createPlayerWorld(player);
@@ -234,14 +240,14 @@ let raising = null;
 let work = null;
 const fps = createFps();
 let slotChosen = false;
-const tourKey = "meridian-tour";
-const tour = (demo || params.get("tour") === "1") && params.get("tour") !== "0" && !followId && !agendaName
-  ? createTour(params.get("tour") === "1" ? [] : (() => { try { return JSON.parse(localStorage.getItem(tourKey) || "[]"); } catch { return []; } })())
-  : null;
-const tourFacts = { walked: 0, hits: 0, digs: 0, mapOpen: false };
+const tourKey = TOUR_KEY;
+const tour = tourWanted ? createTour(tourSeen) : null;
+const tourFacts = { walked: 0, hits: 0, nearShots: 0, digs: 0, joined: false, mapOpen: false, position: null, yaw: 0 };
+let tourArmed = -2;
+let tourTurn = null;
 let tourLast = null;
 let shotFlash = { text: "", until: 0 };
-let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : 0);
+let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : tourSpawn ? TOUR_START.yaw : 0);
 let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
 let tick = (0.87 / (Math.PI * 2)) * DAY_TICKS;
@@ -514,6 +520,10 @@ addEventListener("keydown", (event) => {
   if (event.code === "Tab") cycleEdge = event.shiftKey ? -1 : 1;
   if (event.code === "Backquote") objectEdge = event.shiftKey ? -1 : 1;
   if (event.code === "KeyQ" && !followId) autoRun = !autoRun;
+  if (event.code === "Enter" && tour && tour.index >= 0) {
+    event.preventDefault();
+    tour.skip = true;
+  }
   if (event.code === "F3") {
     event.preventDefault();
     document.documentElement.classList.toggle("demo");
@@ -665,6 +675,8 @@ addEventListener("mousemove", (event) => {
     return;
   }
   if (followId) return;
+  // Chrome can report one huge jump right after the cursor locks; skip it so the view does not spin.
+  if (Math.abs(event.movementX) > 250 || Math.abs(event.movementY) > 250) return;
   yaw += event.movementX * 0.0022;
   pitch = Math.max(-1.2, Math.min(1.2, pitch - event.movementY * 0.0022));
 });
@@ -1360,6 +1372,77 @@ function paintNet() {
   ].filter(Boolean).join("\n");
 }
 
+// Hand the player what the step needs the moment it starts: the slot, and a look at the sand for the dig.
+document.addEventListener("click", (event) => {
+  if (event.target?.id === "tourskip" && tour) {
+    event.stopPropagation();
+    tour.skip = true;
+  }
+}, true);
+document.addEventListener("touchstart", (event) => {
+  if (event.target?.id === "tourskip" && tour) {
+    event.stopPropagation();
+    event.preventDefault();
+    tour.skip = true;
+  }
+}, { capture: true, passive: false });
+
+function armTourStep() {
+  if (!tour || tourArmed === tour.index) return;
+  tourArmed = tour.index;
+  const step = tourStep(tour);
+  if (!step) return;
+  if (step.slot) {
+    slot = step.slot;
+    slotChosen = true;
+  }
+  if (step.pitch !== undefined && pitch > step.pitch + 0.3) pitch = step.pitch;
+  if (step.id === "shoot") tourFacts.nearShots = 0;
+  // Swing the camera to the next goal over about 0.7 s so the player starts out facing it.
+  if (step.face && step.goal) tourTurn = { from: yaw, by: goalOffset(player.position, yaw, step.goal), pitch: step.id === "shoot" ? -0.02 : 0, start: performance.now() };
+}
+
+function easeTourTurn(now) {
+  if (!tourTurn) return;
+  const t = Math.min(1, (now - tourTurn.start) / 700);
+  const k = t * t * (3 - 2 * t);
+  yaw = tourTurn.from + tourTurn.by * k;
+  if (tourTurn.pitch !== undefined) pitch += (tourTurn.pitch - pitch) * k;
+  if (t >= 1) tourTurn = null;
+}
+
+// The yellow objective marker: on the goal when it is in view, else pinned to the edge with an arrow.
+function markGoal(scene) {
+  const el = document.querySelector("#goal");
+  if (!el) return;
+  const step = tourStep(tour);
+  if (!step || !step.goal) {
+    el.hidden = true;
+    return;
+  }
+  const metres = Math.hypot(step.goal[0] - player.position[0], step.goal[1] - player.position[1]);
+  const off = goalOffset(player.position, yaw, step.goal);
+  const screen = worldToScreen(step.goal, scene.camera);
+  const on = screen && screen.x > 0.04 && screen.x < 0.96 && screen.y > 0.06 && screen.y < 0.94;
+  const x = on ? screen.x : 0.5 + 0.44 * Math.sin(off);
+  const y = on ? screen.y : 0.5 - 0.40 * Math.cos(off);
+  el.hidden = false;
+  el.style.left = `${(x * 100).toFixed(1)}%`;
+  el.style.top = `${(y * 100).toFixed(1)}%`;
+  el.dataset.on = on ? "1" : "0";
+  el.dataset.angle = String(Math.round(off * 180 / Math.PI));
+  el.dataset.metres = String(Math.round(metres));
+  const arrow = on ? "▼" : "➤";
+  const text = `${step.name} ${Math.round(metres)} m`;
+  if (el.dataset.text !== arrow + text) {
+    el.dataset.text = arrow + text;
+    el.innerHTML = `<b></b><span></span>`;
+    el.firstChild.textContent = arrow;
+    el.lastChild.textContent = text;
+  }
+  el.firstChild.style.transform = on ? "" : `rotate(${Math.round(off * 180 / Math.PI) - 90}deg)`;
+}
+
 function paintHint() {
   const node = document.querySelector("#hint");
   if (!node) return;
@@ -1368,16 +1451,33 @@ function paintHint() {
     if (tourLast) tourFacts.walked += Math.hypot(player.position[0] - tourLast[0], player.position[1] - tourLast[1]);
     tourLast = [player.position[0], player.position[1]];
     tourFacts.digs = digs;
+    tourFacts.position = player.position;
+    tourFacts.yaw = yaw;
+    tourFacts.joined = Boolean(entryState.joined);
     if (stepTour(tour, tourFacts, now)) {
       try { localStorage.setItem(tourKey, JSON.stringify(tourDone(tour))); } catch {}
     }
+    armTourStep();
+    easeTourTurn(now);
   }
   let line = tour ? tourLine(tour, touchy, now) : "";
   if (!line && demo) {
     if (entryState.prompt && !entryState.joined) line = touchy ? `Tap E Use to join ${entryState.prompt}.` : `Press E to join ${entryState.prompt}.`;
     else if (!touchy && document.pointerLockElement !== canvas) line = "Click the picture to look. Esc gives the cursor back.";
   }
-  if (node.textContent !== line) node.textContent = line;
+  const skip = tour && tour.index >= 0 ? (touchy ? "Skip ›" : "Skip ↵") : "";
+  if (node.dataset.line !== line || node.dataset.skip !== skip) {
+    node.dataset.line = line;
+    node.dataset.skip = skip;
+    node.textContent = line;
+    if (skip) {
+      const button = document.createElement("button");
+      button.id = "tourskip";
+      button.type = "button";
+      button.textContent = skip;
+      node.append(" ", button);
+    }
+  }
   node.hidden = !line;
   canvas.dataset.hint = line;
   canvas.dataset.tour = tour ? String(tour.index) : "";
@@ -1518,6 +1618,7 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   );
   if (scene.gaze) canvas.dataset.gaze = String(Math.round(scene.gaze.reach));
   markTarget(scene);
+  markGoal(scene);
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
   const inEyes = zoom.blend >= 1 || (view === "first" && zoom.blend === 0);
@@ -1626,6 +1727,13 @@ function fire(sample) {
   }
   if (!shot.hitbox) bolts.push(startBolt(eye, shot.dir));
   if (shot.hitbox) tourFacts.hits += 1;
+  else if (tourStep(tour)?.id === "shoot") {
+    const d = atoll.placements.dummy;
+    const to = [d.x / 100 - eye[0], d.y / 100 - eye[1], 1.3 - eye[2]];
+    const len = Math.hypot(to[0], to[1], to[2]) || 1;
+    const dot = (to[0] * shot.dir[0] + to[1] * shot.dir[1] + to[2] * shot.dir[2]) / len;
+    if (dot > Math.cos(8 * Math.PI / 180)) tourFacts.nearShots += 1;
+  }
   flashShot(shot.hitbox ? `hit ${shot.hitbox}` : "miss");
   const look = lookDirection(sample.yaw, sample.pitch);
   const facing = look[0] * shot.dir[0] + look[1] * shot.dir[1] + look[2] * shot.dir[2];
