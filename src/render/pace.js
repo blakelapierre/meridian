@@ -36,22 +36,30 @@ export function createPicturePace() {
     get octave() {
       return octave;
     },
-    step({ gap = 0 } = {}) {
+    step({ gap = 0, displayW = 960, displayH = 540 } = {}) {
       if (!(gap > 0)) return { octave, detail: 0, refresh: period };
       if (gap >= 8 && gap <= 42) {
         period = samples ? period * 0.85 + gap * 0.15 : gap;
         samples += 1;
       }
       const budget = samples < 6 ? Math.max(period, 1000 / 30) : period;
-      if (gap > budget * 1.35) {
-        const over = gap / budget;
-        const steps = over >= 4 ? 2 : 1;
-        octave = Math.min(8, octave + steps);
+      const relaxed = 1000 / 12;
+      const picture = sizeAt(octave, displayW, displayH);
+      const tiny = Math.max(picture.width, picture.height) < 220;
+      if (gap > relaxed) {
+        octave = Math.min(8, octave + (gap > relaxed * 2 ? 2 : 1));
+        wait = 0;
+        return { octave, detail: 0, refresh: budget };
+      }
+      if (!tiny && gap > budget * 1.35) {
+        octave = Math.min(8, octave + 1);
         wait = 0;
         return { octave, detail: 0, refresh: budget };
       }
       wait += 1;
-      if (wait >= 8 && octave > 0) {
+      const due = tiny && Math.max(picture.width, picture.height) < 80 ? 4 : 8;
+      const room = gap <= budget * 1.15 || (tiny && gap < relaxed * 0.9);
+      if (wait >= due && octave > 0 && room) {
         octave -= 1;
         wait = 0;
       }
