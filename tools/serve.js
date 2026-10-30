@@ -35,6 +35,11 @@ export function createStaticServer(root, port = 0) {
     try {
       let target = file;
       const info = await stat(target);
+      if (info.isDirectory() && !url.pathname.endsWith("/")) {
+        response.writeHead(308, { location: `${url.pathname}/${url.search}` });
+        response.end();
+        return;
+      }
       if (info.isDirectory()) target = resolve(target, "index.html");
       const body = await readFile(target);
       response.writeHead(200, {

@@ -261,7 +261,13 @@ export function loadWorld(store, key = "meridian-world") {
   const raw = store.get(key);
   if (!raw) return emptyWorld();
   try {
-    return { ...emptyWorld(), ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return {
+      blocks: Array.isArray(parsed.blocks) ? parsed.blocks : [],
+      frames: Array.isArray(parsed.frames) ? parsed.frames : [],
+      sheets: parsed.sheets && typeof parsed.sheets === "object" ? parsed.sheets : {},
+      crust: Array.isArray(parsed.crust) ? parsed.crust : [],
+    };
   } catch {
     return emptyWorld();
   }
