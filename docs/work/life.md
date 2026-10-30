@@ -1,10 +1,10 @@
 # Life
 
-Scrub, one tree, and three animals on the beach. The sand has a low roll you can walk.
+Scrub, one tree, and three animals on the beach. The sand rises into hills you can walk.
 
 ## In the build
 
-Dunes are a few tenths of a meter. The feet stand on that height unless a pit is deeper. The camera stays above it. Five scrubs, a dry tuft, and a short tree sit on the roll. A crab and a skink wander and step away when you come close. A gull circles. They are not targets, and they are not written into the chain.
+Hills rise to about three body heights, 5.4 m. Lows stay near the old beach. The feet stand on that height unless a pit is deeper. The camera stays above it. The picture marches the hill instead of flattening it. Five scrubs, a dry tuft, and a short tree sit on the ground. A crab and a skink wander and step away when you come close. A gull circles. They are not targets, and they are not written into the chain.
 
 ## This pass
 

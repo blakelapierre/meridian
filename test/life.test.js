@@ -1,19 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { duneHeight, fauna, floraBoxes, standHeight } from "../src/sim/life.js";
+import { duneHeight, fauna, floraBoxes, HILL, standHeight } from "../src/sim/life.js";
 
-test("the beach rolls a little and a pit is still the floor", () => {
-  let low = 1;
+test("hills reach about three body heights and a pit is still the floor", () => {
+  let low = 99;
   let high = -1;
-  for (let x = -40; x <= 40; x += 2) {
-    for (let y = -180; y <= -100; y += 2) {
+  for (let x = -80; x <= 80; x += 1) {
+    for (let y = -200; y <= -80; y += 1) {
       const height = duneHeight(x, y);
       if (height < low) low = height;
       if (height > high) high = height;
     }
   }
-  assert.ok(high - low > 0.15, high - low);
-  assert.ok(high < 0.5 && low > -0.5, `${low} ${high}`);
+  assert.ok(high > 4, high);
+  assert.ok(high <= HILL + 0.001, high);
+  assert.ok(low >= -0.001, low);
+  assert.equal(HILL, 5.4);
   assert.equal(standHeight(0, -150, -1.2), -1.2);
   assert.equal(standHeight(0, -150, 0), duneHeight(0, -150));
 });

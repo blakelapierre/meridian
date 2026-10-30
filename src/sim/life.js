@@ -1,7 +1,10 @@
+export const HILL = 5.4;
+
 export function duneHeight(x, y) {
-  const roll = Math.sin(x * 0.05) * Math.cos(y * 0.041);
-  const wash = Math.sin((x + y) * 0.08 + 1.3);
-  return 0.22 * roll + 0.12 * wash;
+  const roll = 0.5 * Math.sin(x * 0.15) + 0.5 * Math.cos(y * 0.13);
+  const wash = 0.5 * Math.sin((x + y) * 0.17 + 1.3) + 0.5;
+  const n = Math.max(0, Math.min(1, 0.55 * roll + 0.45 * wash));
+  return n * n * HILL;
 }
 
 export function standHeight(x, y, dug = 0) {
