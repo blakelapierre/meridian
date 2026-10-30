@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, traceInterval, tuneRays, viewStill, visualThroughput } from "../src/render/pace.js";
+import { cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, inFront, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, traceInterval, tuneRays, viewStill, visualThroughput, watchScene } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -158,7 +158,25 @@ test("movement snaps toward vsync and will not stay under 12fps", () => {
   assert.ok(seen.scale < before * 0.7);
   let slow = seen.scale;
   for (let i = 0; i < 8; i += 1) slow = pace.step({ gap: 120, ...box, still: false }).scale;
-  assert.ok(slow < seen.scale);
+  assert.ok(slow <= seen.scale);
+});
+
+test("a moving scene is pulled toward 12fps in one trace", () => {
+  const box = { displayW: 1280, displayH: 720 };
+  const pace = createPicturePace();
+  let seen = pace.step({ gap: 16, ...box, still: true });
+  for (let i = 0; i < 30; i += 1) seen = pace.step({ gap: 90, ...box, still: true });
+  const parked = seen.scale;
+  assert.ok(parked > 0.7);
+  seen = pace.step({ gap: 200, ...box, still: false, speed: 0, accel: 0 });
+  assert.ok(seen.scale < parked * 0.75);
+  assert.ok(seen.scale <= parked * Math.sqrt((1000 / 12) / 200) + 0.02);
+  const memory = new Map();
+  assert.equal(watchScene(memory, [{ id: "gull", key: "1,2,6", live: true }]), true);
+  assert.equal(watchScene(memory, [{ id: "miner", key: "0,0,0" }]), false);
+  assert.equal(watchScene(memory, [{ id: "miner", key: "1,0,0" }]), true);
+  assert.equal(inFront([0, 0, 2], [0, 1, 0], [0, 8, 1], 56), true);
+  assert.equal(inFront([0, 0, 2], [0, 1, 0], [0, -8, 1], 56), false);
 });
 
 test("a still camera climbs to the native picture", () => {
