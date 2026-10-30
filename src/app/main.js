@@ -4,7 +4,7 @@ import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=63";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=64";
 import { createFps } from "../render/fps.js";
 import { createPacer, coverLevel, nativePixels, paceWord, sizeAt, stepOctave, tuneRays, viewStill } from "../render/pace.js?v=60";
 import {
@@ -56,6 +56,8 @@ import { cellSize, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, no
 import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, stamp } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
+import { acceptPrint, encodePrint } from "../net/prints.js";
+import { addPrint } from "../sim/prints.js";
 import { paintChart } from "../render/chart.js?v=63";
 import { blendDir, blendOrigin, CLOSE, OPTICS, rangeRead, relaxOrbit, stepZoom, zoomFov } from "../sim/sight.js";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
@@ -201,6 +203,8 @@ let mapOpen = params.get("quiet") !== "1" || params.has("ai");
 const trail = [];
 const selfPath = [];
 const tracks = new Map();
+const prints = [];
+const seenPrints = new Set();
 const survey = createSurvey();
 const plate = createPlate();
 let mapZoom = 1;
@@ -278,6 +282,9 @@ function shareWalls(link) {
     if (piece.id !== "hearth" && piece.id !== "fin") continue;
     enqueue(link, [encodePiece(identity, { nonce, cell: piece.at, id: piece.id })]);
     nonce += 1;
+  }
+  for (const print of prints) {
+    if (print.frame) enqueue(link, [print.frame]);
   }
 }
 
@@ -1162,6 +1169,7 @@ function markTarget(scene) {
 
 function paint(sample) {
   const scene = sceneFor(sample, canvas.width, canvas.height);
+  scene.prints = prints;
   scene.work = work;
   scene.time = tick / 30;
   markTarget(scene);
@@ -1302,6 +1310,16 @@ function onOps(bytes, from) {
         // A peer that already has the block will ignore the extra copy.
       }
     }
+    return;
+  }
+  if (bytes[0] === 14) {
+    const accepted = acceptPrint(bytes);
+    if (!accepted.ok) return;
+    const seen = `${accepted.who}:${accepted.nonce}`;
+    if (seenPrints.has(seen)) return;
+    seenPrints.add(seen);
+    const placed = addPrint(prints, accepted);
+    if (placed) prints[prints.length - 1].frame = bytes;
     return;
   }
   if (bytes[0] === 13) {
@@ -1891,6 +1909,16 @@ if (params.get("still") !== "1") {
         notePath(selfPath, [player.position[0], player.position[1]], skills.tracking.value);
         if (pathStamp(skills.tracking.value)) {
           stamp(plate, player.position[0], player.position[1], [110, 86, 52, 230], 0.55);
+        }
+        const frame = encodePrint(identity, {
+          nonce: tick,
+          x: player.position[0],
+          y: player.position[1],
+          yaw,
+        });
+        if (addPrint(prints, { x: player.position[0], y: player.position[1], yaw, who: "self" })) {
+          prints[prints.length - 1].frame = frame;
+          sendOps(frame);
         }
       }
       if (skills.tracking.value >= 18) {

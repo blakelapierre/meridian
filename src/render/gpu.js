@@ -4,6 +4,7 @@ import { ATLAS, GRASS_TILE, ROCK_TILE, SAND_TILE, WOOD_TILE, blitTexture, grassT
 const MAX_SPHERES = 24;
 const MAX_BOXES = 32;
 const MAX_DIGS = 128;
+const MAX_PRINTS = 48;
 
 const sphereData = new Float32Array(MAX_SPHERES * 4);
 const sphereColor = new Float32Array(MAX_SPHERES * 4);
@@ -11,6 +12,7 @@ const boxMin = new Float32Array(MAX_BOXES * 4);
 const boxMax = new Float32Array(MAX_BOXES * 4);
 const boxColor = new Float32Array(MAX_BOXES * 4);
 const digData = new Float32Array(MAX_DIGS * 4);
+const printData = new Float32Array(MAX_PRINTS * 4);
 const RECT_SLOTS = 40;
 const rectData = new Float32Array(RECT_SLOTS * 4);
 const atlasData = new Uint8Array(ATLAS * ATLAS * 4);
@@ -103,6 +105,7 @@ uniform vec2 uRes;
 uniform int uSpheres;
 uniform int uBoxes;
 uniform int uDigs;
+uniform int uPrints;
 uniform vec4 uWork;
 uniform float uTime;
 in vec2 vRay;
@@ -112,6 +115,7 @@ uniform sampler2D uBoxMin;
 uniform sampler2D uBoxMax;
 uniform sampler2D uBoxColor;
 uniform sampler2D uDigTex;
+uniform sampler2D uPrintTex;
 uniform sampler2D uTexRects;
 uniform sampler2D uAtlas;
 out vec4 fragColor;
@@ -190,6 +194,23 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
   grassC *= 0.86 + valueNoise(p * 0.31 + 4.0) * 0.26;
   rockC *= 0.84 + valueNoise(p * 0.19 + 9.0) * 0.28;
   return mix(mix(sandC, grassC, grassW), rockC, rockW);
+}
+
+vec3 withPrints(vec3 rgb, vec2 p, int bounce) {
+  if (bounce > 0 || uPrints <= 0) return rgb;
+  float mark = 0.0;
+  for (int i = 0; i < ${MAX_PRINTS}; i++) {
+    if (i >= uPrints) break;
+    vec4 s = texelFetch(uPrintTex, ivec2(i, 0), 0);
+    vec2 d = p - s.xy;
+    float c = cos(s.z);
+    float sn = sin(s.z);
+    vec2 local = vec2(d.x * c + d.y * sn, -d.x * sn + d.y * c);
+    float left = length((local - vec2(-0.08, 0.02)) * vec2(9.0, 14.0));
+    float right = length((local - vec2(0.08, -0.02)) * vec2(9.0, 14.0));
+    mark = max(mark, smoothstep(1.05, 0.2, min(left, right)));
+  }
+  return rgb * (1.0 - 0.62 * mark);
 }
 
 float islandExit(vec3 ro, vec3 rd) {
@@ -387,7 +408,7 @@ void main() {
         bestT = t;
         bestP = p;
         bestN = vec3(0.0, 0.0, 1.0);
-        bestRgb = tiled(${SAND_TILE}, p.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55;
+        bestRgb = withPrints(tiled(${SAND_TILE}, p.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, p.xy, bounce);
         bestRef = 0.02;
         found = true;
       }
@@ -396,14 +417,14 @@ void main() {
       bestT = sandT;
       bestP = vec3(sandP.xy, mouthFloor);
       bestN = vec3(0.0, 0.0, 1.0);
-      bestRgb = tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55;
+      bestRgb = withPrints(tiled(${SAND_TILE}, sandP.xy * 0.35, vec3(0.16, 0.13, 0.10)) * 0.55, sandP.xy, bounce);
       bestRef = 0.02;
       found = true;
     } else if (sand && !openMouth && sandT < bestT) {
       bestT = sandT;
       bestP = sandP;
       bestN = duneNormal(sandP.xy);
-      bestRgb = groundAlbedo(sandP.xy, bestN);
+      bestRgb = withPrints(groundAlbedo(sandP.xy, bestN), sandP.xy, bounce);
       bestRef = 0.02;
       found = true;
     }
@@ -517,6 +538,7 @@ void main() {
   let boxMaxTex;
   let boxColorTex;
   let digTex;
+  let printTex;
   let rectTex;
   let atlasTex;
   try {
@@ -526,6 +548,7 @@ void main() {
     boxMaxTex = texture(gl, MAX_BOXES);
     boxColorTex = texture(gl, MAX_BOXES);
     digTex = texture(gl, MAX_DIGS);
+    printTex = texture(gl, MAX_PRINTS);
     rectTex = texture(gl, RECT_SLOTS);
     atlasTex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE7);
@@ -554,6 +577,7 @@ void main() {
   gl.uniform1i(loc("uBoxMax"), 3);
   gl.uniform1i(loc("uBoxColor"), 4);
   gl.uniform1i(loc("uDigTex"), 5);
+  gl.uniform1i(loc("uPrintTex"), 8);
   gl.uniform1i(loc("uTexRects"), 6);
   gl.uniform1i(loc("uAtlas"), 7);
   gl.enableVertexAttribArray(0);
@@ -584,6 +608,7 @@ void main() {
       boxMax.fill(0);
       boxColor.fill(0);
       digData.fill(0);
+      printData.fill(0);
       let spheres = 0;
       let boxes = 0;
       let digs = 0;
@@ -641,6 +666,14 @@ void main() {
         }
       }
       const basis = cameraBasis(scene.camera);
+      const steps = scene.prints || [];
+      const shown = Math.min(steps.length, MAX_PRINTS);
+      for (let i = 0; i < shown; i += 1) {
+        const step = steps[steps.length - shown + i];
+        printData[i * 4] = step.x;
+        printData[i * 4 + 1] = step.y;
+        printData[i * 4 + 2] = step.yaw || 0;
+      }
       const miss = scene.miss || [0.45, 0.62, 0.85, 1];
       const sun = scene.sun || [0, 0, 1];
       const prog = mode === "points" && pointProgram ? pointProgram : program;
@@ -653,6 +686,7 @@ void main() {
       upload(3, boxMaxTex, MAX_BOXES, boxMax);
       upload(4, boxColorTex, MAX_BOXES, boxColor);
       upload(5, digTex, MAX_DIGS, digData);
+      upload(8, printTex, MAX_PRINTS, printData);
       upload(6, rectTex, RECT_SLOTS, rectData);
       if (atlasDirty) {
         gl.activeTexture(gl.TEXTURE7);
@@ -666,6 +700,7 @@ void main() {
       gl.uniform1i(u("uBoxMax"), 3);
       gl.uniform1i(u("uBoxColor"), 4);
       gl.uniform1i(u("uDigTex"), 5);
+      gl.uniform1i(u("uPrintTex"), 8);
       gl.uniform1i(u("uTexRects"), 6);
       gl.uniform1i(u("uAtlas"), 7);
       gl.uniform3f(u("uOrigin"), scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
@@ -681,6 +716,7 @@ void main() {
       gl.uniform1i(u("uSpheres"), spheres);
       gl.uniform1i(u("uBoxes"), boxes);
       gl.uniform1i(u("uDigs"), digs);
+      gl.uniform1i(u("uPrints"), shown);
       const work = scene.work;
       gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
       gl.uniform1f(u("uTime"), scene.time || 0);
