@@ -69,6 +69,7 @@
       #stick.live { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.35); }
       #nub { position: absolute; left: 30px; top: 30px; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.35); }
       #lookpad { position: absolute; left: 45%; right: 0; top: 18%; bottom: 0; }
+      html:not(.touch):not(.debug) #net { display: none; }
       html.touch:not(.touch-info) #help, html.touch:not(.touch-info) #skills, html.touch:not(.touch-info) #net { display: none; }
       #touch #tfire { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: 22px; width: 68px; height: 68px; border-radius: 50%; background: rgba(200,40,40,.4); border: 1px solid rgba(255,255,255,.3); padding: 0; }
       #tbuttons { position: absolute; right: max(8px, env(safe-area-inset-right)); bottom: 100px; width: 188px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; pointer-events: none; }
@@ -160,7 +161,7 @@
     <div id="shotfx"></div>
     <pre id="net">alone</pre>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=114"></script>
+    <script type="module" src="../../src/app/main.js?v=115"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {

@@ -1,3 +1,4 @@
+import { agilityFactor } from "./agility.js";
 import { JUMP_ACCEL, stepPlayer, stepStamina } from "./player.js";
 
 export const BASE_APEX = 1.15;
@@ -20,7 +21,7 @@ export function createJump() {
 export function stepLift(world, player, stamina, input, jump, skill, acceleration, airborne) {
   const ground = world.ground || 0;
   const altitude = player.position[2] - ground;
-  const cap = jumpAbility(skill);
+  const cap = jumpAbility(skill) * agilityFactor("jump", input.agility || 0);
   const sprint = !airborne && input.sprint;
   if (!airborne && !input.jump) jump.spent = false;
   let launched = false;

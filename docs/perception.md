@@ -26,12 +26,13 @@ Helpers: `falloff`, `refreshPeriod`, `blockLevel`, `tracePriority`, `tracedFract
   (`createTraceBudget` in `src/render/pace.js`) budgets by traced pixels per frame and cuts
   at once on a stall.
 - **Labels/LOD**: goal markers fade with `perceivedDetail` (`markGoal` in `src/app/main.js`).
+- **Minimap reveal**: the reveal radius takes its eyesight term from sight acuity and is capped
+  by sight range (`revealRange` in `src/sim/plate.js`, fed from `revealMap`).
 - **Net priority**: peer poses in the periphery are applied only when `refreshDue`; followed
   peers and first poses always apply.
 
 ## Follow-ups
 
-- Minimap reveal from sight range and acuity rather than a fixed radius.
 - Entity LOD: simplify bodies and animation by `perceivedDetail`.
 - Spatial audio from the hearing sense (falloff by angle and range, refresh by `tickMs`).
 - Sender-side net priority: send peripheral updates less often, not just apply them less often.

@@ -1,6 +1,6 @@
 import { paintFrame } from "../engine/frame.js";
 import { mountTouch, wantsTouch } from "./touch.js?v=3";
-import { createTour, demoMode, goalOffset, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=2";
+import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=3";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
@@ -57,13 +57,14 @@ import {
   fluxMetal,
   bleed,
 } from "../sim/hearth.js";
-import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=57";
+import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
-import { GEO_COLOR, createPlate, dragCenter, isMapDrag, mapFollowAfter, mapSpan, revealLook, samplePlate, stamp } from "../sim/plate.js";
+import { agilityFactor } from "../sim/agility.js";
+import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
@@ -159,6 +160,7 @@ if (bootBus) {
   };
 }
 const quiet = params.get("quiet") === "1";
+if (params.get("debug") === "1") document.documentElement.classList.add("debug");
 const demo = demoMode(params, location.hostname);
 document.documentElement.classList.toggle("demo", demo);
 const touchy = wantsTouch(window);
@@ -294,6 +296,11 @@ const seenPrints = new Set();
 const survey = createSurvey();
 const plate = createPlate();
 let mapZoom = 1;
+let followZoom = 1;
+function chartSpan() {
+  if (mapFollow) return followSpan(revealRange(skillBag(), perception.senses.sight), followZoom);
+  return mapSpan(skills.mapping.value, mapZoom);
+}
 let mapFollow = true;
 let mapCenter = [0, -150];
 let mapDrag = null;
@@ -343,6 +350,7 @@ if (kept && keepSlot) {
 }
 if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 let linkNote = "";
+let lighthouseState = "off";
 const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0 };
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const jump = createJump();
@@ -534,6 +542,7 @@ addEventListener("keydown", (event) => {
     event.preventDefault();
     tour.skip = true;
   }
+  if (event.code === "KeyI" && !event.repeat) document.documentElement.classList.toggle("debug");
   if (event.code === "F3") {
     event.preventDefault();
     document.documentElement.classList.toggle("demo");
@@ -720,6 +729,7 @@ function input() {
     crouch: keys.has("ControlLeft") || keys.has("ControlRight"),
     jump: keys.has("Space"),
     run: skills.run.value,
+    agility: skills.agility.value,
     wind: skills.wind.value,
   };
 }
@@ -1016,6 +1026,7 @@ function revealMap() {
     origin: eye,
     dir: lookDirection(yaw, pitch),
     skills: skillBag(),
+    sight: perception.senses.sight,
     fov: sight,
     heightAt: (px, py) => standHeight(px, py, columnFloor(terrain.log.crust, px, py)),
   });
@@ -1037,7 +1048,9 @@ function bindChart() {
     event.preventDefault();
     event.stopPropagation();
     const direction = Math.sign(event.deltaY) || 1;
-    mapZoom = Math.max(0.25, Math.min(8, mapZoom * (direction > 0 ? 1 / 1.18 : 1.18)));
+    const step = direction > 0 ? 1 / 1.18 : 1.18;
+    if (mapFollow) followZoom = Math.max(0.25, Math.min(8, followZoom * step));
+    else mapZoom = Math.max(0.25, Math.min(8, mapZoom * step));
   }, { passive: false });
   surface.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
@@ -1052,10 +1065,11 @@ function bindChart() {
     const dx = event.clientX - mapDrag.x;
     const dy = event.clientY - mapDrag.y;
     if (!mapDrag.moved && !isMapDrag(dx, dy)) return;
+    if (!mapDrag.moved && mapFollow) mapZoom = zoomForSpan(skills.mapping.value, chartSpan());
     mapDrag.moved = true;
     mapFollow = mapFollowAfter(mapFollow, "drag");
     const rect = surface.getBoundingClientRect();
-    const span = mapSpan(skills.mapping.value, mapZoom);
+    const span = chartSpan();
     mapCenter = dragCenter(mapDrag.center, dx, dy, span, rect.width || surface.width);
   });
   const endDrag = () => {
@@ -1155,7 +1169,7 @@ function drawChart() {
   if ((yard.tracks || 0) > 0) {
     plotted.marks.push({ kind: "graze", point: [player.position[0] + 1.2, player.position[1]], name: `graze ${yard.scrub ?? 0}` });
   }
-  const span = mapSpan(skills.mapping.value, mapZoom);
+  const span = chartSpan();
   const rise = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
   const detail = contourDetail(skills.topography.value);
   const contours = detail.step > 0 ? contourLines({
@@ -1389,6 +1403,7 @@ function paintNet() {
   const chainWord = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "empty";
   node.textContent = [
     players || archives ? `players ${players}    archives ${archives}` : "alone",
+    ...(lighthouseLine(lighthouseState) ? [lighthouseLine(lighthouseState)] : []),
     `links ${open.length} open    ${connecting} connecting`,
     `ice ${iceLine}`,
     `ops in ${net.opsIn} out ${net.opsOut}    snap in ${net.snapIn} out ${net.snapOut}`,
@@ -1966,11 +1981,13 @@ function ensureRoom() {
       catalog: catalogHex,
     });
     // A lighthouse that does not answer in 3 s means solo. Try again in 30 s.
+    lighthouseState = "connecting";
     roomReady = Promise.race([
-      room.start().then(() => room),
+      room.start().then(() => { lighthouseState = "up"; return room; }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("lighthouse timeout")), 3000)),
     ]);
     roomReady.catch(() => {
+      lighthouseState = "unreachable";
       room.close();
       setTimeout(() => { roomReady = null; }, 30000);
     });
@@ -2172,7 +2189,7 @@ if (params.get("still") !== "1") {
     }
     if (!followId && !agent) {
       const turn = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
-      if (turn) yaw += turn * 2.1 * dt;
+      if (turn) yaw += turn * 2.1 * agilityFactor("turn", skills.agility.value) * dt;
     }
     const sample = input();
     if (seated) {
@@ -2559,6 +2576,7 @@ if (params.get("still") !== "1") {
         grantUse(skills, "run", { tick, gap: 30 });
         grantUse(skills, "wind", { tick, gap: 45 });
       }
+      if (moved.jump || moved.running) grantUse(skills, "agility", { tick, gap: 30 });
       const practice = sightPractice({
         down: vitals.down > 0,
         eyes: view === "first" || (zoom.blend || 0) >= 0.85,

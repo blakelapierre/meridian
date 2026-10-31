@@ -73,14 +73,16 @@ export function stepStamina(pool, { sprint = false, jump = false, wind = 0 } = {
   if (pool.locked && pool.value >= 20) pool.locked = false;
 }
 
+import { agilityFactor } from "./agility.js";
+
 export function runSpeed(skill = 0) {
   const trained = Math.max(0, Math.min(140, skill));
   return 6.6 * (1 + 0.35 * trained / 140);
 }
 
-export function wishSpeed(pool, { crouch = false, sprint = false, run = 0, limp = 1 } = {}) {
+export function wishSpeed(pool, { crouch = false, sprint = false, run = 0, agility = 0, limp = 1 } = {}) {
   const factor = typeof limp === "number" ? limp : 1;
   const heavy = factor <= 0.4;
-  const base = crouch ? 2.2 : !heavy && sprint && !pool.locked && pool.value > 0 ? runSpeed(run) : 4.4;
+  const base = crouch ? 2.2 : !heavy && sprint && !pool.locked && pool.value > 0 ? runSpeed(run) * agilityFactor("run", agility) : 4.4;
   return base * factor;
 }

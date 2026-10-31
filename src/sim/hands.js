@@ -1,5 +1,5 @@
 import { stepPlayer, stepStamina, STOP_ACCEL, wishSpeed } from "./player.js";
-import { stepLift } from "./jump.js?v=57";
+import { stepLift } from "./jump.js?v=58";
 
 const AIR_ACCEL = 12;
 
@@ -42,6 +42,7 @@ export function stepHands(world, player, stamina, input, jump = null, jumpSkill 
     sprint: input.sprint,
     crouch: input.crouch,
     run: input.run || 0,
+    agility: input.agility || 0,
     limp: typeof input.limp === "number" ? input.limp : 1,
   });
   const wish = wishPlanar(input.yaw, input.forward || 0, input.strafe || 0, speed);

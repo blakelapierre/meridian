@@ -513,6 +513,7 @@ Success is defined per skill: a certified hit for marksmanship, a certified edit
 | Breach | Plant, defuse, and charge times × `1 - 0.25 * skill/140` |
 | Fieldcraft | Sprint drain × `1 - 0.30 * skill/140`. Fall damage × the same factor |
 | Run | Sprint speed × `1 + 0.35 * skill/140`. Walking speed is unchanged |
+| Agility | Sprint speed × `1 + 0.5 * skill/140` (cap **1.5×**), jump height × `1 + 0.4 * skill/140` (cap **1.4×**), keyboard turn (A/D) × `1 + 0.5 * skill/140` (cap **1.5×**). Caps are reached only at 140 (specialized); at 100 it is about 1.36× / 1.29× / 1.36×. Stacks with Run and Jump. Mouse and touch look are not scaled. Gained by sprinting and jumping (one use per second at most). `src/sim/agility.js` |
 | Surgery | Bandage and splint times × `1 - 0.40 * skill/140` |
 | Building | Structure piece integrity starts at `80 + skill/140*40`. Place work time down by the same fraction as surgery |
 | Mining | Terraform rate, §7 |
