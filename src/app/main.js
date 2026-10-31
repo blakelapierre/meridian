@@ -63,7 +63,7 @@ import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMor
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
-import { GEO_COLOR, createPlate, dragCenter, mapSpan, revealLook, samplePlate, stamp } from "../sim/plate.js";
+import { GEO_COLOR, createPlate, dragCenter, isMapDrag, mapFollows, mapSpan, revealLook, samplePlate, stamp } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
@@ -296,6 +296,7 @@ const plate = createPlate();
 let mapZoom = 1;
 let mapFollow = true;
 let mapCenter = [0, -150];
+let mapReleasedAt = null;
 let mapDrag = null;
 const friends = new Map();
 const seenPeople = new Map();
@@ -1044,22 +1045,31 @@ function bindChart() {
     event.preventDefault();
     event.stopPropagation();
     const center = mapFollow ? [player.position[0], player.position[1]] : mapCenter.slice();
-    mapFollow = false;
-    mapCenter = center;
-    mapDrag = { x: event.clientX, y: event.clientY, center };
+    mapDrag = { x: event.clientX, y: event.clientY, center, moved: false };
     surface.setPointerCapture?.(event.pointerId);
   });
   surface.addEventListener("pointermove", (event) => {
     if (!mapDrag) return;
+    const dx = event.clientX - mapDrag.x;
+    const dy = event.clientY - mapDrag.y;
+    if (!mapDrag.moved && !isMapDrag(dx, dy)) return;
+    mapDrag.moved = true;
+    mapFollow = false;
     const rect = surface.getBoundingClientRect();
     const span = mapSpan(skills.mapping.value, mapZoom);
-    mapCenter = dragCenter(mapDrag.center, event.clientX - mapDrag.x, event.clientY - mapDrag.y, span, rect.width || surface.width);
+    mapCenter = dragCenter(mapDrag.center, dx, dy, span, rect.width || surface.width);
   });
   const endDrag = () => {
+    if (mapDrag?.moved) mapReleasedAt = performance.now();
     mapDrag = null;
   };
   surface.addEventListener("pointerup", endDrag);
   surface.addEventListener("pointercancel", endDrag);
+  surface.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    mapFollow = true;
+  });
 }
 
 function showChart() {
@@ -1103,6 +1113,7 @@ function drawChart() {
   showChart();
   if (mapMode === "none") return;
   bindChart();
+  mapFollow = mapFollows({ follow: mapFollow, dragging: Boolean(mapDrag?.moved), releasedAt: mapReleasedAt, now: performance.now() });
   if (mapFollow) mapCenter = [player.position[0], player.position[1]];
   const ability = mapAbilities(skills.mapping.value);
   const objects = listObjects({
