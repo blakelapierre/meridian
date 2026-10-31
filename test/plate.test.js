@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GEO_COLOR, createPlate, dragCenter, hitGround, isMapDrag, MAP_REFOLLOW_MS, mapFollows, mapSpan, placeOnView, plateViewRect, revealLook, revealRange, samplePlate, stamp } from "../src/sim/plate.js";
+import { GEO_COLOR, createPlate, dragCenter, hitGround, isMapDrag, mapFollowAfter, mapSpan, placeOnView, plateViewRect, revealLook, revealRange, samplePlate, stamp } from "../src/sim/plate.js";
 import { chaseOrigin } from "../src/sim/body.js";
 import { lookDirection } from "../src/sim/hands.js";
 
@@ -82,9 +82,13 @@ test("a plain click on the chart keeps it following; only a real drag stops it",
   assert.equal(isMapDrag(10, 0), true);
 });
 
-test("the chart returns to the player shortly after a pan ends", () => {
-  assert.equal(mapFollows({ follow: true, dragging: false, releasedAt: null, now: 0 }), true);
-  assert.equal(mapFollows({ follow: false, dragging: true, releasedAt: 0, now: 99999 }), false);
-  assert.equal(mapFollows({ follow: false, dragging: false, releasedAt: 1000, now: 2000 }), false);
-  assert.equal(mapFollows({ follow: false, dragging: false, releasedAt: 1000, now: 1000 + MAP_REFOLLOW_MS }), true);
+test("a pan stays put until the player recenters; zoom and walking never recenter", () => {
+  let follow = true;
+  follow = mapFollowAfter(follow, "drag");
+  assert.equal(follow, false);
+  for (const event of ["zoom", "move", "tick", "click"]) follow = mapFollowAfter(follow, event);
+  assert.equal(follow, false, "still panned after zooming and walking");
+  follow = mapFollowAfter(follow, "recenter");
+  assert.equal(follow, true);
+  assert.equal(mapFollowAfter(true, "zoom"), true, "zoom does not stop following");
 });
