@@ -159,6 +159,7 @@ if (bootBus) {
   };
 }
 const quiet = params.get("quiet") === "1";
+if (params.get("debug") === "1") document.documentElement.classList.add("debug");
 const demo = demoMode(params, location.hostname);
 document.documentElement.classList.toggle("demo", demo);
 const touchy = wantsTouch(window);
@@ -535,6 +536,7 @@ addEventListener("keydown", (event) => {
     event.preventDefault();
     tour.skip = true;
   }
+  if (event.code === "KeyI" && !event.repeat) document.documentElement.classList.toggle("debug");
   if (event.code === "F3") {
     event.preventDefault();
     document.documentElement.classList.toggle("demo");
