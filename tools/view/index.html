@@ -27,6 +27,23 @@
       #map { display: block; width: 220px; height: 220px; background: #081218; cursor: grab; touch-action: none; }
       #fix { margin: 4px 0 0; font: 12px/1.3 ui-monospace, monospace; color: #9cf; text-align: center; text-shadow: 0 1px 2px #000; }
       #skills { position: fixed; right: 14px; bottom: 12px; z-index: 3; margin: 0; padding: 8px 10px; list-style: none; background: rgba(0,0,0,.72); font: 12px/1.4 sans-serif; min-width: 11rem; }
+      #cues { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2; }
+      #notices { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 6; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; max-width: min(90vw, 34rem); }
+      #notices .notice { background: rgba(10,14,20,.78); color: #eef; border: 1px solid rgba(160,200,255,.35); border-radius: 6px; padding: 6px 12px; font: 13px/1.35 sans-serif; text-align: center; animation: notice 5s ease forwards; }
+      @keyframes notice { 0% { opacity: 0; transform: translateY(-6px); } 10% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+      #tip { position: fixed; z-index: 7; max-width: 16rem; background: rgba(12,16,22,.94); color: #dde; border: 1px solid #456; border-radius: 5px; padding: 6px 9px; font: 12px/1.4 sans-serif; pointer-events: none; }
+      #tip .tier { color: #9f9; margin-top: 3px; }
+      #log-open { position: fixed; right: 14px; bottom: calc(12px + var(--skills-h, 0px)); z-index: 4; font: 12px sans-serif; padding: 6px 12px; min-height: 32px; background: rgba(0,0,0,.72); color: #ddd; border: 1px solid #456; border-radius: 4px; }
+      html.touch #log-open { right: 58px; bottom: 135px; min-height: 26px; padding: 3px 10px; border-radius: 8px; z-index: 9; }
+      html.touch #ablog, html.touch #tip { z-index: 9; }
+      #ablog { position: fixed; right: 14px; top: 64px; z-index: 6; width: min(22rem, calc(100vw - 28px)); max-height: 60vh; overflow: auto; background: rgba(8,12,18,.92); color: #dde; border: 1px solid #456; border-radius: 6px; font: 12px/1.45 sans-serif; }
+      #ablog header { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #345; position: sticky; top: 0; background: inherit; }
+      #ablog header b { flex: 1; }
+      #ablog .close { min-width: 32px; min-height: 32px; background: none; color: #ccd; border: 0; font-size: 18px; }
+      #ablog ol { list-style: none; margin: 0; padding: 6px 10px; }
+      #ablog li { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+      #ablog time { color: #8ab; margin-right: 4px; }
+      #skills li:focus { outline: 1px solid #456; }
       #skills li { display: flex; gap: 8px; align-items: center; }
       #skills span:first-child { width: 6.2rem; }
       #skills li.child span:first-child { width: 5.5rem; padding-left: 0.7rem; }
@@ -151,6 +168,14 @@
     <div id="target"></div>
     <div id="range"></div>
     <ul id="skills"></ul>
+    <button id="log-open" type="button" aria-controls="ablog" aria-expanded="false" title="Abilities log (L)">Log</button>
+    <section id="ablog" hidden aria-label="Abilities log">
+      <header><b>Abilities</b><label><input id="cue-toggle" type="checkbox" checked> sound cues</label><button class="close" type="button" aria-label="Close">×</button></header>
+      <ol></ol>
+    </section>
+    <div id="tip" role="tooltip" hidden></div>
+    <canvas id="cues" aria-hidden="true"></canvas>
+    <div id="notices" aria-live="polite"></div>
     <div id="sight"></div>
     <div id="chart">
       <canvas id="map" width="220" height="220"></canvas>
@@ -163,7 +188,7 @@
     <div id="shotfx"></div>
     <pre id="net">alone</pre>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=116"></script>
+    <script type="module" src="../../src/app/main.js?v=118"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {

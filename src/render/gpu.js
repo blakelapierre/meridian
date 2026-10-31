@@ -72,10 +72,20 @@ float fovT(vec2 uv) {
 float fovPeriod(float t) {
   return floor(1.0 + (max(1.0, uFovea.z) - 1.0) * t + 0.5);
 }
+float fovLevel(float t) {
+  return max(0.0, uFovea.w * t - uRefine);
+}
 float fovBlock(float t) {
   return exp2(max(0.0, floor(uFovea.w * t + 0.5) - uRefine));
 }
 `;
+
+// Share of the previous resolved frame kept in the periphery (scaled by the fovea fade in the shader).
+// Only while the view is still, so motion never ghosts; enough to hide each refinement step.
+export const HISTORY_KEEP = 0.6;
+export function historyKeep(still, hasHistory) {
+  return still && hasHistory ? HISTORY_KEEP : 0;
+}
 
 export function fitCanvas(canvas, scale = 1, pixels = null) {
   const boxW = canvas.clientWidth || window.innerWidth || 960;
@@ -816,17 +826,38 @@ void main() {
   const blitNewer = blitProgram ? gl.getUniformLocation(blitProgram, "uNewer") : null;
   const blitMix = blitProgram ? gl.getUniformLocation(blitProgram, "uMix") : null;
   // Resolve: fill each peripheral cell from its traced corner pixel into a full picture.
+  // Resolve: rebuild the picture from the traced samples. Each pixel interpolates the traced corners
+  // of its cell (no blocks), and the cell size is blended across levels so the fade from the sharp
+  // gaze to the soft periphery is continuous (no ring). While the view is still, the periphery is
+  // also eased toward the previous resolved frame so each refinement step does not pop.
   const resolveFs = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
 precision highp float;
 uniform sampler2D uAccum;
+uniform sampler2D uHistory;
+uniform float uKeep;
 ${FOVEA_GLSL}
 in vec2 vUV;
 out vec4 fragColor;
+vec3 cellLerp(vec2 pix, float cell) {
+  ivec2 size = textureSize(uAccum, 0) - 1;
+  vec2 lo = pix - mod(pix, cell);
+  vec2 f = (pix - lo) / cell;
+  vec3 a = texelFetch(uAccum, clamp(ivec2(lo), ivec2(0), size), 0).rgb;
+  vec3 b = texelFetch(uAccum, clamp(ivec2(lo + vec2(cell, 0.0)), ivec2(0), size), 0).rgb;
+  vec3 c = texelFetch(uAccum, clamp(ivec2(lo + vec2(0.0, cell)), ivec2(0), size), 0).rgb;
+  vec3 d = texelFetch(uAccum, clamp(ivec2(lo + vec2(cell)), ivec2(0), size), 0).rgb;
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 void main() {
   vec2 ray = vec2(vUV.x, 1.0 - vUV.y);
-  float cell = fovBlock(fovT(ray));
+  float t = fovT(ray);
+  float level = fovLevel(t);
   vec2 pix = floor(gl_FragCoord.xy);
-  fragColor = vec4(texelFetch(uAccum, ivec2(pix - mod(pix, cell)), 0).rgb, 1.0);
+  float fine = exp2(floor(level));
+  vec3 rgb = mix(cellLerp(pix, fine), cellLerp(pix, fine * 2.0), smoothstep(0.0, 1.0, fract(level)));
+  if (level <= 0.0) rgb = texelFetch(uAccum, ivec2(pix), 0).rgb;
+  vec3 past = texelFetch(uHistory, ivec2(pix), 0).rgb;
+  fragColor = vec4(mix(rgb, past, uKeep * t), 1.0);
 }`);
   let resolveProgram = null;
   if (blitVs && resolveFs) {
@@ -1037,6 +1068,7 @@ void main() {
       gl.disable(gl.BLEND);
       gl.bindFramebuffer(gl.FRAMEBUFFER, accumSlot.fbo);
       viewSize = { w: tw, h: th };
+      const forceFullFrame = forceFull;
       const drew = draw(scene, "full", 0, fovea);
       forceFull = false;
       frame = (frame + 1) % 3600;
@@ -1052,11 +1084,18 @@ void main() {
       gl.activeTexture(gl.TEXTURE11);
       gl.bindTexture(gl.TEXTURE_2D, accumSlot.tex);
       gl.uniform1i(gl.getUniformLocation(resolveProgram, "uAccum"), 11);
+      const past = newest >= 0 && hold[newest] !== slot ? hold[newest] : accumSlot;
+      gl.activeTexture(gl.TEXTURE12);
+      gl.bindTexture(gl.TEXTURE_2D, past.tex);
+      gl.uniform1i(gl.getUniformLocation(resolveProgram, "uHistory"), 12);
+      gl.uniform1f(gl.getUniformLocation(resolveProgram, "uKeep"), historyKeep(base.still, past !== accumSlot && past.w === tw && past.h === th && !forceFullFrame));
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.activeTexture(gl.TEXTURE11);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.activeTexture(gl.TEXTURE12);
       gl.bindTexture(gl.TEXTURE_2D, null);
       viewSize = null;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);

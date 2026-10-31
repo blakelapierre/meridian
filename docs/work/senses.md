@@ -21,3 +21,9 @@ The chart draws a solid sight edge at the reveal radius and its line reads `sigh
 ## Later
 
 Separate colors for knowledge you learned yourself and knowledge someone told you. 
+
+## Batch 3 status
+
+Done: hearing sub-skills, Localization, exposure training, visual cues, Awareness presence cues, Dark adaptation, tooltips, unlock notices, Abilities log.
+
+Follow-ups: Awareness from sound occlusion; Tracking age-reading of prints; Dark adaptation recovery after bright light.
