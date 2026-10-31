@@ -30,8 +30,8 @@ The sea cue is half as loud at noon. It is not silent.
 
 ## Next
 
-The sea does not go quiet at night. Not in this build.
+The sea drops to 0.3 at night (0.5 at noon). Sounds from other players (shots, digs, steps) are placed by distance and side through the hearing sense (`hearAt` in `src/sim/perception.js`). Ambient sources are not in this build.
 
 ## Later
 
-Distance and side. A shot that cracks only inside its range. No music bed.
+A shot that cracks only inside its range. No music bed.

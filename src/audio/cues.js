@@ -12,7 +12,9 @@ export const CUES = {
 };
 
 export function seaGain(word) {
-  return word === "noon" ? 0.5 : 1;
+  if (word === "noon") return 0.5;
+  if (word === "night") return 0.3;
+  return 1;
 }
 
 export function cueFor(name) {

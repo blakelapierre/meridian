@@ -34,5 +34,5 @@ Helpers: `falloff`, `refreshPeriod`, `blockLevel`, `tracePriority`, `tracedFract
 ## Follow-ups
 
 - Entity LOD: simplify bodies and animation by `perceivedDetail`.
-- Spatial audio from the hearing sense (falloff by angle and range, refresh by `tickMs`).
+- Spatial audio: remote shots, digs and steps use `hearAt` (range falloff + side pan). Angle-dependent acuity and ambient sources remain.
 - Sender-side net priority: send peripheral updates less often, not just apply them less often.

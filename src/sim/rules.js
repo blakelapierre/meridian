@@ -90,6 +90,14 @@ export function windPush(wind) {
   return [wind[0] * 0.004, (wind[1] || 0) * 0.004, 0];
 }
 
+// Status-line note for the wind push on a drifting body; empty when there is none.
+export function pushNote(wind) {
+  const push = windPush(wind);
+  const strength = Math.hypot(push[0], push[1]);
+  if (strength < 1e-4) return "";
+  return ` · wind push ${(strength * 1000).toFixed(1)}`;
+}
+
 export function frontGain(dot) {
   return dot < 0 ? 0.5 : 1;
 }

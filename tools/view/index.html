@@ -77,7 +77,7 @@
       @media (orientation: landscape) and (max-height: 500px) { #tbuttons { width: 300px; bottom: 10px; right: 96px; } #stick { width: 92px; height: 92px; bottom: 14px; } #nub { left: 24px; top: 24px; } #lookpad { top: 10%; } #touch #tfire { bottom: 14px; width: 62px; height: 62px; } }
       @media (orientation: portrait) { #tbuttons { bottom: 132px; width: 210px; } }
       /* Demo mode: the public build. F3 or ?debug=1 brings the panels back. */
-      html.demo #net, html.demo #help, html.demo #skills, html.demo #bit, html.demo aside h1 { display: none; }
+      html.demo:not(.debug):not(.touch-info) #net, html.demo #help, html.demo #skills, html.demo #bit, html.demo aside h1 { display: none; }
       html.demo aside { width: auto; max-width: min(24rem, calc(100vw - 24px)); padding: 6px 10px; font-size: 12px; background: rgba(0,0,0,.45); }
       html.demo aside p { margin: 0 0 2px; }
       #hint { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 7; max-width: min(36rem, calc(100vw - 200px)); padding: 6px 12px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; font: 14px/1.35 sans-serif; text-align: center; pointer-events: none; }
@@ -103,6 +103,8 @@
       html.touch #notes { top: 162px; max-width: 9rem; font-size: 10px; }
       html.touch #hint { top: 8px; font-size: 12px; max-width: calc(100vw - 360px); min-width: 12rem; }
       html.touch #fps { font-size: 11px; top: 10px; }
+      /* Phone portrait: the tour line sits under the demo links, left of the map, instead of over both. */
+      @media (orientation: portrait) { html.touch #hint { left: 12px; top: 88px; transform: none; min-width: 0; max-width: calc(100vw - 160px); text-align: left; } }
     </style>
     <script type="importmap">
       {
@@ -161,7 +163,7 @@
     <div id="shotfx"></div>
     <pre id="net">alone</pre>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=115"></script>
+    <script type="module" src="../../src/app/main.js?v=116"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {

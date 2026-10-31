@@ -7,7 +7,7 @@ import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
 import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=72";
-import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=1";
+import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, hearAt, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=2";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
 import {
@@ -27,6 +27,7 @@ import {
   windAt,
   storeWind,
   windPush,
+  pushNote,
 } from "../sim/rules.js";
 import { dominionFrame } from "../sim/clocks.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
@@ -53,6 +54,7 @@ import {
   tryFinishHearth,
   fallFromCount,
   seedLanding,
+  landingNote,
   countLanding,
   fluxMetal,
   bleed,
@@ -69,7 +71,7 @@ import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unp
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
-import { paintChart } from "../render/chart.js?v=70";
+import { paintChart } from "../render/chart.js?v=71";
 import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, sightPractice, stepFollow, zoomFov } from "../sim/sight.js?v=10";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -267,6 +269,7 @@ let trigger = false;
 let shotQueued = false;
 let cooldown = 0;
 let report = "";
+let windNote = "";
 let useEdge = false;
 let buyEdge = false;
 let selectEdge = false;
@@ -322,6 +325,18 @@ function hear(name, amount = 1, pan = 0) {
   heardAt.set(name, now);
   listener.play(name, amount, pan);
 }
+// A sound made by someone else: placed by distance and side through the hearing sense.
+function hearFrom(name, source, amount = 1) {
+  if (!source) return;
+  const heard = hearAt(player.position, yaw, source, perception.senses.hearing);
+  if (!heard || heard.gain < 0.02) return;
+  hear(name, amount * heard.gain, heard.pan);
+}
+function poseAt(id) {
+  const pose = id ? poses.get(id) : null;
+  return pose ? [pose.x, pose.y] : null;
+}
+const peerSteps = new Map();
 let stillPose = null;
 let lastCameraSpeed = 0;
 let stillFor = 0;
@@ -1187,6 +1202,7 @@ function drawChart() {
     skill: skills.mapping.value,
     marks: plotted.marks,
     radius: ability.radius,
+    sight: revealRange(skillBag(), perception.senses.sight),
     plate,
     center: mapCenter,
     span,
@@ -1552,7 +1568,7 @@ function publish() {
   const bound = yard.bound ? graceMark({ cell: yard.bound }, yard.grace) : null;
   const boundNote = bound ? ` · bound${bound.grace ? " grace" : ""}` : "";
   const legNote = (vitals.left < 100 || vitals.right < 100) ? ` · L${Math.ceil(vitals.left)} R${Math.ceil(vitals.right)}` : "";
-  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${legNote}`;
+  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${landingNote(skills)}${legNote}${windNote}`;
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}/${spoilCap(skills.mining.value)}` : "";
   const brushNote = slot === "bit" && brush !== "dig" ? ` · ${brush}` : "";
   const light = dayWord(tick);
@@ -1921,7 +1937,9 @@ function onOps(bytes, from) {
     return;
   }
   if (bytes[0] !== 7) {
+    const before = terrain.log.seq;
     terrain.receive(bytes);
+    if (terrain.log.seq > before) hearFrom("dig", poseAt(from));
     return;
   }
   const scene = buildScene({
@@ -1941,6 +1959,7 @@ function onOps(bytes, from) {
     return;
   }
   seenShots.add(accepted.nonce);
+  hearFrom("shot", poseAt(from));
   const applied = applyDummyHit(dummy, accepted.hitbox);
   report = `${applied.hitbox} ${applied.damage}`;
 }
@@ -2036,6 +2055,9 @@ async function openLink(to, offer, role) {
     if (to !== followId && poses.has(to) && !refreshDue(perception, "sight", angle, nowMs - (poseSeenAt.get(to) || 0))) return;
     poseSeenAt.set(to, nowMs);
     poses.set(to, pose);
+    const stride = hearStep(peerSteps.get(to) || null, [pose.x, pose.y]);
+    peerSteps.set(to, stride.at);
+    if (stride.cue) hearFrom(stride.cue, stride.at);
     if (to === followId) followed = pose;
   };
   const linkLine = document.querySelector("#link");
@@ -2527,11 +2549,14 @@ if (params.get("still") !== "1") {
       }
       const falling = player.velocity[2];
       const drifting = Math.hypot(player.velocity[0], player.velocity[1]) > 0.15;
+      if (!drifting || vitals.down > 0) windNote = "";
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, sample, jump, skills.jump.value);
       if (drifting && vitals.down <= 0) {
-        const push = windPush(cellWind.get(cellId(player.position[1])));
+        const felt = cellWind.get(cellId(player.position[1]));
+        windNote = pushNote(felt);
+        const push = windPush(felt);
         player.velocity[0] += push[0];
         player.velocity[1] += push[1];
       }

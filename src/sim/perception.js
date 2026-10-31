@@ -139,3 +139,17 @@ export function foveaUniforms(perception, refine = 0) {
     refine: Math.max(0, refine | 0),
   };
 }
+
+// Where a sound lands for this listener: gain falls off linearly to the hearing range and
+// scales with acuity; pan is the source's side relative to the facing yaw (-1 left, 1 right).
+export function hearAt(listener, yaw, source, hearing = SENSE_DEFAULTS.hearing) {
+  const dx = source[0] - listener[0];
+  const dy = source[1] - listener[1];
+  const dist = Math.hypot(dx, dy);
+  const range = hearing.range || SENSE_DEFAULTS.hearing.range;
+  if (dist > range) return null;
+  const near = 1 - dist / range;
+  const gain = near * (0.4 + 0.6 * (hearing.acuity ?? SENSE_DEFAULTS.hearing.acuity));
+  const pan = dist < 0.5 ? 0 : Math.max(-1, Math.min(1, (dx * Math.cos(yaw) - dy * Math.sin(yaw)) / dist));
+  return { gain, pan, dist };
+}
