@@ -1,6 +1,6 @@
 import { paintFrame } from "../engine/frame.js";
 import { mountTouch, wantsTouch } from "./touch.js?v=3";
-import { createTour, demoMode, goalOffset, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=2";
+import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=3";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
@@ -343,6 +343,7 @@ if (kept && keepSlot) {
 }
 if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 let linkNote = "";
+let lighthouseState = "off";
 const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0 };
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const jump = createJump();
@@ -1389,6 +1390,7 @@ function paintNet() {
   const chainWord = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "empty";
   node.textContent = [
     players || archives ? `players ${players}    archives ${archives}` : "alone",
+    ...(lighthouseLine(lighthouseState) ? [lighthouseLine(lighthouseState)] : []),
     `links ${open.length} open    ${connecting} connecting`,
     `ice ${iceLine}`,
     `ops in ${net.opsIn} out ${net.opsOut}    snap in ${net.snapIn} out ${net.snapOut}`,
@@ -1966,11 +1968,13 @@ function ensureRoom() {
       catalog: catalogHex,
     });
     // A lighthouse that does not answer in 3 s means solo. Try again in 30 s.
+    lighthouseState = "connecting";
     roomReady = Promise.race([
-      room.start().then(() => room),
+      room.start().then(() => { lighthouseState = "up"; return room; }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("lighthouse timeout")), 3000)),
     ]);
     roomReady.catch(() => {
+      lighthouseState = "unreachable";
       room.close();
       setTimeout(() => { roomReady = null; }, 30000);
     });

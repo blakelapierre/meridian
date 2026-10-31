@@ -27,6 +27,15 @@ export function lighthouseUrl(params, hostname = "", config = null) {
   return null;
 }
 
+// One line for the network panel about the lighthouse. "off" means solo was
+// chosen (no lighthouse configured, or ?lighthouse=off), so it says nothing.
+export function lighthouseLine(state) {
+  if (state === "unreachable") return "lighthouse unreachable, playing solo";
+  if (state === "connecting") return "lighthouse connecting";
+  if (state === "up") return "lighthouse up";
+  return "";
+}
+
 // 1 is the line. 3 takes the bit out first, then swaps bit and hammer.
 export function nextSlot(slot, code, chosen) {
   if (code === "Digit1") return { slot: "line", chosen };
