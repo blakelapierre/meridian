@@ -35,3 +35,7 @@ The sea drops to 0.3 at night (0.5 at noon). Sounds from other players (shots, d
 ## Later
 
 A shot that cracks only inside its range. No music bed.
+
+## Ambient soundscape (batch 3)
+
+`src/audio/ambient.js` schedules surf, gusts, birds, gulls, insects, rustle, distant activity and rare sounds with jittered gaps and non-repeating variants. Precise sources go through an HRTF PannerNode, others through a StereoPanner (`src/audio/play.js`).

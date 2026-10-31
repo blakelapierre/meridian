@@ -2,12 +2,16 @@ import { paintFrame } from "../engine/frame.js";
 import { mountTouch, wantsTouch } from "./touch.js?v=3";
 import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=3";
 import { hearStep, seaGain } from "../audio/cues.js";
-import { createListener } from "../audio/play.js";
+import { createListener } from "../audio/play.js?v=2";
+import { createAmbient, planAmbient } from "../audio/ambient.js";
+import { cueStyle, darkLift, exposureSkills, hearSource, sensePresence } from "../sim/hearing.js";
+import { skillLabel, tooltipFor } from "./skill-text.js";
+import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=72";
-import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, hearAt, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=2";
+import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=73";
+import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=3";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
 import {
@@ -61,7 +65,7 @@ import {
 } from "../sim/hearth.js";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
 import { createJump } from "../sim/jump.js";
-import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js";
+import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=2";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
@@ -71,7 +75,7 @@ import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unp
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
-import { paintChart } from "../render/chart.js?v=71";
+import { paintChart } from "../render/chart.js?v=72";
 import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, sightPractice, stepFollow, zoomFov } from "../sim/sight.js?v=10";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -326,11 +330,257 @@ function hear(name, amount = 1, pan = 0) {
   listener.play(name, amount, pan);
 }
 // A sound made by someone else: placed by distance and side through the hearing sense.
+const HEAR_CATEGORY = { dig: "combat", shot: "combat", step: "people", splash: "people" };
 function hearFrom(name, source, amount = 1) {
   if (!source) return;
-  const heard = hearAt(player.position, yaw, source, perception.senses.hearing);
+  const category = HEAR_CATEGORY[name] || "people";
+  const heard = hearSource(player.position, yaw, source, perception.senses.hearing, skills, category);
   if (!heard || heard.gain < 0.02) return;
   hear(name, amount * heard.gain, heard.pan);
+  heardCue(category, source, heard);
+  grantHeard(heard, category);
+  if (name === "dig") digSpots.push([source[0], source[1]]);
+  if (digSpots.length > 40) digSpots.shift();
+}
+
+// --- Sound cues (visual), ambient soundscape, awareness -------------------------------------
+const CUE_KEY = "meridian.cues";
+let cuesOn = (() => {
+  try {
+    return globalThis.localStorage?.getItem(CUE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+})();
+const cues = [];
+const blips = [];
+const digSpots = [];
+const ambient = createAmbient();
+const CUE_MS = 1600;
+function heardCue(category, source, heard) {
+  const style = cueStyle(skills, category, heard.gain);
+  if (!style) return;
+  const z = source[2] ?? columnFloor(terrain.log.crust, source[0], source[1]) + 1;
+  // Low Localization: an edge cue points where the sound *seemed* to come from (jittered bearing).
+  cues.push({ category, at: [source[0], source[1], z], angle: heard.angle, born: performance.now(), style });
+  if (cues.length > 24) cues.shift();
+  if (style.blip) blips.push({ kind: "sound", point: [source[0], source[1]], tint: style.tint, born: performance.now() });
+  if (blips.length > 12) blips.shift();
+}
+function grantHeard(heard, category) {
+  for (const name of exposureSkills(heard, category)) grantUse(skills, name, { tick, gap: name === "hearing" ? 45 : 70 });
+}
+function stepAmbient() {
+  const events = planAmbient(ambient, {
+    now: tick / 30,
+    listener: player.position,
+    light: dayWord(tick),
+    actors: otherActors().map((other) => other.feet),
+  });
+  for (const event of events) {
+    const heard = hearSource(player.position, yaw, event.at, perception.senses.hearing, skills, event.category);
+    if (!heard || heard.gain < 0.03) continue;
+    listener.ambient(event.kind, event.variant, event.gain * heard.gain, {
+      angle: heard.angle,
+      precise: (skills.localization?.value || 0) >= 50,
+    });
+    heardCue(event.category, event.at, heard);
+    grantHeard(heard, event.category);
+  }
+}
+function stepAwareness() {
+  for (const other of otherActors()) {
+    const felt = sensePresence(player.position, yaw, other.feet, skills.awareness.value);
+    if (!felt) continue;
+    grantUse(skills, "awareness", { tick, gap: 90 });
+    if (tick % 20) continue;
+    cues.push({
+      category: "people",
+      at: [...other.feet],
+      angle: felt.angle,
+      born: performance.now(),
+      style: { tint: [255, 255, 255], opacity: Math.min(0.4, 0.1 + felt.strength * 0.4), spread: 0.9, shimmer: true, pulse: false, blip: false },
+    });
+  }
+  // Awareness also trains a little whenever someone is close behind you, even before it is noticed.
+  if (skills.awareness.value < 10 && otherActors().some((other) => Math.hypot(other.feet[0] - player.position[0], other.feet[1] - player.position[1]) < 8)) {
+    grantUse(skills, "awareness", { tick, gap: 150 });
+  }
+  // Exposure for the existing Tracking skill: other people's footprints and dig marks nearby.
+  const [x, y] = player.position;
+  const nearPrint = prints.some((print) => print.who !== "self" && Math.hypot(print.x - x, print.y - y) < 3);
+  const nearDig = digSpots.some((spot) => Math.hypot(spot[0] - x, spot[1] - y) < 3);
+  if (nearPrint || nearDig) grantUse(skills, "tracking", { tick, gap: 60 });
+  if (nearPrint) grantUse(skills, "trailing", { tick, gap: 80 });
+  // Dark adaptation: trained by being out at night; it lifts the night picture a little.
+  const night = dayWord(tick) === "night";
+  if (night) grantUse(skills, "dark", { tick, gap: 240 });
+  const lift = darkLift(skills.dark.value, night);
+  const filter = lift > 0.01 ? `brightness(${(1 + lift).toFixed(2)})` : "";
+  if (canvas.style.filter !== filter) canvas.style.filter = filter;
+}
+function paintCues(scene) {
+  const layer = document.querySelector("#cues");
+  if (!layer) return;
+  const w = layer.clientWidth;
+  const h = layer.clientHeight;
+  if (layer.width !== w || layer.height !== h) {
+    layer.width = w;
+    layer.height = h;
+  }
+  const ctx = layer.getContext("2d");
+  ctx.clearRect(0, 0, w, h);
+  const now = performance.now();
+  while (cues.length && now - cues[0].born > CUE_MS) cues.shift();
+  if (!cuesOn) return;
+  for (const cue of cues) {
+    const age = (now - cue.born) / CUE_MS;
+    const fade = Math.sin(Math.min(1, age) * Math.PI) * cue.style.opacity;
+    if (fade <= 0.005) continue;
+    const [r, g, b] = cue.style.tint;
+    const screen = worldToScreen(cue.at, scene.camera);
+    const inside = screen && screen.x > 0.02 && screen.x < 0.98 && screen.y > 0.02 && screen.y < 0.98;
+    if (inside && cue.style.pulse) {
+      ctx.strokeStyle = `rgba(${r},${g},${b},${fade.toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(screen.x * w, screen.y * h, 8 + age * 26, 0, Math.PI * 2);
+      ctx.stroke();
+      continue;
+    }
+    // Off-screen (or low skill): an arc on an ellipse hugging the screen edge, centred on the bearing.
+    const bearing = cue.angle - Math.PI / 2; // 0 ahead = top of screen
+    const spread = cue.style.shimmer ? Math.max(cue.style.spread, 1.4) : cue.style.spread;
+    ctx.lineWidth = cue.style.shimmer ? 3 : 4 + (1 - age) * 3;
+    ctx.strokeStyle = `rgba(${r},${g},${b},${(cue.style.shimmer ? fade * 0.6 : fade).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(w / 2, h / 2, w / 2 - 6 - age * 4, h / 2 - 6 - age * 4, 0, bearing - spread / 2, bearing + spread / 2);
+    ctx.stroke();
+  }
+}
+function soundBlips() {
+  const now = performance.now();
+  while (blips.length && now - blips[0].born > 4000) blips.shift();
+  if (!cuesOn) return [];
+  return blips.map((blip) => ({ ...blip, alpha: 0.7 * (1 - (now - blip.born) / 4000) }));
+}
+function setCues(on) {
+  cuesOn = on;
+  try {
+    globalThis.localStorage?.setItem(CUE_KEY, on ? "on" : "off");
+  } catch {
+    // storage blocked: the toggle still works this session
+  }
+  const box = document.querySelector("#cue-toggle");
+  if (box) box.checked = on;
+}
+
+// --- Ability notices + log ------------------------------------------------------------------
+const abilityLog = createLog();
+const notices = createNoticeQueue();
+let tierMarks = null;
+let abilityCheckAt = 0;
+let logOpen = false;
+function checkAbilities() {
+  if (!tierMarks) {
+    tierMarks = tierSnapshot(skills);
+    return;
+  }
+  for (const found of detectCrossings(tierMarks, skills)) {
+    notices.push(found.text);
+    abilityLog.add({ skill: found.skill, tier: found.tier, text: found.text });
+    if (logOpen) paintLog();
+  }
+}
+function paintNotices() {
+  const box = document.querySelector("#notices");
+  if (!box) return;
+  const { add, drop } = notices.step(performance.now());
+  for (const item of drop) item.el?.remove();
+  for (const item of add) {
+    const el = document.createElement("div");
+    el.className = "notice";
+    el.setAttribute("role", "status");
+    el.textContent = item.text;
+    item.el = el;
+    box.append(el);
+  }
+}
+function paintLog() {
+  const list = document.querySelector("#ablog ol");
+  if (!list) return;
+  const now = Date.now();
+  if (!abilityLog.entries.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty";
+    empty.textContent = "Nothing yet. Skills that cross a tier show up here.";
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...abilityLog.entries.map((entry) => {
+    const item = document.createElement("li");
+    const when = document.createElement("time");
+    when.textContent = relativeTime(entry.at, now);
+    when.dateTime = new Date(entry.at).toISOString();
+    item.append(when, document.createTextNode(` ${entry.text}`));
+    return item;
+  }));
+}
+function toggleLog(force) {
+  logOpen = force ?? !logOpen;
+  const panel = document.querySelector("#ablog");
+  if (!panel) return;
+  panel.hidden = !logOpen;
+  document.querySelector("#log-open")?.setAttribute("aria-expanded", String(logOpen));
+  if (logOpen) paintLog();
+}
+function showTip(item) {
+  const tip = document.querySelector("#tip");
+  if (!tip || !item) return;
+  const name = item.dataset.skill;
+  const text = tooltipFor(name, skills[name]?.value || 0);
+  if (!text) return;
+  const a = document.createElement("div");
+  a.textContent = text.flavour;
+  const b = document.createElement("div");
+  b.className = "tier";
+  b.textContent = text.tier;
+  tip.replaceChildren(a, b);
+  tip.hidden = false;
+  const box = item.getBoundingClientRect();
+  const tw = tip.offsetWidth;
+  tip.style.left = `${Math.max(6, Math.min(innerWidth - tw - 6, box.left - tw - 10))}px`;
+  tip.style.top = `${Math.max(6, Math.min(innerHeight - tip.offsetHeight - 6, box.top - 4))}px`;
+}
+function hideTip() {
+  const tip = document.querySelector("#tip");
+  if (tip) tip.hidden = true;
+}
+function wireAbilityUi() {
+  const list = document.querySelector("#skills");
+  if (list) {
+    list.addEventListener("mouseover", (event) => showTip(event.target.closest("li[data-skill]")));
+    list.addEventListener("mouseleave", hideTip);
+    list.addEventListener("focusin", (event) => showTip(event.target.closest("li[data-skill]")));
+    list.addEventListener("focusout", hideTip);
+    // Touch: a tap or long-press shows the tip; touching anywhere else hides it.
+    list.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "mouse") showTip(event.target.closest("li[data-skill]"));
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "mouse" && !event.target.closest?.("#skills")) hideTip();
+    });
+  }
+  document.querySelector("#log-open")?.addEventListener("click", () => toggleLog());
+  document.querySelector("#ablog .close")?.addEventListener("click", () => toggleLog(false));
+  const box = document.querySelector("#cue-toggle");
+  if (box) {
+    box.checked = cuesOn;
+    box.addEventListener("change", () => setCues(box.checked));
+  }
+  setInterval(() => {
+    if (logOpen) paintLog();
+  }, 15000);
 }
 function poseAt(id) {
   const pose = id ? poses.get(id) : null;
@@ -353,6 +603,9 @@ let zoom = { distance: CHASE, first: false, level: 0, forced: false, blend: 0 };
 let rangeText = "";
 let selection = null;
 const skills = createSkills();
+wireAbilityUi();
+// ?debug=1 exposes a small handle for headless playtests (skills and the ability UI only).
+if (params.get("debug") === "1") globalThis.meridianDebug = { skills, toggleLog, setCues, paintSkills: () => paintSkills(), checkAbilities, marks: () => tierMarks };
 const kept = keepSlot ? loadSheet(keptStore, keepSlot) : null;
 let sheetSeq = kept?.seq || 0;
 if (kept && keepSlot) {
@@ -634,6 +887,7 @@ addEventListener("keydown", (event) => {
     const placed = tryPlacePost(yard, mark.cell);
     report = placed.ok ? "post" : placed.reason;
   }
+  if (event.code === "KeyL" && !event.repeat && slot !== "hammer") toggleLog();
   if (event.code === "KeyL" && !event.repeat && slot === "hammer") {
     const mark = refreshAim(input());
     const placed = tryPlaceRoad(yard, mark.cell);
@@ -1200,7 +1454,7 @@ function drawChart() {
     self: player.position,
     yaw,
     skill: skills.mapping.value,
-    marks: plotted.marks,
+    marks: [...plotted.marks, ...soundBlips()],
     radius: ability.radius,
     sight: revealRange(skillBag(), perception.senses.sight),
     plate,
@@ -1369,7 +1623,8 @@ function paintSkills() {
   list.replaceChildren(...skillRows().map((row) => {
     const skill = skills[row.name];
     const label = document.createElement("span");
-    label.textContent = skill.specialized ? `${row.name}*` : row.name;
+    const name = skillLabel(row.name);
+    label.textContent = skill.specialized ? `${name}*` : name;
     const track = document.createElement("span");
     track.className = "bar";
     const fill = document.createElement("i");
@@ -1379,9 +1634,17 @@ function paintSkills() {
     value.textContent = String(Math.floor(skill.value));
     const item = document.createElement("li");
     if (row.child) item.className = "child";
+    item.dataset.skill = row.name;
+    item.tabIndex = 0;
+    const tip = tooltipFor(row.name, skill.value);
+    if (tip) {
+      item.title = `${tip.flavour}\n${tip.tier}`;
+      item.setAttribute("aria-label", `${name} ${Math.floor(skill.value)}. ${tip.flavour} ${tip.tier}`);
+    }
     item.append(label, track, value);
     return item;
   }));
+  document.documentElement.style.setProperty("--skills-h", `${list.offsetHeight ? list.offsetHeight + 6 : 0}px`);
 }
 
 function paintNotes() {
@@ -1680,7 +1943,13 @@ function paint(sample, width = canvas.width, height = canvas.height) {
     skills.focus.value,
   );
   if (scene.gaze) canvas.dataset.gaze = String(Math.round(scene.gaze.reach));
-  perception = withFocus(perceptionFrom({ eyesight: skills.eyesight.value, focus: skills.focus.value }), {
+  perception = withFocus(perceptionFrom({
+    eyesight: skills.eyesight.value,
+    focus: skills.focus.value,
+    hearing: skills.hearing.value,
+    localization: skills.localization.value,
+    dark: skills.dark.value,
+  }), {
     x: scene.gaze ? scene.gaze.x : 0.5,
     y: scene.gaze ? scene.gaze.y : 0.5,
     dir: lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch),
@@ -1689,6 +1958,9 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   canvas.dataset.fovea = `${Math.round(perception.senses.sight.fovea * 180 / Math.PI)}deg/${perception.senses.sight.period}f`;
   markTarget(scene);
   markGoal(scene);
+  paintCues(scene);
+  if (performance.now() - abilityCheckAt > 500) { abilityCheckAt = performance.now(); checkAbilities(); }
+  paintNotices();
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects, scene.miss);
   const inEyes = zoom.blend >= 1 || (view === "first" && zoom.blend === 0);
@@ -1850,6 +2122,7 @@ function onOps(bytes, from) {
     if (bytesHex(accepted.pubkey) !== bytesHex(identity.pubkey)) return;
     if ((accepted.seq || 0) <= sheetSeq) return;
     const pose = applyCharacter(accepted.body, { player, skills, yard, survey, notes });
+    tierMarks = tierSnapshot(skills);
     yaw = pose.yaw;
     pitch = pose.pitch;
     sheetSeq = accepted.seq;
@@ -2370,6 +2643,9 @@ if (params.get("still") !== "1") {
       reloadBeat = waited.reload;
       bleed(vitals, 1 / 30);
       if (player.position[1] < -190) hear("sea", seaGain(dayWord(tick)));
+      stepAmbient();
+      stepAwareness();
+
       if (tick % 30 === 0) {
         for (let step = 0; step < 2; step += 1) {
           for (const pool of pools) {

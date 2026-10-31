@@ -1,14 +1,16 @@
-export const SKILL_NAMES = ["appraisal", "jump", "run", "mapping", "tracking", "marksmanship", "mining", "building", "eyesight", "ranging", "agility"];
+export const SKILL_NAMES = ["appraisal", "jump", "run", "mapping", "tracking", "marksmanship", "mining", "building", "eyesight", "ranging", "agility", "hearing", "awareness"];
 
 export const SUBSKILLS = {
   mapping: ["topography"],
   mining: ["prospect"],
   building: ["bracing"],
-  eyesight: ["focus"],
+  eyesight: ["focus", "dark"],
   ranging: ["measure"],
   tracking: ["trailing"],
   jump: ["landing"],
   run: ["wind"],
+  // Noticing by sound category, plus Localization (how precisely a sound is placed).
+  hearing: ["nature", "footsteps", "mechanics", "weather", "rare", "localization"],
 };
 
 export function skillRows() {
