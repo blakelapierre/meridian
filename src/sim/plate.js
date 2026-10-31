@@ -75,8 +75,15 @@ export function samplePlate(plate, x, y) {
   return [plate.data[i], plate.data[i + 1], plate.data[i + 2], plate.data[i + 3]];
 }
 
-export function revealRange(skills = {}) {
-  return 8 + skillValue(skills, "mapping") / 140 * 28 + skillValue(skills, "eyesight") / 140 * 16;
+// sight: the perception sight sense ({ acuity, range }) from perceptionFrom. When given, the
+// eyesight term comes from its acuity (0.55 base, +0.35 at full eyesight, so a default sense
+// matches the skill formula; focus and optics overrides add to it) and the radius never exceeds
+// the sense range. Without it, the skill formula alone.
+export function revealRange(skills = {}, sight = null) {
+  const mapped = 8 + skillValue(skills, "mapping") / 140 * 28;
+  if (!sight || !Number.isFinite(sight.acuity)) return mapped + skillValue(skills, "eyesight") / 140 * 16;
+  const seen = mapped + Math.max(0, sight.acuity - 0.55) / 0.35 * 16;
+  return Number.isFinite(sight.range) ? Math.min(sight.range, seen) : seen;
 }
 
 export function revealCount(skills = {}) {
@@ -134,8 +141,9 @@ export function revealLook({
   heightAt = () => 0,
   fov = 70,
   aspect = 16 / 9,
+  sight = null,
 } = {}) {
-  const range = revealRange(skills);
+  const range = revealRange(skills, sight);
   const cols = revealCount(skills);
   const rows = revealRows(skills);
   const points = [{ x, y }];

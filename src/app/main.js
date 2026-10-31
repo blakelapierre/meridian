@@ -1016,6 +1016,7 @@ function revealMap() {
     origin: eye,
     dir: lookDirection(yaw, pitch),
     skills: skillBag(),
+    sight: perception.senses.sight,
     fov: sight,
     heightAt: (px, py) => standHeight(px, py, columnFloor(terrain.log.crust, px, py)),
   });
