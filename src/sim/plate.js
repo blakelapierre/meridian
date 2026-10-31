@@ -171,6 +171,23 @@ export function dragCenter(center, dxPx, dyPx, span, size) {
   return [center[0] - dxPx * scale, center[1] + dyPx * scale];
 }
 
+export const MAP_DRAG_SLOP = 4;
+export const MAP_REFOLLOW_MS = 4000;
+
+// A press on the chart only stops following once it really drags; a plain
+// click (e.g. focusing the pane) keeps the map on the player.
+export function isMapDrag(dxPx, dyPx, slop = MAP_DRAG_SLOP) {
+  return Math.hypot(dxPx, dyPx) > slop;
+}
+
+// After a pan, the chart goes back to following the player once the pointer
+// has been released for a short while.
+export function mapFollows({ follow, dragging, releasedAt, now, after = MAP_REFOLLOW_MS }) {
+  if (follow) return true;
+  if (dragging || releasedAt == null) return false;
+  return now - releasedAt >= after;
+}
+
 export function plateViewRect(plate, center, span, size) {
   const left = plate.origin[0] - plate.meters / 2;
   const north = plate.origin[1] + plate.meters / 2;
