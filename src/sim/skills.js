@@ -1,4 +1,4 @@
-export const SKILL_NAMES = ["appraisal", "jump", "run", "mapping", "tracking", "marksmanship", "mining", "building", "eyesight", "ranging"];
+export const SKILL_NAMES = ["appraisal", "jump", "run", "mapping", "tracking", "marksmanship", "mining", "building", "eyesight", "ranging", "agility"];
 
 export const SUBSKILLS = {
   mapping: ["topography"],

@@ -57,12 +57,13 @@ import {
   fluxMetal,
   bleed,
 } from "../sim/hearth.js";
-import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=57";
+import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
+import { agilityFactor } from "../sim/agility.js";
 import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
@@ -728,6 +729,7 @@ function input() {
     crouch: keys.has("ControlLeft") || keys.has("ControlRight"),
     jump: keys.has("Space"),
     run: skills.run.value,
+    agility: skills.agility.value,
     wind: skills.wind.value,
   };
 }
@@ -2187,7 +2189,7 @@ if (params.get("still") !== "1") {
     }
     if (!followId && !agent) {
       const turn = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
-      if (turn) yaw += turn * 2.1 * dt;
+      if (turn) yaw += turn * 2.1 * agilityFactor("turn", skills.agility.value) * dt;
     }
     const sample = input();
     if (seated) {
@@ -2574,6 +2576,7 @@ if (params.get("still") !== "1") {
         grantUse(skills, "run", { tick, gap: 30 });
         grantUse(skills, "wind", { tick, gap: 45 });
       }
+      if (moved.jump || moved.running) grantUse(skills, "agility", { tick, gap: 30 });
       const practice = sightPractice({
         down: vitals.down > 0,
         eyes: view === "first" || (zoom.blend || 0) >= 0.85,
