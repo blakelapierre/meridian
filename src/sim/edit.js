@@ -1,7 +1,8 @@
+import { DIG_SAMPLE_MM, VOXEL_CM } from "./crust.js";
 import { refuseSlump } from "./rules.js";
 
 function center(i, j, k) {
-  return [i * 50 + 25, j * 50 + 25, k * 50 + 25];
+  return [(i + 0.5) * VOXEL_CM, (j + 0.5) * VOXEL_CM, (k + 0.5) * VOXEL_CM];
 }
 
 function dist2(a, b) {
@@ -34,11 +35,11 @@ export function acceptEdit(crust, proposal, { certified = false, localEdits = fa
     if (dist2(at, proposal.eye) > 160000) return { ok: false, reason: "reach" };
     if (dist2(at, proposal.aim) > 10000) return { ok: false, reason: "brush" };
     const previous = crust.sampleIndex(write.i, write.j, write.k);
-    if (proposal.mode === "dig" && (previous > 0 || write.sdf_mm !== 500)) return { ok: false, reason: "dig" };
-    if (proposal.mode === "fill" && (previous <= 0 || write.sdf_mm !== -500)) return { ok: false, reason: "fill" };
+    if (proposal.mode === "dig" && (previous > 0 || write.sdf_mm !== DIG_SAMPLE_MM)) return { ok: false, reason: "dig" };
+    if (proposal.mode === "fill" && (previous <= 0 || write.sdf_mm !== -DIG_SAMPLE_MM)) return { ok: false, reason: "fill" };
     if (proposal.mode === "smooth") {
       const delta = Math.abs(write.sdf_mm - previous);
-      if (delta === 0 || delta > 500 || Math.abs(write.sdf_mm) > Math.abs(previous)) return { ok: false, reason: "smooth" };
+      if (delta === 0 || delta > DIG_SAMPLE_MM || Math.abs(write.sdf_mm) > Math.abs(previous)) return { ok: false, reason: "smooth" };
     }
   }
   for (const write of proposal.writes) crust.write(write.i, write.j, write.k, write.sdf_mm);

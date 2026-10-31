@@ -1,4 +1,5 @@
 import { cast } from "../engine/cast.js";
+import { VOXEL_M } from "./crust.js";
 
 export const BIT_REACH_M = 4;
 export const BIT_BRUSH_M = 1;
@@ -9,16 +10,16 @@ function nearestSolid(field, eye, aim) {
   const brush2 = BIT_BRUSH_M * BIT_BRUSH_M;
   let best = null;
   let bestD = Infinity;
-  const minI = Math.floor((aim[0] - BIT_BRUSH_M) * 2);
-  const maxI = Math.floor((aim[0] + BIT_BRUSH_M) * 2);
-  const minJ = Math.floor((aim[1] - BIT_BRUSH_M) * 2);
-  const maxJ = Math.floor((aim[1] + BIT_BRUSH_M) * 2);
-  const minK = Math.floor((aim[2] - BIT_BRUSH_M) * 2);
-  const maxK = Math.floor((aim[2] + BIT_BRUSH_M) * 2);
+  const minI = Math.floor((aim[0] - BIT_BRUSH_M) / VOXEL_M);
+  const maxI = Math.floor((aim[0] + BIT_BRUSH_M) / VOXEL_M);
+  const minJ = Math.floor((aim[1] - BIT_BRUSH_M) / VOXEL_M);
+  const maxJ = Math.floor((aim[1] + BIT_BRUSH_M) / VOXEL_M);
+  const minK = Math.floor((aim[2] - BIT_BRUSH_M) / VOXEL_M);
+  const maxK = Math.floor((aim[2] + BIT_BRUSH_M) / VOXEL_M);
   for (let i = minI; i <= maxI; i++) {
     for (let j = minJ; j <= maxJ; j++) {
       for (let k = minK; k <= maxK; k++) {
-        const center = [i * 0.5 + 0.25, j * 0.5 + 0.25, k * 0.5 + 0.25];
+        const center = [(i + 0.5) * VOXEL_M, (j + 0.5) * VOXEL_M, (k + 0.5) * VOXEL_M];
         const fromAim = (center[0] - aim[0]) ** 2 + (center[1] - aim[1]) ** 2 + (center[2] - aim[2]) ** 2;
         const fromEye = (center[0] - eye[0]) ** 2 + (center[1] - eye[1]) ** 2 + (center[2] - eye[2]) ** 2;
         if (fromAim > brush2 || fromEye > reach2) continue;

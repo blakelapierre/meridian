@@ -1,12 +1,15 @@
 import { blake3 } from "@noble/hashes/blake3.js";
 
-export const VOXEL_CM = 50;
+// Voxel edge. Halved from 50 cm in save format 2 (see migrateWorld in persist.js).
+export const VOXEL_CM = 25;
+export const VOXEL_M = VOXEL_CM / 100;
 export const CHUNK_VOXELS = 64;
 export const CHUNK_CM = VOXEL_CM * CHUNK_VOXELS;
 export const LAND_RADIUS_CM = 25600;
-export const VOXEL_CM3 = 125_000;
-export const DIG_SAMPLE_MM = 500;
-export const AIR_SAMPLE_MM = 500;
+export const VOXEL_CM3 = VOXEL_CM ** 3;
+// Signed distance written for a dug (air) or filled voxel: one voxel edge, in mm.
+export const DIG_SAMPLE_MM = VOXEL_CM * 10;
+export const AIR_SAMPLE_MM = VOXEL_CM * 10;
 
 export function isqrt(n) {
   if (n <= 0) return 0;
@@ -118,23 +121,36 @@ function dist2(a, b) {
   return dx * dx + dy * dy + dz * dz;
 }
 
+// Parsed "i,j,k" keys. columnFloor runs many times a frame, and at 25 cm voxels a dug pit holds 8x the
+// overrides, so re-splitting every key per call cost ~0.85 ms. Keys are immutable strings: caching is safe.
+const parsedKeys = new Map();
+function parseKey(key) {
+  let parsed = parsedKeys.get(key);
+  if (!parsed) {
+    parsed = key.split(",").map(Number);
+    if (parsedKeys.size > 200_000) parsedKeys.clear();
+    parsedKeys.set(key, parsed);
+  }
+  return parsed;
+}
+
 export function columnFloor(crust, x, y) {
-  const i = Math.floor(x * 2);
-  const j = Math.floor(y * 2);
+  const i = Math.floor(x / VOXEL_M);
+  const j = Math.floor(y / VOXEL_M);
   let floor = 0;
   for (const [key, sample] of crust.overrides) {
     if (sample <= 0) continue;
-    const [di, dj, dk] = key.split(",").map(Number);
+    const [di, dj, dk] = parseKey(key);
     if (di !== i || dj !== j) continue;
-    const bottom = dk * 0.5;
+    const bottom = dk * VOXEL_M;
     if (bottom < floor) floor = bottom;
   }
   return floor;
 }
 
 function sampleStep(sample) {
-  if (sample > 0) return Math.max(0, sample - 500);
-  if (sample < 0) return Math.min(0, sample + 500);
+  if (sample > 0) return Math.max(0, sample - DIG_SAMPLE_MM);
+  if (sample < 0) return Math.min(0, sample + DIG_SAMPLE_MM);
   return sample;
 }
 
@@ -162,8 +178,8 @@ export function applySlump(crust, aim) {
 }
 
 export function slumpChoice(here, neighbor) {
-  if (here - neighbor < 500) return null;
-  return here - 250;
+  if (here - neighbor < DIG_SAMPLE_MM) return null;
+  return here - DIG_SAMPLE_MM / 2;
 }
 
 export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 0 }) {
@@ -189,7 +205,7 @@ export function brushWrites(crust, { eye, aim, mode = "dig", ticks = 1, skill = 
           const sample = crust.sampleIndex(i, j, k);
           if (mode === "dig" && sample > 0) continue;
           if (mode === "fill" && sample <= 0) continue;
-          if (mode === "smooth" && (sample === 0 || Math.min(500, Math.abs(sample)) === 0)) continue;
+          if (mode === "smooth" && (sample === 0 || Math.min(DIG_SAMPLE_MM, Math.abs(sample)) === 0)) continue;
           const d = dist2(center, aim);
           if (d < bestD || (d === bestD && best && (i < best.i || (i === best.i && (j < best.j || (j === best.j && k < best.k)))))) {
             bestD = d;

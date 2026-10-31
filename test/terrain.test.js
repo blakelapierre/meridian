@@ -4,7 +4,7 @@ import { cast } from "../src/engine/cast.js";
 import { createTerrain } from "../src/net/terrain.js";
 import { createIdentity } from "../src/net/identity.js";
 import { bitAim } from "../src/sim/bit.js";
-import { Crust, CHUNK_VOXELS } from "../src/sim/crust.js";
+import { Crust, CHUNK_VOXELS, DIG_SAMPLE_MM, VOXEL_M } from "../src/sim/crust.js";
 import { catchUp, signCheckpoint } from "../src/sim/oplog.js";
 
 function exchange(a, b) {
@@ -20,9 +20,9 @@ function hold(terrain, peer) {
 test("looking down digs a darker pit and the solo op replays", () => {
   const terrain = createTerrain({ identity: createIdentity(), leader: true });
   hold(terrain, false);
-  assert.equal(terrain.voxel(), 500);
+  assert.equal(terrain.voxel(), DIG_SAMPLE_MM);
   const write = terrain.write();
-  const center = [write.i * 0.5 + 0.25, write.j * 0.5 + 0.25, 1.65];
+  const center = [(write.i + 0.5) * VOXEL_M, (write.j + 0.5) * VOXEL_M, 1.65];
   const before = cast([0, -150, 2], [0, 0, -1], [{ type: "crust", field: new Crust() }]);
   const after = cast(center, [0, 0, -1], [{ type: "crust", field: terrain.log.crust }]);
   assert.ok(after.point[2] < before.point[2] - 0.2);
@@ -31,18 +31,20 @@ test("looking down digs a darker pit and the solo op replays", () => {
   const checkpoint = signCheckpoint(createIdentity(), terrain.log, { cell: "atoll-0", chunk, solo: true });
   const joined = catchUp(checkpoint, terrain.log.ops);
   assert.equal(joined.ok, true, joined.reason);
-  assert.equal(joined.crust.sampleIndex(write.i, write.j, write.k), 500);
+  assert.equal(joined.crust.sampleIndex(write.i, write.j, write.k), DIG_SAMPLE_MM);
 });
 
 test("the other browser applies the same dig", () => {
   const leader = createTerrain({ identity: createIdentity(), leader: true });
   const witness = createTerrain({ identity: createIdentity(), leader: false });
   hold(leader, true);
-  exchange(leader, witness);
-  exchange(witness, leader);
-  exchange(leader, witness);
-  assert.equal(leader.voxel(), 500);
-  assert.equal(witness.voxel(), 500);
+  // 25 cm voxels: 40 ticks of digging is ~17 single-voxel proposals, each a full round trip.
+  for (let turn = 0; turn < 80; turn++) {
+    exchange(leader, witness);
+    exchange(witness, leader);
+  }
+  assert.equal(leader.voxel(), DIG_SAMPLE_MM);
+  assert.equal(witness.voxel(), DIG_SAMPLE_MM);
   assert.equal(leader.hash(), witness.hash());
 });
 

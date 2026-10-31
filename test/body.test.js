@@ -82,6 +82,6 @@ test("the painter is one foveated pass with no near/far split", () => {
   assert.doesNotMatch(src, /uMaxDist|NEAR_METERS|farPixels|stackFs/);
   assert.match(src, /float fovT/);
   assert.match(src, /float fovPeriod/);
-  assert.match(src, /float fovBlock/);
+  assert.match(src, /float fovRadius/);
   assert.match(src, /resolveFs/);
 });

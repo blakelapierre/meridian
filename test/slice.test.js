@@ -72,7 +72,7 @@ test("the rest of the slice keeps a signature, a vote, a bite, and a voucher", (
   assert.equal(dragAsk(true).walk, true);
   assert.equal(boltInSmoke({ position: [0, 0, 1] }, [0.2, 0, 0]), true);
   assert.equal(offBeachSlump(true, 1000, 0), null);
-  assert.equal(offBeachSlump(false, 1000, 0), 750);
+  assert.equal(offBeachSlump(false, 1000, 0), 875);
   const eaten = graze({ stock: 1 });
   assert.equal(eaten.dead, true);
   assert.equal(eaten.track, true);
@@ -163,7 +163,7 @@ test("a stored no changes quorum, a purse spends, and a slump is written", () =>
   const crust = new Crust();
   crust.write(0, 0, 0, 1000);
   crust.write(0, 1, 0, 0);
-  assert.equal(applySlump(crust, [25, 25, 25]), 750);
+  assert.equal(applySlump(crust, [12, 12, 12]), 875);
   const identity = createIdentity();
   const heard = acceptLore(encodeLore(identity, { nonce: 1, notes: ["a wall fell"], harm: 1 }));
   assert.equal(heard.harm, 1);

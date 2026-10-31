@@ -1,9 +1,12 @@
 import { cameraBasis } from "../engine/cast.js";
+import { VOXEL_M } from "../sim/crust.js";
 import { ATLAS, GRASS_TILE, ROCK_TILE, SAND_TILE, WOOD_TILE, blitTexture, grassTexture, rectFor, rockTexture, sandTexture, woodTexture } from "./texture.js?v=62";
 
 const MAX_SPHERES = 24;
 const MAX_BOXES = 32;
-const MAX_DIGS = 128;
+// Dug columns the trace can show; 4x the 50 cm budget since a 25 cm voxel has 4x the columns per area.
+const MAX_DIGS = 512;
+const VOX = VOXEL_M.toFixed(4);
 const MAX_PRINTS = 48;
 
 const sphereData = new Float32Array(MAX_SPHERES * 4);
@@ -13,6 +16,8 @@ const boxMax = new Float32Array(MAX_BOXES * 4);
 const boxColor = new Float32Array(MAX_BOXES * 4);
 const digData = new Float32Array(MAX_DIGS * 4);
 const printData = new Float32Array(MAX_PRINTS * 4);
+export const WEAR_GRID = 128;
+const wearData = new Uint8Array(WEAR_GRID * WEAR_GRID);
 const RECT_SLOTS = 40;
 const rectData = new Float32Array(RECT_SLOTS * 4);
 const atlasData = new Uint8Array(ATLAS * ATLAS * 4);
@@ -70,13 +75,25 @@ float fovT(vec2 uv) {
   return smoothstep(uFovea.x, uFovea.x + uFovea.y, a);
 }
 float fovPeriod(float t) {
-  return floor(1.0 + (max(1.0, uFovea.z) - 1.0) * t + 0.5);
+  return 1.0 + (max(1.0, uFovea.z) - 1.0) * t;
+}
+uniform float uCellMax;
+// Continuous per-pixel blur radius in pixels: 1 at the gaze, 2^block in the far periphery,
+// shrinking smoothly as the still view refines, capped at uCellMax (the low-trace-scale floor).
+float fovRadius(float t) {
+  return clamp(exp2(uFovea.w * t - uRefine), 1.0, max(1.0, uCellMax));
 }
 float fovLevel(float t) {
-  return max(0.0, uFovea.w * t - uRefine);
+  return log2(fovRadius(t));
 }
-float fovBlock(float t) {
-  return exp2(max(0.0, floor(uFovea.w * t + 0.5) - uRefine));
+// Interleaved gradient noise (Jimenez 2014): a blue-ish per-pixel threshold with no lattice.
+float ign(vec2 p) {
+  return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+// Share of frames on which this pixel is traced: one sample per r*r pixels, every period frames.
+float fovDensity(float t) {
+  float r = fovRadius(t);
+  return 1.0 / (r * r * fovPeriod(t));
 }
 `;
 
@@ -85,6 +102,13 @@ float fovBlock(float t) {
 export const HISTORY_KEEP = 0.6;
 export function historyKeep(still, hasHistory) {
   return still && hasHistory ? HISTORY_KEEP : 0;
+}
+
+// Floor on how coarse the outer ring may get: at low trace scales (narrow buffers) one blur
+// radius covers a large share of the screen, so the cap shrinks with the buffer width.
+export const CELL_FLOOR_WIDTH = 160;
+export function cellCap(width, block = 0) {
+  return Math.min(2 ** Math.max(0, block), Math.max(1.5, width / CELL_FLOOR_WIDTH));
 }
 
 export function fitCanvas(canvas, scale = 1, pixels = null) {
@@ -160,6 +184,8 @@ uniform sampler2D uBoxMax;
 uniform sampler2D uBoxColor;
 uniform sampler2D uDigTex;
 uniform sampler2D uPrintTex;
+uniform sampler2D uWearTex;
+uniform vec3 uWear; // origin x, origin y (m), cell size (m)
 uniform sampler2D uTexRects;
 uniform sampler2D uAtlas;
 out vec4 fragColor;
@@ -231,6 +257,20 @@ vec3 duneNormal(vec2 p) {
   return normalize(vec3(h - hx, h - hy, e));
 }
 
+// Trampled paths: wear from src/sim/wear.js, bilinear over the cells around the camera.
+// 0 grass, 1 worn dirt, 2 packed path; continuous between, with noise so edges are ragged.
+vec3 withWear(vec3 rgb, vec2 p) {
+  if (uWear.z <= 0.0) return rgb;
+  vec2 uv = (p - uWear.xy) / (uWear.z * ${WEAR_GRID}.0);
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return rgb;
+  float stage = texture(uWearTex, uv).r * 2.0;
+  stage += (valueNoise(p * 3.1) - 0.5) * 0.35 * smoothstep(0.0, 0.3, stage);
+  vec3 dirt = vec3(0.36, 0.29, 0.2) * (0.85 + valueNoise(p * 1.7 + 2.0) * 0.3);
+  vec3 packed = vec3(0.47, 0.41, 0.32) * (0.92 + valueNoise(p * 0.9 + 7.0) * 0.12);
+  vec3 out1 = mix(rgb, dirt, smoothstep(0.15, 1.0, stage));
+  return mix(out1, packed, smoothstep(1.0, 2.0, stage));
+}
+
 vec3 groundAlbedo(vec2 p, vec3 n) {
   float crest = clamp(duneHeight(p) / 5.4, 0.0, 1.0);
   float slope = 1.0 - clamp(n.z, 0.0, 1.0);
@@ -243,7 +283,8 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
   sandC *= 0.88 + valueNoise(p * 0.23) * 0.22;
   grassC *= 0.86 + valueNoise(p * 0.31 + 4.0) * 0.26;
   rockC *= 0.84 + valueNoise(p * 0.19 + 9.0) * 0.28;
-  return mix(mix(sandC, grassC, grassW), rockC, rockW);
+  vec3 rgb = mix(mix(sandC, grassC, grassW), rockC, rockW);
+  return withWear(rgb, p);
 }
 
 vec3 withPrints(vec3 rgb, vec2 p, int bounce) {
@@ -466,14 +507,12 @@ void main() {
   // Foveated progressive tracing: the gaze region traces every frame at full resolution;
   // the periphery traces one pixel per cell, every few frames, and stays in the accumulation target between.
   if (uFull < 0.5) {
+    // Dithered, continuous sample selection: each pixel is traced with probability fovDensity,
+    // thresholded by IGN shifted every frame, so density falls smoothly with angle (no cell lattice,
+    // no rings) and every pixel is eventually refreshed.
     float ft = fovT(vRay);
-    float cell = fovBlock(ft);
     vec2 pix = floor(gl_FragCoord.xy);
-    if (any(greaterThan(mod(pix, cell), vec2(0.5)))) discard;
-    float period = fovPeriod(ft);
-    vec2 cid = floor(pix / cell);
-    float phase = floor(fract(sin(dot(cid, vec2(12.9898, 78.233))) * 43758.5453) * period);
-    if (mod(uFrame + phase, period) > 0.5) discard;
+    if (ign(pix + 5.588238 * mod(uFrame, 64.0)) >= fovDensity(ft)) discard;
   }
   float uu = vRay.x;
   float vv = vRay.y;
@@ -504,7 +543,7 @@ void main() {
     bool openMouth = false;
     float mouthFloor = 0.0;
     if (bounce == 0 && uDigs > 0) {
-      ivec2 mouth = ivec2(floor(sandP.xy * 2.0));
+      ivec2 mouth = ivec2(floor(sandP.xy / ${VOX}));
       for (int n = 0; n < 32; n++) {
         if (n >= uDigs) break;
         vec4 dig = texelFetch(uDigTex, ivec2(n, 0), 0);
@@ -516,8 +555,8 @@ void main() {
         t = (dig.z - ro.z) / rd.z;
         if (t <= 0.02 || t >= bestT) continue;
         p = ro + rd * t;
-        vec2 lo = dig.xy * 0.5;
-        if (p.x < lo.x - 0.02 || p.x >= lo.x + 0.52 || p.y < lo.y - 0.02 || p.y >= lo.y + 0.52) continue;
+        vec2 lo = dig.xy * ${VOX};
+        if (p.x < lo.x - 0.02 || p.x >= lo.x + ${VOX} + 0.02 || p.y < lo.y - 0.02 || p.y >= lo.y + ${VOX} + 0.02) continue;
         bestT = t;
         bestP = p;
         bestN = vec3(0.0, 0.0, 1.0);
@@ -678,6 +717,8 @@ void main() {
   let boxColorTex;
   let digTex;
   let printTex;
+  let wearTex = null;
+  let wearVersion = -1;
   let rectTex;
   let atlasTex;
   try {
@@ -688,6 +729,15 @@ void main() {
     boxColorTex = texture(gl, MAX_BOXES);
     digTex = texture(gl, MAX_DIGS);
     printTex = texture(gl, MAX_PRINTS);
+    wearTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE13);
+    gl.bindTexture(gl.TEXTURE_2D, wearTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, WEAR_GRID, WEAR_GRID, 0, gl.RED, gl.UNSIGNED_BYTE, wearData);
     rectTex = texture(gl, RECT_SLOTS);
     atlasTex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE7);
@@ -838,24 +888,34 @@ uniform float uKeep;
 ${FOVEA_GLSL}
 in vec2 vUV;
 out vec4 fragColor;
-vec3 cellLerp(vec2 pix, float cell) {
-  ivec2 size = textureSize(uAccum, 0) - 1;
-  vec2 lo = pix - mod(pix, cell);
-  vec2 f = (pix - lo) / cell;
-  vec3 a = texelFetch(uAccum, clamp(ivec2(lo), ivec2(0), size), 0).rgb;
-  vec3 b = texelFetch(uAccum, clamp(ivec2(lo + vec2(cell, 0.0)), ivec2(0), size), 0).rgb;
-  vec3 c = texelFetch(uAccum, clamp(ivec2(lo + vec2(0.0, cell)), ivec2(0), size), 0).rgb;
-  vec3 d = texelFetch(uAccum, clamp(ivec2(lo + vec2(cell)), ivec2(0), size), 0).rgb;
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+uniform float uJitter;
+// Gaussian reconstruction over a jittered Vogel disk of radius ~r. Taps use bilinear filtering of
+// the accumulation target, the disk is rotated per pixel and per frame (IGN), and the history
+// blend averages those rotations over time, so the blur radius is continuous in angle.
+vec3 gather(vec2 pix, float r) {
+  vec2 size = vec2(textureSize(uAccum, 0));
+  float spin = 6.2831853 * ign(pix + 5.588238 * uJitter);
+  float sigma = 0.5 * r;
+  vec3 sum = texture(uAccum, (pix + 0.5) / size).rgb;
+  float total = 1.0;
+  for (int i = 0; i < 8; i++) {
+    float fi = float(i) + 0.5;
+    float rad = r * sqrt(fi / 8.0);
+    float ang = fi * 2.3999632 + spin;
+    vec2 off = rad * vec2(cos(ang), sin(ang));
+    float w = exp(-dot(off, off) / (2.0 * sigma * sigma));
+    sum += w * texture(uAccum, (pix + 0.5 + off) / size).rgb;
+    total += w;
+  }
+  return sum / total;
 }
 void main() {
   vec2 ray = vec2(vUV.x, 1.0 - vUV.y);
   float t = fovT(ray);
-  float level = fovLevel(t);
+  float r = fovRadius(t);
   vec2 pix = floor(gl_FragCoord.xy);
-  float fine = exp2(floor(level));
-  vec3 rgb = mix(cellLerp(pix, fine), cellLerp(pix, fine * 2.0), smoothstep(0.0, 1.0, fract(level)));
-  if (level <= 0.0) rgb = texelFetch(uAccum, ivec2(pix), 0).rgb;
+  vec3 sharp = texelFetch(uAccum, ivec2(pix), 0).rgb;
+  vec3 rgb = mix(sharp, gather(pix, r), smoothstep(1.0, 1.5, r));
   vec3 past = texelFetch(uHistory, ivec2(pix), 0).rgb;
   fragColor = vec4(mix(rgb, past, uKeep * t), 1.0);
 }`);
@@ -873,6 +933,7 @@ void main() {
     gl.uniform2f(u("uGaze"), fovea.x, fovea.y);
     gl.uniform4f(u("uFovea"), fovea.fovea, fovea.falloff, fovea.period, fovea.block);
     gl.uniform1f(u("uRefine"), fovea.refine);
+    gl.uniform1f(u("uCellMax"), fovea.cellMax ?? 2 ** (fovea.block || 0));
     gl.uniform1f(u("uTanHalf"), Math.tan(((camera.fov || 70) * Math.PI) / 360));
     gl.uniform1f(u("uView"), camera.aspect || 1);
     if (full !== undefined) gl.uniform1f(u("uFull"), full ? 1 : 0);
@@ -886,7 +947,7 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
   };
-  const accumSlot = makeTarget(gl.NEAREST);
+  const accumSlot = makeTarget(gl.LINEAR);
   let frame = 0;
   let stillFrames = 0;
   let forceFull = true;
@@ -937,7 +998,7 @@ void main() {
           for (const [key, sample] of object.field.overrides) {
             if (sample <= 0) continue;
             const [i, j, k] = key.split(",").map(Number);
-            const bottom = k * 0.5;
+            const bottom = k * VOXEL_M;
             const id = `${i},${j}`;
             const prev = columns.get(id);
             if (prev === undefined || bottom < prev) columns.set(id, bottom);
@@ -976,6 +1037,15 @@ void main() {
       upload(4, boxColorTex, MAX_BOXES, boxColor);
       upload(5, digTex, MAX_DIGS, digData);
       upload(8, printTex, MAX_PRINTS, printData);
+      const wear = scene.wear;
+      if (wear && wear.version !== wearVersion) {
+        wearVersion = wear.version;
+        wearData.set(wear.grid);
+        gl.activeTexture(gl.TEXTURE13);
+        gl.bindTexture(gl.TEXTURE_2D, wearTex);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, WEAR_GRID, WEAR_GRID, gl.RED, gl.UNSIGNED_BYTE, wearData);
+      }
       upload(6, rectTex, RECT_SLOTS, rectData);
       if (atlasDirty) {
         gl.activeTexture(gl.TEXTURE7);
@@ -993,6 +1063,10 @@ void main() {
       gl.uniform1i(u("uPrintTex"), 8);
       gl.uniform1i(u("uTexRects"), 6);
       gl.uniform1i(u("uAtlas"), 7);
+      gl.activeTexture(gl.TEXTURE13);
+      gl.bindTexture(gl.TEXTURE_2D, wearTex);
+      gl.uniform1i(u("uWearTex"), 13);
+      gl.uniform3f(u("uWear"), wear ? wear.origin[0] : 0, wear ? wear.origin[1] : 0, wear ? wear.cell : 0);
       gl.uniform3f(u("uOrigin"), scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
       gl.uniform3f(u("uForward"), basis.forward[0], basis.forward[1], basis.forward[2]);
       gl.uniform3f(u("uRight"), basis.right[0], basis.right[1], basis.right[2]);
@@ -1063,7 +1137,7 @@ void main() {
       const base = scene.fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, still: false };
       stillFrames = base.still ? stillFrames + 1 : 0;
       // Each full peripheral cycle of a stable view halves the peripheral cell size.
-      const fovea = { ...base, refine: Math.floor(stillFrames / Math.max(1, base.period)) };
+      const fovea = { ...base, refine: stillFrames / Math.max(1, base.period), cellMax: cellCap(tw, base.block) };
       releaseHold();
       gl.disable(gl.BLEND);
       gl.bindFramebuffer(gl.FRAMEBUFFER, accumSlot.fbo);
@@ -1088,6 +1162,7 @@ void main() {
       gl.activeTexture(gl.TEXTURE12);
       gl.bindTexture(gl.TEXTURE_2D, past.tex);
       gl.uniform1i(gl.getUniformLocation(resolveProgram, "uHistory"), 12);
+      gl.uniform1f(gl.getUniformLocation(resolveProgram, "uJitter"), frame % 64);
       gl.uniform1f(gl.getUniformLocation(resolveProgram, "uKeep"), historyKeep(base.still, past !== accumSlot && past.w === tw && past.h === th && !forceFullFrame));
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);

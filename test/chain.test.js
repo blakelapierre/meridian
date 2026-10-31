@@ -134,14 +134,14 @@ test("the heaviest tip is what a client draws, and a local prediction survives i
   viewer.write(1, 2, 3, 500);
   installTip(viewer, chain, fromChain);
   const [i, j, k] = left.writes[0];
-  assert.equal(viewer.sampleIndex(i, j, k), 500);
+  assert.equal(viewer.sampleIndex(i, j, k), 250);
   assert.equal(viewer.sampleIndex(1, 2, 3), 500);
   const heavyParent = createChain();
   assert.equal(acceptBlock(chain, mined(heavyParent, [right], "other", 10)).tip, true);
   installTip(viewer, chain, fromChain);
   assert.equal(viewer.sampleIndex(i, j, k) > 0, false);
   const [u, v, w] = right.writes[0];
-  assert.equal(viewer.sampleIndex(u, v, w), 500);
+  assert.equal(viewer.sampleIndex(u, v, w), 250);
   assert.equal(viewer.sampleIndex(1, 2, 3), 500);
   const numbered = chainEdits(chain, [{ ...left, seq: 99 }, { ...right, seq: 40 }]);
   assert.equal(numbered.length, 1);

@@ -114,7 +114,7 @@ test("the next slice of each open note is a small rule", () => {
   assert.equal(penFactor(0, 1), 1);
   assert.ok(penFactor(20, 1) < 1);
   assert.equal(noteHarm([], "self", "salvage")[0].what, "salvage");
-  assert.equal(slumpChoice(500, -500), 250);
+  assert.equal(slumpChoice(500, -500), 375);
   assert.equal(slumpChoice(0, 0), null);
   assert.equal(dragPace(true), 1.6);
 });

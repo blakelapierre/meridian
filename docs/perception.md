@@ -40,3 +40,20 @@ Helpers: `falloff`, `refreshPeriod`, `blockLevel`, `tracePriority`, `tracedFract
 ## Batch 3
 
 Foveation fades smoothly between levels (bilinear cell reconstruction, fractional level blend) and blends with the previous held frame while still (`HISTORY_KEEP` 0.6). Sight falloff widened to 45°. Hearing carries `localization`; sight carries `dark` (Dark adaptation lifts night brightness).
+
+## Batch 4: continuous foveation
+
+Rings came from quantization: the trace snapped the peripheral cell to powers of two
+(`exp2(floor(block*t + 0.5) - refine)`) on a lattice, the refresh period and still-refine were
+integers, and the resolve read at an unrounded level, so blur stepped at fixed angles.
+
+- `fovRadius(t) = clamp(exp2(block*t - refine), 1, uCellMax)`: continuous per-pixel blur radius;
+  `refine` is continuous (`stillFrames / period`). JS mirror: `blurRadius` / `sampleDensity`.
+- Sample selection is dithered with interleaved gradient noise rotated per frame: a pixel is
+  traced with probability `1 / (r*r*period)` instead of on a cell lattice.
+- Reconstruction is an 8-tap Vogel-disk Gaussian (sigma = r/2) over the bilinear accumulation
+  target, rotated per pixel and frame, blended in from r = 1 to 1.5.
+- Temporal accumulation with per-pixel jitter fills the gaps between frames.
+- Floor: `cellCap(width, block) = min(2^block, max(1.5, width / 160))` caps how coarse the
+  outer ring gets when the trace buffer is small, while the curve below the cap still follows
+  eyesight skill.

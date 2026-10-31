@@ -25,13 +25,13 @@ test("canonical cbor round-trips a terrain body", () => {
     mode: "dig",
     eye: [25, 25, 165],
     aim: [25, 25, -25],
-    writes: [{ i: 0, j: 0, k: -1, sdf_mm: 500 }],
+    writes: [{ i: 0, j: 0, k: -1, sdf_mm: 250 }],
   });
   const bytes = encode(body);
   assert.deepEqual(Buffer.from(encode(body)), Buffer.from(bytes));
   const back = decode(bytes);
   assert.equal(back.chunk[2], -1);
-  assert.equal(back.writes[0][3], 500);
+  assert.equal(back.writes[0][3], 250);
   assert.equal(back.before.length, 32);
 });
 
@@ -42,7 +42,7 @@ test("a joiner replays the checkpoint and the suffix to the same hole", () => {
   const log = createLog();
   const first = sealOp({
     leader,
-    proposal: dig(log.crust, { i: 0, j: 0, k: -1, sdf_mm: 500 }, 1, leader),
+    proposal: dig(log.crust, { i: 0, j: 0, k: -1, sdf_mm: 250 }, 1, leader),
     seq: 1,
     tick: 30,
     votes: [signVote(witness, 1, true), signVote(other, 1, false)],
@@ -51,7 +51,7 @@ test("a joiner replays the checkpoint and the suffix to the same hole", () => {
   const checkpoint = signCheckpoint(leader, log, { cell: "atoll-0", chunk: [0, 0, -1], solo: false });
   const second = sealOp({
     leader,
-    proposal: dig(log.crust, { i: 1, j: 0, k: -1, sdf_mm: 500 }, 2, leader),
+    proposal: dig(log.crust, { i: 1, j: 0, k: -1, sdf_mm: 250 }, 2, leader),
     seq: 2,
     tick: 60,
     votes: [signVote(witness, 2, true)],
@@ -59,14 +59,14 @@ test("a joiner replays the checkpoint and the suffix to the same hole", () => {
   assert.equal(appendOp(log, second, 3).ok, true);
   const joined = catchUp(checkpoint, [first, second]);
   assert.equal(joined.ok, true);
-  assert.equal(joined.crust.sampleIndex(0, 0, -1), 500);
-  assert.equal(joined.crust.sampleIndex(1, 0, -1), 500);
+  assert.equal(joined.crust.sampleIndex(0, 0, -1), 250);
+  assert.equal(joined.crust.sampleIndex(1, 0, -1), 250);
   assert.equal(Buffer.compare(joined.crust.hash(0, 0, -1), log.crust.hash(0, 0, -1)), 0);
 
   const alone = createLog();
   const solo = sealOp({
     leader,
-    proposal: dig(alone.crust, { i: 2, j: 0, k: -1, sdf_mm: 500 }, 9, leader),
+    proposal: dig(alone.crust, { i: 2, j: 0, k: -1, sdf_mm: 250 }, 9, leader),
     seq: 1,
     tick: 30,
     solo: true,
@@ -87,7 +87,7 @@ test("one signed vote is not a quorum of three", () => {
   broken.sig[0] ^= 0xff;
   const op = sealOp({
     leader,
-    proposal: dig(log.crust, { i: 0, j: 0, k: -1, sdf_mm: 500 }, 1, leader),
+    proposal: dig(log.crust, { i: 0, j: 0, k: -1, sdf_mm: 250 }, 1, leader),
     seq: 1,
     tick: 30,
     votes: [broken],

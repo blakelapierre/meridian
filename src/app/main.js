@@ -10,8 +10,8 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas } from "../render/gpu.js?v=73";
-import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=3";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=75";
+import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=4";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
 import {
@@ -68,6 +68,8 @@ import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=2";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
+import { createWear, decayWear, DECAY_TICKS, mergeWear, packWear, stepWear, takeWearBatches, unpackWear, WEAR_KIND, wearWindow } from "../sim/wear.js?v=1";
+import { acceptWear, encodeWear } from "../net/wear.js?v=1";
 import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
 import { agilityFactor } from "../sim/agility.js";
 import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
@@ -605,7 +607,7 @@ let selection = null;
 const skills = createSkills();
 wireAbilityUi();
 // ?debug=1 exposes a small handle for headless playtests (skills and the ability UI only).
-if (params.get("debug") === "1") globalThis.meridianDebug = { skills, toggleLog, setCues, paintSkills: () => paintSkills(), checkAbilities, marks: () => tierMarks };
+if (params.get("debug") === "1") globalThis.meridianDebug = { skills, toggleLog, setCues, paintSkills: () => paintSkills(), checkAbilities, marks: () => tierMarks, wear: () => wear, player: () => [...player.position], yaw: () => yaw };
 const kept = keepSlot ? loadSheet(keptStore, keepSlot) : null;
 let sheetSeq = kept?.seq || 0;
 if (kept && keepSlot) {
@@ -621,6 +623,32 @@ let linkNote = "";
 let lighthouseState = "off";
 const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0 };
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
+const wear = keptWorld?.wear ? unpackWear(keptWorld.wear) : createWear();
+const wearFeet = new Map();
+let wearView = null;
+let wearViewTick = -999;
+let wearDirty = 0;
+function wearScene() {
+  if (!wearView || tick - wearViewTick >= 15) {
+    const next = wearWindow(wear, player.position[0], player.position[1], WEAR_GRID, wearView?.grid);
+    wearView = { ...next, version: (wearView?.version || 0) + 1 };
+    wearViewTick = tick;
+  }
+  return wearView;
+}
+function stepWearAll() {
+  for (const other of otherActors()) {
+    const last = wearFeet.get(other.id);
+    if (!last || Math.hypot(other.feet[0] - last[0], other.feet[1] - last[1]) >= 0.7) {
+      if (last) stepWear(wear, other.feet[0], other.feet[1]);
+      wearFeet.set(other.id, [other.feet[0], other.feet[1]]);
+    }
+  }
+  if (tick % DECAY_TICKS === 0) decayWear(wear, 1);
+  if (tick % 60 === 0) {
+    for (const cells of takeWearBatches(wear)) sendOps(encodeWear(identity, { nonce: tick, cells }));
+  }
+}
 const jump = createJump();
 let ops = null;
 const links = [];
@@ -1932,6 +1960,7 @@ function markTarget(scene) {
 
 function paint(sample, width = canvas.width, height = canvas.height) {
   const scene = sceneFor(sample, width, height);
+  scene.wear = wearScene();
   scene.prints = prints;
   scene.work = work;
   scene.time = tick / 30;
@@ -2017,6 +2046,7 @@ function fire(sample) {
     return;
   }
   const scene = sceneFor(sample, canvas.width, canvas.height);
+  scene.wear = wearScene();
   const speed = Math.hypot(player.velocity[0], player.velocity[1]);
   const eye = eyeOf(sample);
   const forward = lookDirection(sample.yaw, sample.pitch);
@@ -2116,6 +2146,11 @@ function exchangeLore() {
 }
 
 function onOps(bytes, from) {
+  if (bytes[0] === WEAR_KIND) {
+    const accepted = acceptWear(bytes);
+    if (accepted.ok) mergeWear(wear, accepted.cells);
+    return;
+  }
   if (bytes[0] === 15) {
     const accepted = acceptSheet(bytes);
     if (!accepted.ok || holdKeep || !keepSlot) return;
@@ -2890,7 +2925,9 @@ if (params.get("still") !== "1") {
       const stride = hearStep(stepAt, player.position, !!sample.sprint);
       stepAt = stride.at;
       hear(stride.cue);
+      stepWearAll();
       if (stride.cue) {
+        stepWear(wear, player.position[0], player.position[1]);
         grantUse(skills, "tracking", { tick, gap: 40 });
         const nearOther = otherActors().some((other) => Math.hypot(other.feet[0] - player.position[0], other.feet[1] - player.position[1]) < 8);
         if (nearOther) grantUse(skills, "trailing", { tick, gap: 50 });
@@ -2920,6 +2957,7 @@ if (params.get("still") !== "1") {
         pushSheet();
         if (keptWorld && !holdKeep) {
           keptWorld.crust = [...terrain.log.crust.overrides.entries()];
+          keptWorld.wear = packWear(wear);
           saveWorld(keptStore, keptWorld, `meridian-world-${keepSlot}`);
         }
       }
