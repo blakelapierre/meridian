@@ -28,6 +28,7 @@ Slice keys. Later screens do not get to steal these. Hands are first person: the
 | M | Sensed map. Coordinates and heading always. Range, people, names, and objects grow with mapping | same | same | same |
 | Esc | Close the open panel and clear the action target | same | same | same |
 | Q | Toggle auto run. S still backs up | same | same | same |
+| I | Show or hide the network panel. Hidden by default; `?debug=1` starts with it shown | same | same | same |
 | Backquote | Cycle objects. Shift goes backward. Not people, not sand | same | same | same |
 
 Use is one line in the world: the crate, the strike prompt, the hearth. There is no second interact key.
