@@ -20,7 +20,7 @@ A hard landing reads a counter seeded from the jump skill. Each one soaks a litt
 
 ## Next
 
-The landing counter is not shown on the body line. Not in this build.
+The body line shows `land N` once the landing counter is seeded or counted. Not shown: the soak each count buys.
 
 ## Later
 

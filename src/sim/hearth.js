@@ -127,6 +127,12 @@ export function countLanding(skills) {
   return skill.falls;
 }
 
+// Body-line note for the landing counter once it has been seeded or counted.
+export function landingNote(skills) {
+  const falls = skills?.landing?.falls;
+  return falls > 0 ? ` land ${falls}` : "";
+}
+
 export function fallFromCount(integrity, speedDown, falls = 0) {
   return fallHurt(integrity, speedDown, Math.max(0, falls) * 24);
 }

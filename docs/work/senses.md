@@ -16,8 +16,8 @@ The ground on your chart is what nearby players trade. Grass, rock, sand, and pi
 
 ## Next
 
-The two fogs are not drawn on the world picture. Not in this build.
+The chart draws a solid sight edge at the reveal radius and its line reads `sight N m`. The two fogs are not drawn on the world picture. Not in this build.
 
 ## Later
 
-Separate colors for knowledge you learned yourself and knowledge someone told you. A fog edge at the sense radius.
+Separate colors for knowledge you learned yourself and knowledge someone told you. 

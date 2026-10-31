@@ -18,7 +18,7 @@ Stored wind pushes a body that is already moving. A still body is left alone, so
 
 ## Next
 
-The push is not written on the status line. Not in this build.
+The status line shows `wind push N` (push per tick ×1000) while a drifting body is pushed. A body that leans is not in this build.
 
 ## Later
 

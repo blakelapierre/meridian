@@ -97,7 +97,8 @@ test("the rest of the slice keeps a signature, a vote, a bite, and a voucher", (
 
 test("the next slice pays a defuse, spans a beam, and reads the landing counter", () => {
   assert.equal(seaGain("noon"), 0.5);
-  assert.equal(seaGain("night"), 1);
+  assert.equal(seaGain("night"), 0.3);
+  assert.equal(seaGain("dawn"), 1);
   const skills = createSkills();
   skills.jump.value = 30;
   assert.equal(seedLanding(skills), 3);

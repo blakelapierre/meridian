@@ -45,11 +45,11 @@ function plateImage(plate) {
   return plate.image;
 }
 
-export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plate, center, span, rise = null, contours = [] }) {
+export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sight = 0, plate, center, span, rise = null, contours = [] }) {
   const here = center || self;
   const across = span || radius * 2;
   const height = typeof rise === "number" ? `  ·  ${rise.toFixed(1)} m` : "";
-  if (read) read.textContent = `${formatFix(self[0], self[1], yaw)}${height}  ·  ${abilityLine(skill)}  ·  sense ${Math.round(radius)} m  ·  ${Math.round(across)} m`;
+  if (read) read.textContent = `${formatFix(self[0], self[1], yaw)}${height}  ·  ${abilityLine(skill)}  ·  sense ${Math.round(radius)} m${sight > 0 ? `  ·  sight ${Math.round(sight)} m` : ""}  ·  ${Math.round(across)} m`;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const size = canvas.width;
@@ -180,6 +180,14 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, plat
     ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
     ctx.fill("evenodd");
     ctx.restore();
+  }
+  if (sight > 0 && across > 0) {
+    // The sight edge: how far your eyes reveal ground onto this chart.
+    ctx.strokeStyle = "rgba(156, 204, 255, 0.55)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(you.x, you.y, (sight / across) * size, 0, Math.PI * 2);
+    ctx.stroke();
   }
   ctx.save();
   ctx.translate(you.x, you.y);
