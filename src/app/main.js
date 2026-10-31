@@ -63,7 +63,7 @@ import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMor
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
-import { GEO_COLOR, createPlate, dragCenter, isMapDrag, mapFollowAfter, mapSpan, revealLook, samplePlate, stamp } from "../sim/plate.js";
+import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
@@ -295,6 +295,11 @@ const seenPrints = new Set();
 const survey = createSurvey();
 const plate = createPlate();
 let mapZoom = 1;
+let followZoom = 1;
+function chartSpan() {
+  if (mapFollow) return followSpan(revealRange(skillBag(), perception.senses.sight), followZoom);
+  return mapSpan(skills.mapping.value, mapZoom);
+}
 let mapFollow = true;
 let mapCenter = [0, -150];
 let mapDrag = null;
@@ -1041,7 +1046,9 @@ function bindChart() {
     event.preventDefault();
     event.stopPropagation();
     const direction = Math.sign(event.deltaY) || 1;
-    mapZoom = Math.max(0.25, Math.min(8, mapZoom * (direction > 0 ? 1 / 1.18 : 1.18)));
+    const step = direction > 0 ? 1 / 1.18 : 1.18;
+    if (mapFollow) followZoom = Math.max(0.25, Math.min(8, followZoom * step));
+    else mapZoom = Math.max(0.25, Math.min(8, mapZoom * step));
   }, { passive: false });
   surface.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
@@ -1056,10 +1063,11 @@ function bindChart() {
     const dx = event.clientX - mapDrag.x;
     const dy = event.clientY - mapDrag.y;
     if (!mapDrag.moved && !isMapDrag(dx, dy)) return;
+    if (!mapDrag.moved && mapFollow) mapZoom = zoomForSpan(skills.mapping.value, chartSpan());
     mapDrag.moved = true;
     mapFollow = mapFollowAfter(mapFollow, "drag");
     const rect = surface.getBoundingClientRect();
-    const span = mapSpan(skills.mapping.value, mapZoom);
+    const span = chartSpan();
     mapCenter = dragCenter(mapDrag.center, dx, dy, span, rect.width || surface.width);
   });
   const endDrag = () => {
@@ -1159,7 +1167,7 @@ function drawChart() {
   if ((yard.tracks || 0) > 0) {
     plotted.marks.push({ kind: "graze", point: [player.position[0] + 1.2, player.position[1]], name: `graze ${yard.scrub ?? 0}` });
   }
-  const span = mapSpan(skills.mapping.value, mapZoom);
+  const span = chartSpan();
   const rise = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
   const detail = contourDetail(skills.topography.value);
   const contours = detail.step > 0 ? contourLines({

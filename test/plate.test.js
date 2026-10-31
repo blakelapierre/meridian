@@ -106,3 +106,18 @@ test("reveal range follows the sight sense: default acuity matches the skill for
   const near = revealLook({ x: 0, y: 0, yaw: 0, pitch: 0, skills, sight: { acuity: 1, range: 10 } });
   assert.ok(near.every((point) => Math.hypot(point.x, point.y) <= 10.05), near);
 });
+
+test("following, the chart fits the sight-based reveal radius; the wheel scales the fit; leaving follow keeps the scale", async () => {
+  const { followSpan, zoomForSpan, FOLLOW_FIT_MARGIN } = await import("../src/sim/plate.js");
+  const { perceptionFrom } = await import("../src/sim/perception.js");
+  const sight = perceptionFrom({ eyesight: 70 }).senses.sight;
+  const radius = revealRange({ mapping: 70, eyesight: 70 }, sight);
+  assert.ok(Math.abs(followSpan(radius) - 2 * radius * FOLLOW_FIT_MARGIN) < 1e-9);
+  const sharper = revealRange({ mapping: 70, eyesight: 70 }, perceptionFrom({ eyesight: 70 }, { sight: { acuity: 1 } }).senses.sight);
+  assert.ok(followSpan(sharper) > followSpan(radius), "better sight zooms out");
+  assert.ok(followSpan(radius, 2) < followSpan(radius), "wheel in zooms in");
+  assert.equal(followSpan(0), 16);
+  assert.equal(followSpan(1000), 256);
+  const span = followSpan(radius);
+  assert.ok(Math.abs(mapSpan(70, zoomForSpan(70, span)) - span) < 1e-9, "no jump when a pan leaves follow");
+});

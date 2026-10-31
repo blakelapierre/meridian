@@ -174,6 +174,22 @@ export function mapSpan(skill = 0, zoom = 1) {
   return (16 + (trained / 140) * 64) * 2 / level;
 }
 
+// Follow-mode chart span: fit the sight-based reveal radius (revealRange with the
+// perception sight sense) with a margin, so what you can see fills the map. zoom is
+// the wheel factor on top of the fit (1 = exact fit). Clamped to [min, max] meters.
+export const FOLLOW_FIT_MARGIN = 1.25;
+export function followSpan(radius, zoom = 1, { min = 16, max = 256 } = {}) {
+  const level = Math.max(0.25, Math.min(8, zoom || 1));
+  const fit = 2 * Math.max(0, radius || 0) * FOLLOW_FIT_MARGIN / level;
+  return Math.max(min, Math.min(max, fit));
+}
+
+// The manual zoom that keeps the current span when the chart leaves follow mode,
+// so a pan does not jump the scale.
+export function zoomForSpan(skill, span) {
+  return Math.max(0.25, Math.min(8, mapSpan(skill, 1) / Math.max(1e-6, span)));
+}
+
 export function dragCenter(center, dxPx, dyPx, span, size) {
   const scale = span / size;
   return [center[0] - dxPx * scale, center[1] + dyPx * scale];
