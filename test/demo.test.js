@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createTour, demoMode, goalOffset, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR, TOUR_START } from "../src/app/demo.js";
+import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR, TOUR_START } from "../src/app/demo.js";
 
 const q = (search) => new URLSearchParams(search);
 
@@ -94,4 +94,11 @@ test("the view loads the demo pieces with fresh cache keys", () => {
   assert.doesNotMatch(main, /exitPointerLock/, "a click while looking fires instead of dropping the cursor");
   assert.match(view, /id="hint"/);
   assert.match(view, /id="shotfx"/);
+});
+
+test("the network panel says when the lighthouse is unreachable and the demo plays solo", () => {
+  assert.equal(lighthouseLine("unreachable"), "lighthouse unreachable, playing solo");
+  assert.equal(lighthouseLine("up"), "lighthouse up");
+  assert.equal(lighthouseLine("connecting"), "lighthouse connecting");
+  assert.equal(lighthouseLine("off"), "", "a chosen solo says nothing");
 });
