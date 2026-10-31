@@ -4,7 +4,7 @@ A peer-to-peer, browser-native, real-time raytraced open sim on a living globe. 
 
 Design-first, now early implementation. The specs below are the contract; the first slice (**Atoll**) is being built against them.
 
-**[Play the solo demo](https://blakelapierre.github.io/meridian/tools/view/index.html)** in your browser. It runs on desktop and touch devices, solo only; multiplayer needs `npm start`.
+**[Play the solo demo](https://blakelapierre.github.io/meridian/tools/view/index.html)** in your browser. It runs on desktop and touch devices. It connects to the public lighthouse in `content/lighthouse.json` when that is up, so other players on the demo can meet; if the lighthouse is unreachable it plays solo. Add `?lighthouse=off` to force solo, or `?lighthouse=wss://...` to use another lighthouse. For a local multiplayer setup, use `npm start`.
 
 ## Status
 
