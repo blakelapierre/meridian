@@ -171,6 +171,23 @@ export function dragCenter(center, dxPx, dyPx, span, size) {
   return [center[0] - dxPx * scale, center[1] + dyPx * scale];
 }
 
+export const MAP_DRAG_SLOP = 4;
+
+// A press on the chart only stops following once it really drags; a plain
+// click (e.g. focusing the pane) keeps the map on the player.
+export function isMapDrag(dxPx, dyPx, slop = MAP_DRAG_SLOP) {
+  return Math.hypot(dxPx, dyPx) > slop;
+}
+
+// Follow state of the chart. A pan stays put while the player moves until the
+// player asks to recenter ("recenter" from the button or a double-click).
+// Zoom never changes it.
+export function mapFollowAfter(follow, event) {
+  if (event === "recenter") return true;
+  if (event === "drag") return false;
+  return follow;
+}
+
 export function plateViewRect(plate, center, span, size) {
   const left = plate.origin[0] - plate.meters / 2;
   const north = plate.origin[1] + plate.meters / 2;
