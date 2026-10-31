@@ -525,6 +525,12 @@ Success is defined per skill: a certified hit for marksmanship, a certified edit
 | Logistics | Carry mass limits +50% at 140. Link upkeep −25% at 140 |
 | Signals | Aggregate subscribe range. Does not reveal unsensed bodies |
 | Husbandry | Deferred. Food animals and Litho lures |
+| Hearing | Parent of Wildlife, Footsteps, Mechanics, Weather, Rare sounds and Localization. Raises how far and how clearly sounds carry and how much masking they survive; trained by exposure to sounds heard. `src/sim/hearing.js` |
+| Localization | Narrows the angular jitter on a heard sound. At Skilled with a noticed sound, a blip shows on the chart |
+| Awareness | Senses movement behind you as an unlit presence cue. Trained near others' tracks and dig spots |
+| Dark adaptation | Sub-skill of Eyesight. Lifts the night image; trained by spending time in the dark |
+
+Visual sound cues grow with skill: none → shimmer → pulse → chart blip. They can be turned off in the Abilities log (`meridian.cues`). Crossing a tier (Novice 10, Practiced 25, Skilled 50, Expert 80) shows a notice and adds a row to the Abilities log (last 50, kept in localStorage `meridian.abilities`). Hover a skill for its tooltip; text lives in `src/app/skill-text.js`.
 
 Allegiance does not add damage, spread, or integrity. Civic effects only (§14).
 

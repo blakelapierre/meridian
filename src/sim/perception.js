@@ -18,7 +18,7 @@ function unit(value, top = 140) {
 const DEG = Math.PI / 180;
 
 export const SENSE_DEFAULTS = {
-  sight: { acuity: 0.55, fovea: 6 * DEG, falloff: 30 * DEG, period: 6, block: 2, range: 160, tickMs: 1000 / 30 },
+  sight: { acuity: 0.55, fovea: 6 * DEG, falloff: 45 * DEG, period: 6, block: 2, range: 160, tickMs: 1000 / 30 },
   hearing: { acuity: 0.5, fovea: 40 * DEG, falloff: 120 * DEG, period: 4, block: 0, range: 45, tickMs: 50 },
 };
 
@@ -46,7 +46,9 @@ export function perceptionFrom(abilities = {}, overrides = {}) {
     block: 0,
     range: base.hearing.range + ear * 80,
     tickMs: base.hearing.tickMs,
+    localization: unit(abilities.localization),
   };
+  sight.dark = unit(abilities.dark);
   return {
     focus: { x: 0.5, y: 0.5, dir: [0, 1, 0] },
     senses: { sight: { ...sight, ...(overrides.sight || {}) }, hearing: { ...hearing, ...(overrides.hearing || {}) } },
@@ -152,4 +154,10 @@ export function hearAt(listener, yaw, source, hearing = SENSE_DEFAULTS.hearing) 
   const gain = near * (0.4 + 0.6 * (hearing.acuity ?? SENSE_DEFAULTS.hearing.acuity));
   const pan = dist < 0.5 ? 0 : Math.max(-1, Math.min(1, (dx * Math.cos(yaw) - dy * Math.sin(yaw)) / dist));
   return { gain, pan, dist };
+}
+
+// Continuous version of blockLevel: the GPU blends between the two nearest cell sizes with the
+// fraction, so the fade from sharp to soft has no ring where a level steps up.
+export function fadeLevel(sense, angle, refine = 0) {
+  return Math.max(0, sense.block * falloff(sense, angle) - refine);
 }

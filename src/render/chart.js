@@ -121,6 +121,15 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
         ctx.font = "10px sans-serif";
         ctx.fillText(mark.name, at.x, at.y - 8);
       }
+    } else if (mark.kind === "sound") {
+      // Faint, fading blip where a sound was heard (only offered at high hearing skill).
+      if (!at.inside) continue;
+      const [r, g, b] = mark.tint || [200, 220, 255];
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, mark.alpha ?? 0.6))})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, 3 + (1 - (mark.alpha ?? 0.6)) * 6, 0, Math.PI * 2);
+      ctx.stroke();
     } else if (mark.kind === "object") {
       if (!at.inside) continue;
       ctx.fillStyle = "#c9a";

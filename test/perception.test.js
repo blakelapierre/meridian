@@ -111,7 +111,11 @@ test("the shader foveation mirrors the sim math", () => {
   assert.match(src, /exp2\(max\(0\.0, floor\(uFovea\.w \* t \+ 0\.5\) - uRefine\)\)/);
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /scene\.fovea = \{ \.\.\.foveaUniforms\(perception\)/);
-  assert.match(main, /perceptionFrom\(\{ eyesight: skills\.eyesight\.value, focus: skills\.focus\.value \}\)/);
+  assert.match(main, /perceptionFrom\(\{\s*eyesight: skills\.eyesight\.value,\s*focus: skills\.focus\.value,\s*hearing: skills\.hearing\.value/);
+  // Resolve blends continuously between levels (fovLevel), interpolating corners, with a history mix.
+  assert.match(src, /max\(0\.0, uFovea\.w \* t - uRefine\)/);
+  assert.match(src, /smoothstep\(0\.0, 1\.0, fract\(level\)\)/);
+  assert.match(src, /mix\(rgb, past, uKeep \* t\)/);
 });
 
 test("the trace budget sizes the picture by traced pixels and drops at once on a stall", () => {
