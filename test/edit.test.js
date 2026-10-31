@@ -3,7 +3,7 @@ import test from "node:test";
 import { Crust } from "../src/sim/crust.js";
 import { acceptEdit } from "../src/sim/edit.js";
 
-function proposal(crust, write = { i: 0, j: 0, k: -1, sdf_mm: 500 }) {
+function proposal(crust, write = { i: 0, j: 0, k: -1, sdf_mm: 250 }) {
   return {
     eye: [25, 25, 165],
     aim: [25, 25, 15],
@@ -22,7 +22,7 @@ test("a dig is refused unless localEdits or a cert allows it", () => {
   assert.equal(crust.sampleIndex(0, 0, -1), before);
   assert.equal(acceptEdit(crust, proposal(crust), { localEdits: true, strike: true }).reason, "strike");
   assert.equal(acceptEdit(crust, proposal(crust), { localEdits: true }).ok, true);
-  assert.equal(crust.sampleIndex(0, 0, -1), 500);
+  assert.equal(crust.sampleIndex(0, 0, -1), 250);
 });
 
 test("two clients that accept the same dig share a chunk hash", () => {
@@ -35,6 +35,6 @@ test("two clients that accept the same dig share a chunk hash", () => {
   const bad = proposal(stale);
   bad.before = Buffer.alloc(32);
   assert.equal(acceptEdit(stale, bad, { certified: true }).reason, "hash");
-  const far = proposal(stale, { i: 0, j: 0, k: -20, sdf_mm: 500 });
+  const far = proposal(stale, { i: 0, j: 0, k: -20, sdf_mm: 250 });
   assert.equal(acceptEdit(stale, far, { certified: true }).reason, "reach");
 });

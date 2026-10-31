@@ -300,8 +300,32 @@ export function loadPlate(store, slot = "self") {
   return store.get(`meridian-plate-${slot}`);
 }
 
+// World save format. 1 (unversioned): crust keys on a 50 cm voxel grid. 2: 25 cm voxels plus wear.
+export const WORLD_VERSION = 2;
+// Frame kinds whose payload carries voxel indices (terrain ops 1-4, terrain chain blocks 11).
+const VOXEL_FRAME_KINDS = new Set([1, 2, 3, 4, 11]);
+
 export function emptyWorld() {
-  return { blocks: [], frames: [], sheets: {} };
+  return { version: WORLD_VERSION, blocks: [], frames: [], sheets: {} };
+}
+
+// v1 -> v2: each 50 cm voxel override becomes the 8 25 cm voxels it covers, with its signed distance
+// halved (a sample is measured in voxel edges: 500 mm then, 250 mm now). Stored terrain frames and
+// chain blocks name old indices and cannot be re-signed, so they are dropped; the expanded crust
+// snapshot already holds their result. Wall/yard frames use the separate 0.5 m build grid and stay.
+export function migrateWorld(world) {
+  if ((world.version || 1) >= WORLD_VERSION) return world;
+  const crust = [];
+  for (const [key, sample] of world.crust || []) {
+    const [i, j, k] = String(key).split(",").map(Number);
+    if (![i, j, k].every(Number.isFinite)) continue;
+    const half = Math.round(sample / 2);
+    for (let a = 0; a < 2; a += 1) for (let b = 0; b < 2; b += 1) for (let c = 0; c < 2; c += 1) {
+      crust.push([`${i * 2 + a},${j * 2 + b},${k * 2 + c}`, half]);
+    }
+  }
+  const frames = (world.frames || []).filter((text) => !VOXEL_FRAME_KINDS.has(parseInt(String(text).slice(0, 2), 16)));
+  return { ...world, version: WORLD_VERSION, blocks: [], frames, crust };
 }
 
 export function loadWorld(store, key = "meridian-world") {
@@ -309,19 +333,24 @@ export function loadWorld(store, key = "meridian-world") {
   if (!raw) return emptyWorld();
   try {
     const parsed = JSON.parse(raw);
-    return {
+    const world = migrateWorld({
+      version: Number.isInteger(parsed.version) ? parsed.version : 1,
       blocks: Array.isArray(parsed.blocks) ? parsed.blocks : [],
       frames: Array.isArray(parsed.frames) ? parsed.frames : [],
       sheets: parsed.sheets && typeof parsed.sheets === "object" ? parsed.sheets : {},
       crust: Array.isArray(parsed.crust) ? parsed.crust : [],
-    };
+      wear: typeof parsed.wear === "string" || Array.isArray(parsed.wear) ? parsed.wear : undefined,
+    });
+    // Write a migrated save back at once so the old grid is never read again.
+    if (parsed.version !== WORLD_VERSION) saveWorld(store, world, key);
+    return world;
   } catch {
     return emptyWorld();
   }
 }
 
 export function saveWorld(store, world, key = "meridian-world") {
-  store.set(key, JSON.stringify(world));
+  store.set(key, JSON.stringify({ ...world, version: WORLD_VERSION }));
 }
 
 export function packBlock(block) {

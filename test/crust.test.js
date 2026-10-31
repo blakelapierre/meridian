@@ -12,10 +12,10 @@ test("the same dig produces the same chunk hash", () => {
 
 test("a crust march sees a dug voxel", () => {
   const solid = new Crust();
-  const before = crustMarch([0.25, 0.25, 2], [0, 0, -1], solid);
+  const before = crustMarch([0.125, 0.125, 2], [0, 0, -1], solid);
   assert.ok(before);
   const { crust } = digOnce();
-  const after = crustMarch([0.25, 0.25, 2], [0, 0, -1], crust);
+  const after = crustMarch([0.125, 0.125, 2], [0, 0, -1], crust);
   assert.ok(after);
   assert.ok(after.point[2] < before.point[2], `${after.point[2]} should be below ${before.point[2]}`);
 });

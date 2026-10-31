@@ -161,3 +161,17 @@ export function hearAt(listener, yaw, source, hearing = SENSE_DEFAULTS.hearing) 
 export function fadeLevel(sense, angle, refine = 0) {
   return Math.max(0, sense.block * falloff(sense, angle) - refine);
 }
+
+// Continuous blur radius in pixels (mirrors fovRadius in gpu.js): 1 at the gaze, 2^block at the
+// far periphery, shrinking smoothly with refinement, capped at `cap` (the low-trace-scale floor).
+export function blurRadius(sense, angle, refine = 0, cap = 2 ** (sense.block || 0)) {
+  const r = 2 ** ((sense.block || 0) * falloff(sense, angle) - refine);
+  return Math.min(Math.max(1, cap), Math.max(1, r));
+}
+
+// Per-frame trace probability for a pixel (mirrors fovDensity): one sample per r*r pixels per period.
+export function sampleDensity(sense, angle, refine = 0, cap) {
+  const r = blurRadius(sense, angle, refine, cap);
+  const period = 1 + (Math.max(1, sense.period) - 1) * falloff(sense, angle);
+  return 1 / (r * r * period);
+}

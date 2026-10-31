@@ -11,8 +11,8 @@ The slice does not hash a float mesh.
 
 | | Value |
 |---|---|
-| Voxel | 50 cm edge. Volume 125_000 cm³ |
-| Chunk | 64 voxels on a side, 32 m, origin on a multiple of 3200 cm |
+| Voxel | 25 cm edge (`VOXEL_CM`; 50 cm before save format 2). Volume 15_625 cm³ |
+| Chunk | 64 voxels on a side, 16 m, origin on a multiple of 1600 cm |
 | Sample | int16 millimeters, clamped to **±2000** |
 | Sign | Negative is solid. Positive is air. Zero is the surface |
 | Frame | Tangent centimeters, z up, until P8. See [engineering.md](engineering.md) §5 |
@@ -20,7 +20,7 @@ The slice does not hash a float mesh.
 Chunk coordinates and voxel indices are integers. Voxel `(i, j, k)` has its center at
 
 ```text
-center_cm = index * 50 + 25
+center_cm = index * 25 + 12.5
 ```
 
 along each axis, in chunk-local centimeters, then shifted by the chunk origin.
@@ -47,7 +47,7 @@ else:
   sample = max(-2000, plane_mm)
 ```
 
-Outside the disc is never solid. The sea is that rule plus a movement clamp, not a second physics engine. The first solid voxel under a feet position of z = 0 has center z = −25 cm and sample −250.
+Outside the disc is never solid. The sea is that rule plus a movement clamp, not a second physics engine. The first solid voxel under a feet position of z = 0 has center z = −12.5 cm and sample −125.
 
 ## 3. What an edit may say
 
@@ -71,9 +71,9 @@ For every write:
 - Voxel center is within **100 cm** of the proposal's aim point, also an int32 centimeter triple, and the aim point is within **400 cm** of the eye.
 - The chunk's `before_hash` matches the witness.
 - The voxel is not inside a live strike volume.
-- Dig: previous sample `<= 0`, new sample is `+500`, and the op produces one `spoil`.
-- Fill: previous sample `> 0`, new sample is `-500`, and the op consumes one `spoil`.
-- Smooth: new sample is previous plus an integer delta in **[-500, 500]**, spoil unchanged.
+- Dig: previous sample `<= 0`, new sample is `+250` (`DIG_SAMPLE_MM`, one voxel edge), and the op produces one `spoil`.
+- Fill: previous sample `> 0`, new sample is `-250`, and the op consumes one `spoil`.
+- Smooth: new sample is previous plus an integer delta in **[-250, 250]**, spoil unchanged.
 
 Spoil is an item, id `spoil`, **mass 2 kg**, stack 20. One write, one spoil. Dirt's real density is not simulated. If the inventory cannot hold the spoil, the dig write is refused, not silently deleted.
 
@@ -92,7 +92,7 @@ Aim point: 150 cm along the look direction from the eye, quantized to centimeter
 
 Candidate voxels are those whose centers lie inside the 100 cm brush and the 400 cm reach. The write for this spend is the candidate **closest to the aim point**. Ties break by lower `i`, then lower `j`, then lower `k`.
 
-Smooth reads the candidates, sets `avg = floor(sum(sample) / count)`, and moves each sample toward `avg` by at most 500 mm. No spoil.
+Smooth reads the candidates, sets `avg = floor(sum(sample) / count)`, and moves each sample toward `avg` by at most 250 mm (one voxel edge). No spoil.
 
 ## 6. Chunk hash
 
@@ -116,3 +116,23 @@ On the economy tick, after certified edits: if a solid voxel (sample `<= 0`) has
 Slump writes are their own certified edit with the same hash rules. The client does not slump locally and hope.
 
 Water volumes are integer liters on the coarse grid and are **not** required for the Atoll acceptance tests. Do not implement them as floats "for now."
+
+## Save format 2: 25 cm voxels
+
+The voxel edge was halved from 50 cm to 25 cm. Every voxel-sized constant now derives from
+`VOXEL_CM` in `src/sim/crust.js` (`VOXEL_M`, `VOXEL_CM3`, `DIG_SAMPLE_MM`, `AIR_SAMPLE_MM`, slump
+steps, `columnFloor`, the edit validator in `src/sim/edit.js`, `nearestSolid` in `src/sim/aim.js`
+and the dug-column pass in `src/render/gpu.js`). The dig rate is a volume budget, so a stroke
+removes the same cm³ per tick as before, in 8x as many, smaller voxels.
+
+World saves carry `version: 2`. `migrateWorld` (`src/sim/persist.js`) upgrades an unversioned
+(v1) save on load: each 50 cm override becomes the 8 25 cm voxels it covered with its sample
+halved (a sample is measured in voxel edges), and stored terrain frames (kinds 1-4) and
+terrain chain blocks (kind 11) are dropped because they name old indices and cannot be
+re-signed; the expanded crust snapshot already holds their result. Peers on different voxel
+sizes cannot share terrain ops: the validator refuses the other size's samples.
+
+The yard building grid (walls, pieces, fires, roads) stays on its own 0.5 m grid; it is not
+the crust grid. Wear cells (`src/sim/wear.js`) share the crust voxel footprint.
+
+`node --expose-gc tools/measure-cells.mjs [crust.js]` measures the cost on a fixed dig session.

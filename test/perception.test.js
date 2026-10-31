@@ -107,14 +107,14 @@ test("refreshDue: focused things refresh every tick, peripheral ones wait the pe
 test("the shader foveation mirrors the sim math", () => {
   const src = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(src, /smoothstep\(uFovea\.x, uFovea\.x \+ uFovea\.y, a\)/);
-  assert.match(src, /floor\(1\.0 \+ \(max\(1\.0, uFovea\.z\) - 1\.0\) \* t \+ 0\.5\)/);
-  assert.match(src, /exp2\(max\(0\.0, floor\(uFovea\.w \* t \+ 0\.5\) - uRefine\)\)/);
+  assert.match(src, /1\.0 \+ \(max\(1\.0, uFovea\.z\) - 1\.0\) \* t;/);
+  assert.match(src, /clamp\(exp2\(uFovea\.w \* t - uRefine\), 1\.0, max\(1\.0, uCellMax\)\)/);
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /scene\.fovea = \{ \.\.\.foveaUniforms\(perception\)/);
   assert.match(main, /perceptionFrom\(\{\s*eyesight: skills\.eyesight\.value,\s*focus: skills\.focus\.value,\s*hearing: skills\.hearing\.value/);
-  // Resolve blends continuously between levels (fovLevel), interpolating corners, with a history mix.
-  assert.match(src, /max\(0\.0, uFovea\.w \* t - uRefine\)/);
-  assert.match(src, /smoothstep\(0\.0, 1\.0, fract\(level\)\)/);
+  // Resolve: continuous-radius jittered Gaussian gather plus a history mix; trace: IGN-dithered density.
+  assert.match(src, /gather\(pix, r\)/);
+  assert.match(src, /ign\(pix \+ 5\.588238 \* mod\(uFrame, 64\.0\)\) >= fovDensity\(ft\)/);
   assert.match(src, /mix\(rgb, past, uKeep \* t\)/);
 });
 
