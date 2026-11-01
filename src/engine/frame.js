@@ -1,6 +1,10 @@
-import { cast, project, traceColor } from "./cast.js";
+import { cast, holdRayObjects, project, traceColor } from "./cast.js";
 
 export function paintFrame(scene, width, height, buffer) {
+  return holdRayObjects(scene.objects, () => paintHeld(scene, width, height, buffer));
+}
+
+function paintHeld(scene, width, height, buffer) {
   const pixels = buffer ?? new Uint8ClampedArray(width * height * 4);
   const miss = scene.miss || [0, 0, 0, 1];
   let i = 0;
@@ -35,13 +39,15 @@ function shade(scene, hit, miss, direction) {
   }
   const reflectivity = Math.min(1, Math.max(0, hit.object?.reflectivity || 0));
   if (reflectivity <= 0 || !direction || !hit.point) return color;
-  const normal = hit.object.type === "sphere"
-    ? [
-      hit.point[0] - hit.object.origin[0],
-      hit.point[1] - hit.object.origin[1],
-      hit.point[2] - hit.object.origin[2],
-    ]
-    : [0, 0, 1];
+  const normal = hit.normal
+    ? hit.normal
+    : hit.object.type === "sphere"
+      ? [
+        hit.point[0] - hit.object.origin[0],
+        hit.point[1] - hit.object.origin[1],
+        hit.point[2] - hit.object.origin[2],
+      ]
+      : [0, 0, 1];
   const len = Math.hypot(normal[0], normal[1], normal[2]) || 1;
   const unit = [normal[0] / len, normal[1] / len, normal[2] / len];
   const along = direction[0] * unit[0] + direction[1] * unit[1] + direction[2] * unit[2];

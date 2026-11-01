@@ -1,8 +1,10 @@
 import { cameraBasis } from "../engine/cast.js";
+import { GPU_TREE_AT, MAX_GPU_NODES, gpuNodeCount, gpuNodeData, packGpuNodes } from "../engine/octree.js";
 import { VOXEL_M } from "../sim/crust.js";
 import { ATLAS, GRASS_TILE, ROCK_TILE, SAND_TILE, WOOD_TILE, blitTexture, grassTexture, rectFor, rockTexture, sandTexture, woodTexture } from "./texture.js?v=62";
 
 const MAX_SPHERES = 384;
+const MAX_SHAPES = 8;
 const MAX_BOXES = 32;
 // Dug columns the trace can show; 4x the 50 cm budget since a 25 cm voxel has 4x the columns per area.
 const MAX_DIGS = 512;
@@ -11,6 +13,31 @@ const MAX_PRINTS = 48;
 
 const sphereData = new Float32Array(MAX_SPHERES * 4);
 const sphereColor = new Float32Array(MAX_SPHERES * 4);
+const shapeData = new Float32Array(MAX_SHAPES * 16);
+const shapeList = new Array(MAX_SHAPES);
+const SHAPE_KIND = { plane: 1, disk: 2, box: 3, capsule: 4, cylinder: 5, triangle: 6 };
+
+function packShapeData(n) {
+  shapeData.fill(0);
+  for (let i = 0; i < n; i++) {
+    const s = shapeList[i];
+    const put = (row, x, y, z, w) => {
+      const o = (row * MAX_SHAPES + i) * 4;
+      shapeData[o] = x;
+      shapeData[o + 1] = y;
+      shapeData[o + 2] = z;
+      shapeData[o + 3] = w;
+    };
+    const color = s.color || [1, 1, 1, 1];
+    const a = s.a || [0, 0, 0];
+    const b = s.b || [0, 0, 0];
+    const c = s.c || [0, 0, 0];
+    put(0, color[0], color[1], color[2], s.reflectivity || 0);
+    put(1, a[0], a[1], a[2], SHAPE_KIND[s.kind] || 0);
+    put(2, b[0], b[1], b[2], s.r || 0);
+    put(3, c[0] || 0, c[1] || 0, c[2] || 0, 0);
+  }
+}
 const boxMin = new Float32Array(MAX_BOXES * 4);
 const boxMax = new Float32Array(MAX_BOXES * 4);
 const boxColor = new Float32Array(MAX_BOXES * 4);
@@ -164,7 +191,7 @@ void main() {
   gl_Position = vec4(aRay.x * 2.0 - 1.0, (1.0 - aRay.y) * 2.0 - 1.0, 0.0, 1.0);
   gl_PointSize = 1.0;
 }`;
-  const frag = `#version 300 es
+  const fragBody = `#version 300 es
 precision highp float;
 uniform vec3 uOrigin;
 uniform vec3 uForward;
@@ -199,6 +226,11 @@ uniform sampler2D uWearTex;
 uniform vec3 uWear; // origin x, origin y (m), cell size (m)
 uniform sampler2D uTexRects;
 uniform sampler2D uAtlas;
+uniform sampler2D uShapes;
+uniform int uShapeCount;
+#if TREE
+uniform sampler2D uNodes;
+#endif
 out vec4 fragColor;
 
 float gFoot = 0.0;
@@ -466,6 +498,298 @@ bool sphereHit(vec3 ro, vec3 rd, vec4 sphere, out float t) {
   return t >= 0.0;
 }
 
+void considerShapes(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout vec3 bestN, inout vec3 bestRgb, inout float bestRef, inout bool found) {
+  for (int i = 0; i < ${MAX_SHAPES}; i++) {
+    if (i >= uShapeCount) return;
+    vec4 row0 = texelFetch(uShapes, ivec2(i, 0), 0);
+    vec4 row1 = texelFetch(uShapes, ivec2(i, 1), 0);
+    vec4 row2 = texelFetch(uShapes, ivec2(i, 2), 0);
+    vec4 row3 = texelFetch(uShapes, ivec2(i, 3), 0);
+    int kind = int(row1.w + 0.5);
+    vec3 rgb = row0.rgb;
+    float ref = row0.a;
+    vec3 a = row1.xyz;
+    vec3 b = row2.xyz;
+    vec3 c = row3.xyz;
+    float rad = row2.w;
+    if (kind == 1 || kind == 2) {
+      vec3 pn = normalize(b);
+      float denom = dot(rd, pn);
+      if (abs(denom) < 1.0e-6) continue;
+      float t = dot(a - ro, pn) / denom;
+      if (t <= 0.02 || t >= bestT) continue;
+      vec3 at = ro + rd * t;
+      if (kind == 2 && dot(at - a, at - a) > rad * rad) continue;
+      bestT = t;
+      bestP = at;
+      bestN = denom > 0.0 ? -pn : pn;
+      bestRgb = rgb;
+      bestRef = ref;
+      found = true;
+    } else if (kind == 3) {
+      vec3 inv = vec3(abs(rd.x) < 1.0e-8 ? 1.0e16 : 1.0 / rd.x, abs(rd.y) < 1.0e-8 ? 1.0e16 : 1.0 / rd.y, abs(rd.z) < 1.0e-8 ? 1.0e16 : 1.0 / rd.z);
+      vec3 t1 = (a - b - ro) * inv;
+      vec3 t2 = (a + b - ro) * inv;
+      vec3 tsm = min(t1, t2);
+      vec3 tsM = max(t1, t2);
+      float tmin = max(max(tsm.x, tsm.y), tsm.z);
+      float tmaxv = min(min(tsM.x, tsM.y), tsM.z);
+      if (tmaxv < tmin) continue;
+      float t = tmin > 0.02 ? tmin : tmaxv;
+      if (t <= 0.02 || t >= bestT) continue;
+      vec3 p = (ro + rd * t) - a;
+      vec3 ap = abs(p) / max(b, vec3(1.0e-4));
+      vec3 n = vec3(0.0);
+      if (ap.x >= ap.y && ap.x >= ap.z) n.x = p.x < 0.0 ? -1.0 : 1.0;
+      else if (ap.y >= ap.z) n.y = p.y < 0.0 ? -1.0 : 1.0;
+      else n.z = p.z < 0.0 ? -1.0 : 1.0;
+      if (dot(n, rd) > 0.0) n = -n;
+      bestT = t;
+      bestP = ro + rd * t;
+      bestN = n;
+      bestRgb = rgb;
+      bestRef = ref;
+      found = true;
+    } else if (kind == 4 || kind == 5) {
+      vec3 ba = b - a;
+      vec3 oc = ro - a;
+      float baba = dot(ba, ba);
+      float bard = dot(ba, rd);
+      float baoc = dot(ba, oc);
+      float k2 = baba - bard * bard;
+      float k1 = baba * dot(oc, rd) - baoc * bard;
+      float k0 = baba * dot(oc, oc) - baoc * baoc - rad * rad * baba;
+      float h = k1 * k1 - k2 * k0;
+      if (h >= 0.0 && abs(k2) > 1.0e-6) {
+        float s = sqrt(h);
+        for (int side = 0; side < 2; side++) {
+          float t = (-k1 + (side == 0 ? -s : s)) / k2;
+          float y = baoc + t * bard;
+          if (t <= 0.02 || t >= bestT || y <= 0.0 || y >= baba) continue;
+          bestT = t;
+          bestP = ro + rd * t;
+          bestN = normalize(oc + rd * t - ba * y / baba);
+          bestRgb = rgb;
+          bestRef = ref;
+          found = true;
+        }
+      }
+      if (kind == 4) {
+        vec3 cc0 = a;
+        vec3 soc0 = cc0 - ro;
+        float sb0 = dot(rd, soc0);
+        float sd0 = sb0 * sb0 - (dot(soc0, soc0) - rad * rad);
+        if (sd0 >= 0.0) {
+          float sroot0 = sqrt(sd0);
+          float t0 = sb0 - sroot0;
+          if (t0 <= 0.02) t0 = sb0 + sroot0;
+          if (t0 > 0.02 && t0 < bestT) {
+            vec3 at0 = ro + rd * t0;
+            bestT = t0;
+            bestP = at0;
+            bestN = normalize(at0 - cc0);
+            bestRgb = rgb;
+            bestRef = ref;
+            found = true;
+          }
+        }
+        vec3 cc1 = b;
+        vec3 soc1 = cc1 - ro;
+        float sb1 = dot(rd, soc1);
+        float sd1 = sb1 * sb1 - (dot(soc1, soc1) - rad * rad);
+        if (sd1 >= 0.0) {
+          float sroot1 = sqrt(sd1);
+          float t1 = sb1 - sroot1;
+          if (t1 <= 0.02) t1 = sb1 + sroot1;
+          if (t1 > 0.02 && t1 < bestT) {
+            vec3 at1 = ro + rd * t1;
+            bestT = t1;
+            bestP = at1;
+            bestN = normalize(at1 - cc1);
+            bestRgb = rgb;
+            bestRef = ref;
+            found = true;
+          }
+        }
+      } else if (baba > 1.0e-6) {
+        vec3 na = ba / sqrt(baba);
+        vec3 n0 = -na;
+        vec3 n1 = na;
+        float denom0 = dot(rd, n0);
+        if (abs(denom0) >= 1.0e-6) {
+          float t0 = dot(a - ro, n0) / denom0;
+          if (t0 > 0.02 && t0 < bestT) {
+            vec3 at0 = ro + rd * t0;
+            if (dot(at0 - a, at0 - a) <= rad * rad) {
+              bestT = t0;
+              bestP = at0;
+              bestN = denom0 > 0.0 ? -n0 : n0;
+              bestRgb = rgb;
+              bestRef = ref;
+              found = true;
+            }
+          }
+        }
+        float denom1 = dot(rd, n1);
+        if (abs(denom1) >= 1.0e-6) {
+          float t1 = dot(b - ro, n1) / denom1;
+          if (t1 > 0.02 && t1 < bestT) {
+            vec3 at1 = ro + rd * t1;
+            if (dot(at1 - b, at1 - b) <= rad * rad) {
+              bestT = t1;
+              bestP = at1;
+              bestN = denom1 > 0.0 ? -n1 : n1;
+              bestRgb = rgb;
+              bestRef = ref;
+              found = true;
+            }
+          }
+        }
+      }
+    } else if (kind == 6) {
+      vec3 e1 = b - a;
+      vec3 e2 = c - a;
+      vec3 pvec = cross(rd, e2);
+      float det = dot(e1, pvec);
+      if (abs(det) < 1.0e-6) continue;
+      float invDet = 1.0 / det;
+      vec3 tvec = ro - a;
+      float u = dot(tvec, pvec) * invDet;
+      if (u < 0.0 || u > 1.0) continue;
+      vec3 qvec = cross(tvec, e1);
+      float v = dot(rd, qvec) * invDet;
+      if (v < 0.0 || u + v > 1.0) continue;
+      float t = dot(e2, qvec) * invDet;
+      if (t <= 0.02 || t >= bestT) continue;
+      vec3 n = normalize(cross(e1, e2));
+      if (dot(n, rd) > 0.0) n = -n;
+      bestT = t;
+      bestP = ro + rd * t;
+      bestN = n;
+      bestRgb = rgb;
+      bestRef = ref;
+      found = true;
+    }
+  }
+}
+
+bool shapeBlocks(vec3 ro, vec3 rd, float limit) {
+  float bestT = limit;
+  vec3 bestP = ro;
+  vec3 bestN = ro;
+  vec3 bestRgb = ro;
+  float bestRef = 0.0;
+  bool found = false;
+  considerShapes(ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found);
+  return found;
+}
+
+#if TREE
+bool nodeBox(vec3 ro, vec3 rd, vec3 c, float h, float limit) {
+  vec3 inv = vec3(rd.x == 0.0 ? 1e30 : 1.0 / rd.x, rd.y == 0.0 ? 1e30 : 1.0 / rd.y, rd.z == 0.0 ? 1e30 : 1.0 / rd.z);
+  vec3 t1 = (c - h - ro) * inv;
+  vec3 t2 = (c + h - ro) * inv;
+  vec3 tmin3 = min(t1, t2);
+  vec3 tmax3 = max(t1, t2);
+  float tEnter = max(max(tmin3.x, tmin3.y), tmin3.z);
+  float tExit = min(min(tmax3.x, tmax3.y), tmax3.z);
+  return tExit >= max(tEnter, 0.0) && tEnter < limit;
+}
+
+void takeSphere(int i, vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout vec3 bestN, inout vec3 bestRgb, inout float bestRef, inout bool found, int bounce) {
+  if (i < 0 || i >= uSpheres) return;
+  vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
+  float t;
+  if (!sphereHit(ro, rd, sphere, t) || t <= 0.02 || t >= bestT) return;
+  bestT = t;
+  bestP = ro + rd * t;
+  bestN = normalize(bestP - sphere.xyz);
+  gFoot = t * uFoot * float(bounce + 1);
+  vec4 col = texelFetch(uSphereColor, ivec2(i, 0), 0);
+  bestRgb = sphereAlbedo(bestN, i, col.rgb);
+  bestRef = col.a;
+  found = true;
+}
+
+void walkSpheres(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout vec3 bestN, inout vec3 bestRgb, inout float bestRef, inout bool found, int bounce) {
+  int stack[96];
+  int sp = 1;
+  stack[0] = 0;
+  for (int step = 0; step < 80; step++) {
+    if (sp <= 0) break;
+    sp -= 1;
+    int id = stack[sp];
+    vec4 box = texelFetch(uNodes, ivec2(0, id), 0);
+    vec4 meta = texelFetch(uNodes, ivec2(1, id), 0);
+    if (meta.y < 0.5 || !nodeBox(ro, rd, box.xyz, box.w, bestT)) continue;
+    if (meta.x < 0.0) {
+      int len = int(meta.y + 0.5);
+      vec4 extra = texelFetch(uNodes, ivec2(2, id), 0);
+      vec4 tail = texelFetch(uNodes, ivec2(3, id), 0);
+      if (len > 0) takeSphere(int(meta.z + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+      if (len > 1) takeSphere(int(meta.w + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+      if (len > 2) takeSphere(int(extra.x + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+      if (len > 3) takeSphere(int(extra.y + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+      if (len > 4) takeSphere(int(extra.z + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+      if (len > 5) takeSphere(int(extra.w + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+      if (len > 6) takeSphere(int(tail.x + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+      if (len > 7) takeSphere(int(tail.y + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+    } else {
+      int child = int(meta.x + 0.5);
+      for (int k = 0; k < 8; k++) {
+        vec4 cbox = texelFetch(uNodes, ivec2(0, child + k), 0);
+        vec4 cm = texelFetch(uNodes, ivec2(1, child + k), 0);
+        if (cm.y > 0.5 && nodeBox(ro, rd, cbox.xyz, cbox.w, bestT) && sp < 96) stack[sp++] = child + k;
+      }
+    }
+  }
+}
+
+bool treeBlocks(vec3 sro, vec3 ld, float lightT) {
+  int stack[96];
+  int sp = 1;
+  stack[0] = 0;
+  for (int step = 0; step < 80; step++) {
+    if (sp <= 0) break;
+    sp -= 1;
+    int id = stack[sp];
+    vec4 box = texelFetch(uNodes, ivec2(0, id), 0);
+    vec4 meta = texelFetch(uNodes, ivec2(1, id), 0);
+    if (meta.y < 0.5 || !nodeBox(sro, ld, box.xyz, box.w, lightT)) continue;
+    if (meta.x < 0.0) {
+      int len = int(meta.y + 0.5);
+      vec4 extra = texelFetch(uNodes, ivec2(2, id), 0);
+      vec4 tail = texelFetch(uNodes, ivec2(3, id), 0);
+      int ids[8];
+      ids[0] = int(meta.z + 0.5);
+      ids[1] = int(meta.w + 0.5);
+      ids[2] = int(extra.x + 0.5);
+      ids[3] = int(extra.y + 0.5);
+      ids[4] = int(extra.z + 0.5);
+      ids[5] = int(extra.w + 0.5);
+      ids[6] = int(tail.x + 0.5);
+      ids[7] = int(tail.y + 0.5);
+      for (int k = 0; k < 8; k++) {
+        if (k >= len) break;
+        int j = ids[k];
+        if (j < 0 || j >= uSpheres) continue;
+        vec4 sph = texelFetch(uSphereTex, ivec2(j, 0), 0);
+        float st;
+        if (sphereHit(sro, ld, sph, st) && st > 0.0 && st < lightT) return true;
+      }
+    } else {
+      int child = int(meta.x + 0.5);
+      for (int k = 0; k < 8; k++) {
+        vec4 cbox = texelFetch(uNodes, ivec2(0, child + k), 0);
+        vec4 cm = texelFetch(uNodes, ivec2(1, child + k), 0);
+        if (cm.y > 0.5 && nodeBox(sro, ld, cbox.xyz, cbox.w, lightT) && sp < 96) stack[sp++] = child + k;
+      }
+    }
+  }
+  return false;
+}
+#endif
+
 bool blocked(vec3 from, vec3 rd) {
   float t;
   for (int i = 0; i < ${MAX_BOXES}; i++) {
@@ -474,11 +798,16 @@ bool blocked(vec3 from, vec3 rd) {
     vec3 bmax = texelFetch(uBoxMax, ivec2(i, 0), 0).xyz;
     if (boxHit(from, rd, bmin, bmax, t) && t < 80.0) return true;
   }
+  if (uShapeCount > 0 && shapeBlocks(from, rd, 80.0)) return true;
+#if TREE
+  if (treeBlocks(from, rd, 80.0)) return true;
+#else
   for (int i = 0; i < ${MAX_SPHERES}; i++) {
     if (i >= uSpheres) break;
     vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
     if (sphereHit(from, rd, sphere, t) && t < 80.0) return true;
   }
+#endif
   return false;
 }
 
@@ -606,6 +935,10 @@ void main() {
       bestRef = col.a;
       found = true;
     }
+    if (uShapeCount > 0) considerShapes(ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found);
+#if TREE
+    walkSpheres(ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
+#else
     for (int i = 0; i < ${MAX_SPHERES}; i++) {
       if (i >= uSpheres) break;
       vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
@@ -619,6 +952,7 @@ void main() {
       bestRef = col.a;
       found = true;
     }
+#endif
     if (rd.z < -0.001) {
       float waterT = (0.0 - ro.z) / rd.z;
       vec3 waterP = ro + rd * waterT;
@@ -710,7 +1044,7 @@ void main() {
   fragColor = vec4(present(accum), depthCode);
 }`;
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
-  const fs = compile(gl, gl.FRAGMENT_SHADER, frag);
+  const fs = compile(gl, gl.FRAGMENT_SHADER, fragBody);
   if (!vs || !fs) return fail(canvas, compile.lastLog || "shader");
   const program = gl.createProgram();
   gl.attachShader(program, vs);
@@ -718,11 +1052,23 @@ void main() {
   gl.bindAttribLocation(program, 0, "aPos");
   gl.linkProgram(program);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return fail(canvas, gl.getProgramInfoLog(program) || "link");
+  const treeFs = compile(gl, gl.FRAGMENT_SHADER, fragBody.replace("#version 300 es\n", "#version 300 es\n#define TREE 1\n"));
+  let treeProgram = null;
+  if (treeFs) {
+    treeProgram = gl.createProgram();
+    gl.attachShader(treeProgram, vs);
+    gl.attachShader(treeProgram, treeFs);
+    gl.bindAttribLocation(treeProgram, 0, "aPos");
+    gl.linkProgram(treeProgram);
+    if (!gl.getProgramParameter(treeProgram, gl.LINK_STATUS)) treeProgram = null;
+  }
   const buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   let sphereTex;
   let sphereColorTex;
+  let shapeTex;
+  let nodeTex = null;
   let boxMinTex;
   let boxMaxTex;
   let boxColorTex;
@@ -735,6 +1081,24 @@ void main() {
   try {
     sphereTex = texture(gl, MAX_SPHERES);
     sphereColorTex = texture(gl, MAX_SPHERES);
+    shapeTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE14);
+    gl.bindTexture(gl.TEXTURE_2D, shapeTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SHAPES, 4, 0, gl.RGBA, gl.FLOAT, null);
+    if (treeProgram) {
+      nodeTex = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE15);
+      gl.bindTexture(gl.TEXTURE_2D, nodeTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, MAX_GPU_NODES, 0, gl.RGBA, gl.FLOAT, null);
+    }
     boxMinTex = texture(gl, MAX_BOXES);
     boxMaxTex = texture(gl, MAX_BOXES);
     boxColorTex = texture(gl, MAX_BOXES);
@@ -973,6 +1337,12 @@ void main() {
       let spheres = 0;
       let boxes = 0;
       let digs = 0;
+      let shapes = 0;
+      const takeShape = (object) => {
+        if (shapes >= MAX_SHAPES) return;
+        shapeList[shapes] = object;
+        shapes += 1;
+      };
       for (const object of scene.objects) {
         if (object.type === "sphere" && spheres < MAX_SPHERES) {
           const at = spheres * 4;
@@ -1004,6 +1374,8 @@ void main() {
           boxColor.set(object.color, at);
           boxColor[at + 3] = object.reflectivity || 0;
           boxes += 1;
+        } else if (object.type === "shape") {
+          takeShape(object);
         } else if (object.type === "crust" && object.field) {
           const columns = new Map();
           for (const [key, sample] of object.field.overrides) {
@@ -1026,6 +1398,9 @@ void main() {
           }
         }
       }
+      const listed = scene.shapes || [];
+      for (let i = 0; i < listed.length; i++) takeShape(listed[i]);
+      packShapeData(shapes);
       const basis = cameraBasis(scene.camera);
       const steps = scene.prints || [];
       const shown = Math.min(steps.length, MAX_PRINTS);
@@ -1037,7 +1412,8 @@ void main() {
       }
       const miss = scene.miss || [0.45, 0.62, 0.85, 1];
       const sun = scene.sun || [0, 0, 1];
-      const prog = mode === "points" && pointProgram ? pointProgram : program;
+      const useTree = mode !== "points" && !!treeProgram && !!nodeTex && spheres > GPU_TREE_AT && packGpuNodes(sphereData, spheres);
+      const prog = mode === "points" && pointProgram ? pointProgram : (useTree ? treeProgram : program);
       const u = (name) => gl.getUniformLocation(prog, name);
       gl.useProgram(prog);
       gl.viewport(0, 0, viewSize ? viewSize.w : canvas.width, viewSize ? viewSize.h : canvas.height);
@@ -1074,6 +1450,18 @@ void main() {
       gl.uniform1i(u("uPrintTex"), 8);
       gl.uniform1i(u("uTexRects"), 6);
       gl.uniform1i(u("uAtlas"), 7);
+      gl.activeTexture(gl.TEXTURE14);
+      gl.bindTexture(gl.TEXTURE_2D, shapeTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_SHAPES, 4, gl.RGBA, gl.FLOAT, shapeData);
+      gl.uniform1i(u("uShapes"), 14);
+      gl.uniform1i(u("uShapeCount"), shapes);
+      if (useTree) {
+        gl.activeTexture(gl.TEXTURE15);
+        gl.bindTexture(gl.TEXTURE_2D, nodeTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, gpuNodeCount(), gl.RGBA, gl.FLOAT, gpuNodeData);
+        const nodes = u("uNodes");
+        if (nodes) gl.uniform1i(nodes, 15);
+      }
       gl.activeTexture(gl.TEXTURE13);
       gl.bindTexture(gl.TEXTURE_2D, wearTex);
       gl.uniform1i(u("uWearTex"), 13);

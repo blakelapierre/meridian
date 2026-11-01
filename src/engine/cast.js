@@ -1,4 +1,7 @@
 import { cross, dot, length } from "./math.js";
+import { holdRayObjects, raySphereRoot, visitRayTree } from "./octree.js";
+
+export { holdRayObjects };
 
 export function sphereRayIntersection(origin, direction, center, radius) {
   const ocx = center[0] - origin[0];
@@ -88,6 +91,7 @@ export function intersect(origin, direction, object) {
   }
   if (object.type === "box") return boxRayIntersection(origin, direction, object);
   if (object.type === "crust") return crustMarch(origin, direction, object.field);
+  if (object.type === "shape") return shapeHit(origin, direction, object);
   return null;
 }
 
@@ -152,10 +156,197 @@ export function crustMarch(origin, direction, field, maxDistance = 400) {
   return null;
 }
 
+function vsub(a, b) {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function vadd(a, b) {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+function vscale(a, s) {
+  return [a[0] * s, a[1] * s, a[2] * s];
+}
+
+function vdot(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function vunit(a) {
+  const n = Math.hypot(a[0], a[1], a[2]) || 1;
+  return [a[0] / n, a[1] / n, a[2] / n];
+}
+
+function vcross(u, v) {
+  return [
+    u[1] * v[2] - u[2] * v[1],
+    u[2] * v[0] - u[0] * v[2],
+    u[0] * v[1] - u[1] * v[0],
+  ];
+}
+
+function shapeRecord(shape, t, point, normal) {
+  return {
+    t,
+    point,
+    normal: vunit(normal),
+    object: shape,
+    color: shape.color,
+  };
+}
+
+function rayPlane(origin, direction, point, normal) {
+  const denom = vdot(direction, normal);
+  if (Math.abs(denom) < 1e-8) return null;
+  const t = vdot(vsub(point, origin), normal) / denom;
+  if (t < 0) return null;
+  return { t, point: vadd(origin, vscale(direction, t)), normal: denom > 0 ? vscale(normal, -1) : normal.slice() };
+}
+
+function rayDisk(origin, direction, center, normal, radius) {
+  const hit = rayPlane(origin, direction, center, normal);
+  if (!hit) return null;
+  const d = vsub(hit.point, center);
+  if (vdot(d, d) > radius * radius) return null;
+  return hit;
+}
+
+function raySolid(origin, direction, center, half) {
+  let tmin = -1e30;
+  let tmax = 1e30;
+  let axis = 0;
+  let sign = 1;
+  for (let a = 0; a < 3; a++) {
+    if (Math.abs(direction[a]) < 1e-8) {
+      if (origin[a] < center[a] - half[a] || origin[a] > center[a] + half[a]) return null;
+      continue;
+    }
+    const inv = 1 / direction[a];
+    let t1 = (center[a] - half[a] - origin[a]) * inv;
+    let t2 = (center[a] + half[a] - origin[a]) * inv;
+    let s1 = -1;
+    if (t1 > t2) {
+      const swap = t1;
+      t1 = t2;
+      t2 = swap;
+      s1 = 1;
+    }
+    if (t1 > tmin) {
+      tmin = t1;
+      axis = a;
+      sign = s1;
+    }
+    if (t2 < tmax) tmax = t2;
+    if (tmax < tmin) return null;
+  }
+  const t = tmin > 0 ? tmin : tmax;
+  if (t < 0) return null;
+  const normal = [0, 0, 0];
+  normal[axis] = sign;
+  if (vdot(normal, direction) > 0) normal[axis] = -normal[axis];
+  return { t, point: vadd(origin, vscale(direction, t)), normal };
+}
+
+function sphereAt(origin, direction, center, radius) {
+  const oc = vsub(origin, center);
+  const b = vdot(direction, oc);
+  const c0 = vdot(oc, oc) - radius * radius;
+  const h = b * b - vdot(direction, direction) * c0;
+  if (h < 0) return null;
+  const s = Math.sqrt(h);
+  const a = vdot(direction, direction) || 1;
+  let t = (-b - s) / a;
+  if (t < 0) t = (-b + s) / a;
+  if (t < 0) return null;
+  const point = vadd(origin, vscale(direction, t));
+  return { t, point, normal: vsub(point, center) };
+}
+
+function rayRound(origin, direction, pa, pb, radius, capped) {
+  const ba = vsub(pb, pa);
+  const oc = vsub(origin, pa);
+  const baba = vdot(ba, ba);
+  const bard = vdot(ba, direction);
+  const baoc = vdot(ba, oc);
+  const k2 = baba - bard * bard;
+  const k1 = baba * vdot(oc, direction) - baoc * bard;
+  const k0 = baba * vdot(oc, oc) - baoc * baoc - radius * radius * baba;
+  let best = null;
+  const take = (hit) => {
+    if (!hit || hit.t < 0) return;
+    if (!best || hit.t < best.t) best = hit;
+  };
+  const h = k1 * k1 - k2 * k0;
+  if (h >= 0 && Math.abs(k2) > 1e-8) {
+    const s = Math.sqrt(h);
+    const ts = [(-k1 - s) / k2, (-k1 + s) / k2];
+    for (let i = 0; i < ts.length; i++) {
+      const t = ts[i];
+      const y = baoc + t * bard;
+      if (t < 0 || y <= 0 || y >= baba) continue;
+      const point = vadd(origin, vscale(direction, t));
+      const normal = vsub(vadd(oc, vscale(direction, t)), vscale(ba, y / baba));
+      take({ t, point, normal });
+    }
+  }
+  if (!capped) {
+    take(sphereAt(origin, direction, pa, radius));
+    take(sphereAt(origin, direction, pb, radius));
+  } else if (baba > 1e-8) {
+    const axis = vunit(ba);
+    take(rayDisk(origin, direction, pa, vscale(axis, -1), radius));
+    take(rayDisk(origin, direction, pb, axis, radius));
+  }
+  return best;
+}
+
+function rayTri(origin, direction, a, b, c) {
+  const e1 = vsub(b, a);
+  const e2 = vsub(c, a);
+  const pvec = vcross(direction, e2);
+  const det = vdot(e1, pvec);
+  if (Math.abs(det) < 1e-8) return null;
+  const inv = 1 / det;
+  const tvec = vsub(origin, a);
+  const u = vdot(tvec, pvec) * inv;
+  if (u < 0 || u > 1) return null;
+  const qvec = vcross(tvec, e1);
+  const v = vdot(direction, qvec) * inv;
+  if (v < 0 || u + v > 1) return null;
+  const t = vdot(e2, qvec) * inv;
+  if (t < 0) return null;
+  let normal = vunit(vcross(e1, e2));
+  if (vdot(normal, direction) > 0) normal = vscale(normal, -1);
+  return { t, point: vadd(origin, vscale(direction, t)), normal };
+}
+
+export function shapeHit(origin, direction, shape) {
+  const kind = shape.kind;
+  let hit = null;
+  if (kind === "plane") hit = rayPlane(origin, direction, shape.a, shape.b);
+  else if (kind === "disk") hit = rayDisk(origin, direction, shape.a, shape.b, shape.r);
+  else if (kind === "box") hit = raySolid(origin, direction, shape.a, shape.b);
+  else if (kind === "capsule") hit = rayRound(origin, direction, shape.a, shape.b, shape.r, false);
+  else if (kind === "cylinder") hit = rayRound(origin, direction, shape.a, shape.b, shape.r, true);
+  else if (kind === "triangle") hit = rayTri(origin, direction, shape.a, shape.b, shape.c);
+  if (!hit) return null;
+  return shapeRecord(shape, hit.t, hit.point, hit.normal);
+}
+
 export function cast(origin, direction, objects, miss = [0, 0, 0, 1]) {
   let best = null;
+  const root = raySphereRoot(objects);
+  if (root >= 0) {
+    best = visitRayTree(origin, direction, root, (object) => {
+      const hit = sphereRayIntersection(origin, direction, object.origin, object.radius);
+      if (!hit) return null;
+      return { ...hit, object, color: object.color };
+    });
+  }
   for (let i = 0; i < objects.length; i++) {
-    const hit = intersect(origin, direction, objects[i]);
+    const object = objects[i];
+    if (root >= 0 && object.type === "sphere") continue;
+    const hit = intersect(origin, direction, object);
     if (!hit) continue;
     if (!best || hit.t < best.t) best = hit;
   }
@@ -167,6 +358,7 @@ export const REFLECTION_STEPS = 4;
 const REFLECT_BIAS = 0.05;
 
 function hitNormal(hit) {
+  if (hit.normal) return hit.normal;
   const object = hit.object;
   if (!object || !hit.point) return [0, 0, 1];
   if (object.type === "sphere") {

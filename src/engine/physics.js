@@ -1,6 +1,10 @@
-// N-body step from blakelapierre/nbody-raycaster@4698794.
+// N-body step. Below 1000 bodies the pairwise pass predicts the separation.
+// At 1000 or more, gravity and Coulomb are the exact pair formula on current
+// positions (nbody-raycaster@6506c5e). The octree does not approximate forces.
 // Velocities are units per second. One tick advances 1/ticksPerStep seconds.
 // Game frames at 30 Hz use ticksPerStep 30. The toy solar system keeps 60.
+
+const EXACT_FORCE_AT = 1000;
 
 const scratch = {
   dd: [0, 0, 0],
@@ -17,6 +21,7 @@ export class Mass {
     this.velocity = velocity.slice();
     this.acceleration = [0, 0, 0];
     this.gravity = [0, 0, 0];
+    this.charge = 0;
     this.policy = "merge";
     this._visual = null;
     this._collision = null;
@@ -56,6 +61,7 @@ export function createUniverse(bodies, options = {}) {
     ticksPerStep: options.ticksPerStep ?? 60,
     stepsPerSecond: options.stepsPerSecond ?? 1,
     gravityConstant: options.gravityConstant ?? 6.67408e-7,
+    coulombConstant: options.coulombConstant ?? 0,
     speedlimit: options.speedlimit ?? 300000,
     events: [],
     collisionList: [],
@@ -95,7 +101,8 @@ export function tick(state) {
     mass.gravity[2] = 0;
   }
 
-  for (let i = 0; i < bodies.length; i++) {
+  if (bodies.length >= EXACT_FORCE_AT) exactBodyForces(state, collisionList);
+  else for (let i = 0; i < bodies.length; i++) {
     const a = bodies[i];
     for (let j = i + 1; j < bodies.length; j++) {
       const b = bodies[j];
@@ -114,7 +121,8 @@ export function tick(state) {
       const pv2z = p2[2] - a.position[2];
       const d1 = pv1x * pv1x + pv1y * pv1y + pv1z * pv1z;
       const d2 = pv2x * pv2x + pv2y * pv2y + pv2z * pv2z;
-      const scalar = a.mass * b.mass * state.gravityConstant;
+      const scalar = a.mass * b.mass * state.gravityConstant
+        - (state.coulombConstant || 0) * (a.charge || 0) * (b.charge || 0);
       if (d1 > 0) {
         const s = scalar / (d1 * Math.sqrt(d1));
         b.gravity[0] += pv1x * s;
@@ -163,6 +171,48 @@ export function tick(state) {
   return state;
 }
 
+function exactBodyForces(state, collisionList) {
+  const bodies = state.universe;
+  const n = bodies.length;
+  const G = state.gravityConstant;
+  const K = state.coulombConstant || 0;
+  for (let i = 0; i < n; i++) {
+    const a = bodies[i];
+    const pa = a.position;
+    const ga = a.gravity;
+    const qa = a.charge || 0;
+    const ma = a.mass;
+    const sa = a.collisionSize;
+    for (let j = i + 1; j < n; j++) {
+      const b = bodies[j];
+      const pb = b.position;
+      const dx = pb[0] - pa[0];
+      const dy = pb[1] - pa[1];
+      const dz = pb[2] - pa[2];
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (!(d2 > 1e-8)) continue;
+      const inv = (G * ma * b.mass - K * qa * (b.charge || 0)) / (d2 * Math.sqrt(d2));
+      ga[0] += dx * inv;
+      ga[1] += dy * inv;
+      ga[2] += dz * inv;
+      b.gravity[0] -= dx * inv;
+      b.gravity[1] -= dy * inv;
+      b.gravity[2] -= dz * inv;
+      const reach = sa + b.collisionSize;
+      if (d2 < reach * reach) {
+        if (ma <= b.mass) collisionList.push([a, b]);
+        else collisionList.push([b, a]);
+      }
+    }
+    if (ma !== 0) {
+      const invM = 1 / ma;
+      ga[0] *= invM;
+      ga[1] *= invM;
+      ga[2] *= invM;
+    }
+  }
+}
+
 function resolveCollisions(state, collisionList) {
   const absorbed = new Set();
   for (let i = 0; i < collisionList.length; i++) {
@@ -201,6 +251,7 @@ function merge(state, smaller, greater, absorbed) {
   greater.velocity[1] = (greater.velocity[1] * m1 + smaller.velocity[1] * m2) / total;
   greater.velocity[2] = (greater.velocity[2] * m1 + smaller.velocity[2] * m2) / total;
   greater.mass = total;
+  greater.charge = (greater.charge || 0) + (smaller.charge || 0);
   absorbed.add(smaller);
   removeBody(state, smaller);
   state.events.push(["absorbed", smaller, greater]);

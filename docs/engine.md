@@ -1,7 +1,7 @@
 # MERIDIAN
 ## Engine basis
 
-The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `37226b0afc58efc0ff93b5c18edd4679835408d4`. That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
+The primary renderer and the primary physics are the ones in [blakelapierre/nbody-raycaster](https://github.com/blakelapierre/nbody-raycaster), commit `6506c5e13b8c7fc9c137065c9cbbff5730791950`. That commit is the pin. A newer commit of that repo does not change Meridian until this pin moves.
 
 This file wins over [engineering.md](engineering.md) on what draws the frame and what integrates motion. It does not win on damage numbers, the keymap, the chunk hash, or packet layout.
 
@@ -25,14 +25,17 @@ A software raycaster into a 2D canvas. No WebGL and no WebGPU on this path.
 
 Default internal resolution is the demo's **160×90**, scaled up to the element. Raise it only after a frame of the Atoll holds. `imageSmoothingEnabled` stays false.
 
-The demo only intersects spheres. Meridian's `cast` keeps that loop and adds two tests in the same style, nearest `t` wins:
+The demo only intersects spheres. Meridian's `cast` keeps that loop and adds tests in the same style, nearest `t` wins:
 
 1. The integer crust. A raymarch over the samples in [crust.md](crust.md), not a sphere per voxel.
 2. Half-open boxes from `content/atoll.json` and placed pieces. Slab test.
+3. Analytic shapes from the pin: plane, disk, center-and-half box, capsule, cylinder, and triangle. A hit is any `t >= 0`. The 2 cm self-hit bias in the pen is not applied here, because a shot against a body at the muzzle would miss. The GPU picture still rejects `t <= 0.02`, which it already did for spheres.
+
+At 32 or more spheres the cast sorts them into the pin's octree and searches that. The octree only sorts and searches. It does not approximate a force. Boxes, the crust, and analytic shapes stay a linear test beside it. Past 64 spheres, if every leaf holds at most 8, the GPU picture uses the same tree (texture unit 15) instead of the direct sphere loop. A packed character puts more than 8 spheres in one 8 m cell, the pack fails, and that frame stays on the direct loop, which already runs to 384 spheres. A leaf the walk does not reach cannot drop a limb on the direct path.
 
 Bodies, the dummy, and projectiles stay spheres. A standing character is drawn as a sphere of radius **0.35 m** until a capsule intersection exists. That sphere is the picture. It is not the merge collider.
 
-The trace is drawn into one of three offscreen buffers. Every refresh copies the latest buffers to the canvas. The score is pixels times the displayed frame rate times speed squared times acceleration squared. The frame target is an inverse square of acceleration: it stays near 12 fps for a light acceleration and approaches the display refresh only as acceleration gets hard. A squared clamp and a cube both kinked. Putting velocity in that curve, either squared or as one over a square, missed the refresh at the start of a flick or blew up when the camera stopped, so speed is only in the score. With no acceleration the spare time down to 12 fps raises the resolution. The frame rate does not go below 12 while the camera is moving. Only a completely still camera may go slower, and that is when the picture climbs to native. A jump is vertical speed. Reported acceleration of 1 or more, including that rise, cuts a still picture to the display refresh on the same frame. A resolution change crossfades. Orbit trails from that pen are not drawn.
+The trace is drawn into one of three offscreen buffers. Every refresh copies the latest buffers to the canvas. The score is pixels times the displayed frame rate times speed squared times acceleration squared. The frame target is an inverse square of acceleration: it stays near 12 fps for a light acceleration and approaches the display refresh only as acceleration gets hard. A squared clamp and a cube both kinked. Putting velocity in that curve, either squared or as one over a square, missed the refresh at the start of a flick or blew up when the camera stopped, so speed is only in the score. With no acceleration the spare time down to 12 fps raises the resolution. The frame rate does not go below 12 while the camera is moving. Only a completely still camera may go slower, and that is when the picture climbs to native. A jump is vertical speed. Reported acceleration of 1 or more, including that rise, cuts a still picture to the display refresh on the same frame. A resolution change crossfades. Orbit trails from that pen are not drawn. The trace buffer is the canvas layout size. It is not multiplied by `devicePixelRatio`, which is the phone fix in that pin: a retina screen cannot fill a buffer the size of its physical pixels.
 
 ### Physics
 
@@ -41,9 +44,9 @@ The integrator in `tick`, the `Mass` record, and `createUniverse`.
 Each body has `position`, `velocity`, `acceleration`, `gravity`, `mass`, `size`, `collisionSize`, and `color`. One physics step is:
 
 1. `positionHalfTick` — move by half of `velocity / ticksPerStep`, then zero `gravity`.
-2. Pairwise gravity. Acceleration magnitude is `G * m / r^2`, applied along the separation using `r^3 = d * sqrt(d)` where `d` is distance squared. Keep that correction. The old `d` in the denominator was wrong.
+2. Pairwise gravity and Coulomb. Acceleration magnitude is `G * m / r^2` along the separation, using `r^3 = d * sqrt(d)` where `d` is distance squared. Coulomb is the same leapfrog with the opposite sign: the scalar is `G*m1*m2 - K*q1*q2`. Keep that correction. The old `d` in the denominator was wrong. Below 1000 bodies the separation is the predicted one. At 1000 or more it is the exact pair formula on the current positions. The octree is not used for either pass.
 3. `velocityTick` — `velocity += (acceleration + gravity) / ticksPerStep`, then the other half position step.
-4. Resolve overlaps.
+4. Resolve overlaps. A merge adds the charges.
 
 `acceleration` is control. `gravity` is only what the pairwise pass writes. The controller sets `acceleration` every tick. It does not accumulate.
 
@@ -93,7 +96,8 @@ The chunk hash does not include `Mass` positions. Float physics stays ephemeral,
 ```text
 src/engine/math.js        the vec3 and quaternion helpers the caster uses
 src/engine/physics.js     Mass, tick, createUniverse, collision policies
-src/engine/cast.js        project, cast, sphere, box, crust march
+src/engine/octree.js      sphere sort and ray search, not a force approximation
+src/engine/cast.js        project, cast, sphere, box, crust march, analytic shapes
 src/engine/frame.js       paintFrame
 src/engine/demo.js        the sun, three planets, and a moon, unchanged in spirit
 src/render/               calls paintFrame. Does not integrate
