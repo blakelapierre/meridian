@@ -74,6 +74,21 @@ test("receiver smooths a correction instead of snapping", () => {
   assert.ok(Math.hypot(...view.offset) < 0.01, "offset gone within ~0.4 s");
 });
 
+test("a client that has been running does not fling a peer who just joined", () => {
+  const view = createView();
+  const rec = createSendState();
+  const local = base.tick + 240;
+  receive(view, sendNow(rec, { ...base, mode: 1 }), local);
+  const seen = shown(view, local);
+  const sent = predict(rec.verified, base.tick);
+  assert.ok(Math.hypot(seen.p[0] - sent.p[0], seen.p[1] - sent.p[1]) < 0.02, `seen ${seen.p}`);
+  const later = shown(view, local + 15);
+  const expected = predict(rec.verified, base.tick + 15);
+  assert.ok(Math.hypot(later.p[0] - expected.p[0], later.p[1] - expected.p[1]) < 0.02, `later ${later.p}`);
+  const flung = predict(rec.verified, local);
+  assert.ok(Math.hypot(flung.p[0] - sent.p[0], flung.p[1] - sent.p[1]) > 1);
+});
+
 test("estimator recovers speed from local history", () => {
   const est = createEstimator();
   for (let t = 0; t < 12; t += 1) observe(est, t, [t * 0.2, 0, 0], 0); // 6 m/s

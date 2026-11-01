@@ -215,15 +215,18 @@ export function sendNow(rec, now, tierIndex = 3) {
 
 // Receiver: predicted pose plus a decaying offset that hides each correction.
 export function createView() {
-  return { state: null, offset: [0, 0, 0], yawOffset: 0, corrections: 0 };
+  return { state: null, offset: [0, 0, 0], yawOffset: 0, corrections: 0, arrivalTick: 0 };
 }
 
 export function receive(view, bytes, tick, floor) {
   const next = decodeMotion(bytes, floor);
   if (view.state && next.tick < view.state.tick) return false;
+  // `tick` is this page's sim clock, not the sender's. A client opened later is behind by
+  // every tick the others have already run, so predicting to the local tick flings them.
+  const arrival = tick ?? next.tick;
   if (view.state) {
-    const was = shown(view, tick);
-    const now = predict(next, tick);
+    const was = shown(view, arrival);
+    const now = predict(next, next.tick);
     view.offset = [0, 1, 2].map((k) => was.p[k] - now.p[k]);
     // A jump of more than 3 m is a teleport (respawn, tour): snap.
     if (Math.hypot(...view.offset) > 3) view.offset = [0, 0, 0];
@@ -231,12 +234,16 @@ export function receive(view, bytes, tick, floor) {
     view.corrections += 1;
   }
   view.state = next;
+  view.arrivalTick = arrival;
   return true;
 }
 
 export function shown(view, tick, dt = 1 / TICK_HZ) {
   if (!view.state) return null;
-  const base = predict(view.state, tick);
+  // Advance only by the ticks since this packet arrived, starting from the packet's own tick.
+  const elapsed = view.arrivalTick === undefined ? tick - view.state.tick : tick - view.arrivalTick;
+  const at = view.state.tick + Math.max(0, elapsed);
+  const base = predict(view.state, at);
   return { p: base.p.map((x, k) => x + view.offset[k]), yaw: wrapYaw(base.yaw + view.yawOffset), pitch: base.pitch };
 }
 

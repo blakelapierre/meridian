@@ -87,7 +87,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { createEstimator, createSendState, createView, estimate, isMotion, modeOf, observe, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=2";
+import { createEstimator, createSendState, createView, estimate, isMotion, modeOf, observe, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=3";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=2";
 import { createIdentity, exportKey, importKey, keyPhrase, recoveryPhrase, signBytes } from "../net/identity.js";
 import {
@@ -2632,14 +2632,15 @@ showChart();
 const FOLLOW_M = 3.5;
 
 // Everything a heard peer pose drives: interest, perception-paced refresh, strides, prints, follow.
-function acceptPeerPose(to, link, pose) {
+function acceptPeerPose(to, link, pose, live = false) {
   if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]), 80 + skills.mapping.value / 10)) return;
   // Perception sets net priority: peers near the focus update every tick, peripheral ones at the sight refresh period.
+  // A v3 pose is already the dead-reckoned draw for this tick, so it is applied every tick.
   const look = perception.focus.dir;
   const toward = [pose.x - player.position[0], pose.y - player.position[1], (pose.z || 0) - player.position[2]];
   const angle = Math.hypot(toward[0], toward[1]) > 0.5 ? angleBetween(look, toward) : 0;
   const nowMs = performance.now();
-  if (to !== followId && poses.has(to) && !refreshDue(perception, "sight", angle, nowMs - (poseSeenAt.get(to) || 0))) return;
+  if (!live && to !== followId && poses.has(to) && !refreshDue(perception, "sight", angle, nowMs - (poseSeenAt.get(to) || 0))) return;
   poseSeenAt.set(to, nowMs);
   poses.set(to, pose);
   const stride = hearStep(peerSteps.get(to) || null, [pose.x, pose.y]);
@@ -2656,7 +2657,7 @@ function stepPeers() {
     const seen = shown(link.view, tick);
     if (!seen) continue;
     settle(link.view);
-    acceptPeerPose(link.to, link, { tick, x: seen.p[0], y: seen.p[1], z: seen.p[2], yaw: seen.yaw, pitch: seen.pitch });
+    acceptPeerPose(link.to, link, { tick, x: seen.p[0], y: seen.p[1], z: seen.p[2], yaw: seen.yaw, pitch: seen.pitch }, true);
   }
 }
 
