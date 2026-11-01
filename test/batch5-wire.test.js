@@ -5,14 +5,14 @@ import { createIdentity } from "../src/net/identity.js";
 import { encodePrint } from "../src/net/prints.js";
 import { encodePosition, decodePosition } from "../src/net/position.js";
 import {
-  decodePoseV2, encodeDeflatedPack, encodePack, encodePoseV2, isPoseV2, packState, poseDue, readHello, helloMessage, unwrap, wrapYaw,
+  decodePoseV2, encodeDeflatedPack, encodePack, encodePoseV2, isPoseV2, packState, poseDue, readHello, helloMessage, unwrap, wrapYaw, PROTO,
 } from "../src/net/wire.js";
 import { createLighthouse } from "../tools/signal/server.js";
 import { WORLD_VERSION, FRAME_WIRE, loadWorld, migrateWorld } from "../src/sim/persist.js";
 
 test("hello round-trips and clamps proto", () => {
-  assert.deepEqual(readHello(helloMessage("abc")), { proto: 2, catalog: "abc" });
-  assert.equal(readHello('{"t":"hello","proto":9}').proto, 2);
+  assert.deepEqual(readHello(helloMessage("abc")), { proto: PROTO, catalog: "abc" });
+  assert.equal(readHello('{"t":"hello","proto":9}').proto, PROTO);
   assert.equal(readHello("garbage"), null);
 });
 

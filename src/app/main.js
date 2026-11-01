@@ -84,6 +84,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
+import { createEstimator, createSendState, createView, estimate, isMotion, modeOf, observe, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js";
 import { createIdentity, exportKey, importKey, keyPhrase, recoveryPhrase, signBytes } from "../net/identity.js";
 import {
@@ -622,7 +623,7 @@ if (kept && keepSlot) {
 if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 let linkNote = "";
 let lighthouseState = "off";
-const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0 };
+const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0, motionIn: 0 };
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const wear = keptWorld?.wear ? unpackWear(keptWorld.wear) : createWear();
 const wearFeet = new Map();
@@ -2356,7 +2357,7 @@ async function openLink(to, offer, role) {
     channel.binaryType = "arraybuffer";
     channels[spec[0]] = channel;
   }
-  const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc, proto: 1, packIn: packState(), packOut: packState(), loreIn: packState(), sent: null };
+  const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc, proto: 1, packIn: packState(), packOut: packState(), loreIn: packState(), sent: null, motion: createSendState(), view: createView() };
   channels.ctrl.onopen = () => {
     try {
       channels.ctrl.send(helloMessage(catalogHex));
@@ -2399,6 +2400,15 @@ async function openLink(to, offer, role) {
     net.snapIn += 1;
     const raw = new Uint8Array(event.data);
     let pose;
+    if (isMotion(raw)) {
+      // v3: keep the dead-reckoned state; the pose itself is drawn every tick by stepPeers().
+      try {
+        if (receive(link.view, raw, tick)) net.motionIn += 1;
+      } catch {
+        // A malformed state is dropped; the next send repairs it.
+      }
+      return;
+    }
     if (isPoseV2(raw)) {
       try {
         const next = decodePoseV2(raw);
@@ -2408,21 +2418,7 @@ async function openLink(to, offer, role) {
         return;
       }
     } else pose = acceptPosition(poses.get(to) || null, raw);
-    if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]), 80 + skills.mapping.value / 10)) return;
-    // Perception sets net priority: peers near the focus update every tick, peripheral ones at the sight refresh period.
-    const look = perception.focus.dir;
-    const toward = [pose.x - player.position[0], pose.y - player.position[1], (pose.z || 0) - player.position[2]];
-    const angle = Math.hypot(toward[0], toward[1]) > 0.5 ? angleBetween(look, toward) : 0;
-    const nowMs = performance.now();
-    if (to !== followId && poses.has(to) && !refreshDue(perception, "sight", angle, nowMs - (poseSeenAt.get(to) || 0))) return;
-    poseSeenAt.set(to, nowMs);
-    poses.set(to, pose);
-    const stride = hearStep(peerSteps.get(to) || null, [pose.x, pose.y]);
-    peerSteps.set(to, stride.at);
-    if (stride.cue) hearFrom(stride.cue, stride.at);
-    // Wire v2 peers send no print frames; each heard stride leaves the footprint here.
-    if (stride.cue && link.proto >= 2) addPrint(prints, { x: pose.x, y: pose.y, yaw: pose.yaw || 0, who: to });
-    if (to === followId) followed = pose;
+    acceptPeerPose(to, link, pose);
   };
   const linkLine = document.querySelector("#link");
   try {
@@ -2502,14 +2498,67 @@ showChart();
 
 const FOLLOW_M = 3.5;
 
+// Everything a heard peer pose drives: interest, perception-paced refresh, strides, prints, follow.
+function acceptPeerPose(to, link, pose) {
+  if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]), 80 + skills.mapping.value / 10)) return;
+  // Perception sets net priority: peers near the focus update every tick, peripheral ones at the sight refresh period.
+  const look = perception.focus.dir;
+  const toward = [pose.x - player.position[0], pose.y - player.position[1], (pose.z || 0) - player.position[2]];
+  const angle = Math.hypot(toward[0], toward[1]) > 0.5 ? angleBetween(look, toward) : 0;
+  const nowMs = performance.now();
+  if (to !== followId && poses.has(to) && !refreshDue(perception, "sight", angle, nowMs - (poseSeenAt.get(to) || 0))) return;
+  poseSeenAt.set(to, nowMs);
+  poses.set(to, pose);
+  const stride = hearStep(peerSteps.get(to) || null, [pose.x, pose.y]);
+  peerSteps.set(to, stride.at);
+  if (stride.cue) hearFrom(stride.cue, stride.at);
+  // Wire v2 peers send no print frames; each heard stride leaves the footprint here.
+  if (stride.cue && link.proto >= 2) addPrint(prints, { x: pose.x, y: pose.y, yaw: pose.yaw || 0, who: to });
+  if (to === followId) followed = pose;
+}
+
+// v3 peers: draw the shared prediction each tick, with the last correction fading out.
+function stepPeers() {
+  for (const link of links) {
+    const seen = shown(link.view, tick);
+    if (!seen) continue;
+    settle(link.view);
+    acceptPeerPose(link.to, link, { tick, x: seen.p[0], y: seen.p[1], z: seen.p[2], yaw: seen.yaw, pitch: seen.pitch });
+  }
+}
+
+const motionEst = createEstimator();
+let motionTick = -1;
+
 function publishPose() {
   if (followId) return;
   const pose = { tick, x: player.position[0], y: player.position[1], z: player.position[2], yaw, pitch };
   const packet = encodePosition(pose);
   let packetV2 = null;
   const nowMs = performance.now();
+  let motion = null;
+  if (tick !== motionTick) {
+    motionTick = tick;
+    observe(motionEst, tick, player.position, yaw);
+    stepPeers();
+  }
   for (const link of links) {
     // The archive never reads poses.
+    if (link.role !== "archive" && link.proto >= 3 && link.snap.readyState === "open") {
+      // v3: the receiver's own pose (as drawn here) plus our fov decides its tier; send on drift.
+      if (!motion) {
+        const e = estimate(motionEst);
+        const airborne = Math.abs(player.velocity?.[2] || 0) > 0.5;
+        motion = { tick, p: [...player.position], v: e.v, a: e.a, yaw, yawRate: e.yawRate, pitch, floor: player.position[2], mode: modeOf(e.v, airborne) };
+      }
+      const them = poses.get(link.to);
+      const view = them ? { x: them.x, y: them.y, yaw: them.yaw || 0, fov: 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * 16 / 9), range: 80 + skills.mapping.value / 10 } : null;
+      const tierIdx = tierFor(view, player.position);
+      if (!shouldSend(link.motion, motion, tierIdx)) continue;
+      net.snapOut += 1;
+      link.snap.send(sendNow(link.motion, motion, tierIdx));
+      continue;
+    }
     if (link.role === "archive") continue;
     const known = poses.get(link.to);
     const reach = 80 + skills.mapping.value / 10;

@@ -12,7 +12,7 @@
 //     its proposal, is sent as before + reference + after.
 //   deflated pack (archive replay/snapshots): 0xF3 + deflate-raw(pack body). It is
 //     self-contained: it uses a fresh key table and cache.
-export const PROTO = 2;
+export const PROTO = 3; // 3: dead-reckoned, interest-tiered poses (src/net/motion.js)
 export const POSE_V2 = 0xb2;
 export const PACK = 0xf2;
 export const PACK_DEFLATE = 0xf3;
