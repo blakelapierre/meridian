@@ -6,7 +6,7 @@
 
 ## Logline
 
-Meridian is a single planet with no shards, no session reset, and no one standing behind the gunfight but the people in it. You shoot with Counter-Strike clarity, dig and build with Wurm permanence, swear allegiance like Asheron’s Call, take the chair like Natural Selection or Savage, and run metal, flux, and wreck-reclaim like Total Annihilation. The map is a sphere. Down is the core. Night is a weapon. What you do to the crust is still there when you come back.
+Meridian is a single planet with no shards, no session reset, and no one standing behind the gunfight but the people in it. You shoot with Counter-Strike clarity and Team Fortress readability, dig and build with Wurm permanence, swear allegiance like Asheron’s Call, take the chair like Natural Selection or Savage, and run a metal-and-flux fight you can read the way Total Annihilation and Beyond All Reason do. The map is a sphere. Down is the core. Night is a weapon. What you do to the crust is still there when you come back.
 
 ## Pillars
 
@@ -27,9 +27,11 @@ Meridian is a single planet with no shards, no session reset, and no one standin
 | **Savage / Savage 2** | One commander on an overhead view directing real people; everyone else is the army. Economy, tech, and a stronghold that matters. Squads under officers. | Match maps, race lock, “destroy the lair and the server wipes.” |
 | **Natural Selection** | The chair is a place, and it is vulnerable. Team resources vs personal kit. Map control of extractors. Asymmetry that comes from doctrine, not from a species select screen. | A single skirmish map as the whole game. Commander as a different game you alt-tab into. |
 | **Counter-Strike** | Readable guns, utility, buy phase, site executes, economy that punishes throwing lives away. | A menu that is the world. Global round reset. Hitscan across a planetary horizon. |
+| **Team Fortress 2** | A job you can name at rifle range: the silhouette is the kit, not a class menu. A nest that holds a door, a beam you can see, a cart that is a body, movement paid for with the explosion that caused it. Paint and a cloth mark that do not change the shot. | The class select. Hats as the economy. Random crits. Invulnerability as a button. Respawn closets as the only death. A teleporter that deletes the map. |
 | **Total Annihilation** | Metal and energy, streaming *inside a connected base*, fabbers, wreck reclaim as the reason to fight in the open, ballistic artillery, commander as the best builder and a poor front-line brawler. | “Commander dies, game over.” Infinite metal makers as the optimal culture. A flat metal map. |
+| **Beyond All Reason** | The same economy as a picture: metal, flux, income, build power, and a stall you can see. Wrecks with a number on them. Overdrive, wind, and a reclaim beam. Tiers that are buildings you can lose. The army still exists after the best builder dies. Counters that are machines you brought, not a species you queued. | Resurrection. A faction select with two mirror races. Widgets that leak the enemy’s economy. A flat lobby map as the whole planet. |
 
-The spherical RTS lineage after TA (especially Planetary Annihilation) already showed that a planet can be a battlefield. Meridian’s bet is to put a persistent person on that sphere, with FPS hands, and to let them stay.
+The spherical RTS lineage after TA (especially Planetary Annihilation, and the readable eco fight BAR kept from that lineage) already showed that a planet can be a battlefield. Team Fortress 2 showed that the people on it can be told apart before the kill feed does it. Meridian’s bet is to put a persistent person on that sphere, with FPS hands, and to let them stay.
 
 ## Three clocks
 
@@ -50,7 +52,7 @@ flowchart TB
 
 **Hands** are the default. First person, on the crust, in whatever weather the planet is currently inflicting.
 
-**Strikes** are opt-in, time-boxed contracts over a specific place: a relay, a gate, a bomb-analog **core**, a mine mouth. Inside a strike, CS rules hold. Outside, they do not. You can walk to a strike. You do not queue into another game.
+**Strikes** are opt-in, time-boxed contracts over a specific place: a relay, a gate, a bomb-analog **core**, a mine mouth, or a **haul** whose cart is a body on a hill. Inside a strike, CS rules hold, and the jobs still have to be readable the way a payload lobby is readable. Outside, they do not. You can walk to a strike. You do not queue into another game.
 
 **Dominion** is the MMO. Allegiance, townships, industry, and scars that outlive the session. There is no global win. Regions change hands. The globe does not reboot.
 
@@ -79,6 +81,8 @@ Creation is a body and a key, not a role. Three **starting cultures** are equipm
 
 Skills rise by use. You may **train** widely and **specialize** only a few (marksmanship, close combat, breach, fieldcraft, surgery, building, mining, smithing, fabrication, survey, mapping, command, logistics, signals, husbandry, run). Specialization is public to your allegiance and slow to undo. A monarch who is also the best sniper and the best smith is a myth the system is built to prevent.
 
+Team Fortress 2’s classes are the lesson, and they are not the menu. A body stays one body. The back piece is the silhouette, and people call the job it is doing: a launcher, a beam, a nest frame, a long gun, a light pack. Hands and back may mix. You do not pick “Soldier” and become one. Paint, cloth, and a plate may sit on that silhouette. They do not change the hitbox, the armor, or the spread. A taunt locks the gun for its channel. It is not a buff. There is no hat market and no roll that sometimes deletes a person.
+
 There is no spellbook. Asheron’s schools survive as **practices**: war-magic becomes fire missions and guided munitions; life-magic becomes surgery, stims, and crops; item-magic becomes alloys and temper; creature-magic becomes lures and husbandry. All of them are devices or trained hands, with energy cost, windup, and a visible tell.
 
 **Resonance** — coherent stress in the deep crust — is the one uncanny force. It is rare, locational, and the planet notices when you use it. It is not a class.
@@ -101,6 +105,14 @@ Vehicles and aircraft have component damage, not a single bar. Tracks, rotors, m
 
 Artillery is ballistic and radial. Shells obey the curve and the wind. A ridge is cover until someone walks a fire mission over it, and someone must see to correct that mission.
 
+A tube can be locomotion. Firing it into the ground lofts the body, spends integrity, and is loud enough that the hill hears it. That is the rocket jump, without the class that owned it. It is not a free double jump.
+
+A **beam** is a held tether. While it is on, you are not shooting. Allies see it. Enemies see it. A stored **surge** is a short brace you choose to spend. It is bright. It is not invulnerability, and it is not a random crit. A heal with no tell is refused.
+
+A **nest** is three small machines one person can raise in a fight: a gun that watches a door, a drum that refills whoever stands next to it, and a **pair** — two mouths, a short walk between them, loud, and dead if either mouth breaks. The pair is not a portal. If it would delete the horizon, it is too long. A person in the doorway still beats the gun. The nest holds the corridor while you reload. It does not replace the person.
+
+Some contracts are a plant. Some are a **haul**: a cart that is a body, slower on a hill, pushable backward, won by where it sits. The objective is not a capture bar. If a contract uses a case, the case has weight. It does not teleport home.
+
 ## The crust is the map
 
 Near you, the ground is a **volumetric shell**, not a heightmap: dig, raise, tunnel, shore, flood. Caves are real voids with real supports. Far away, the same data collapses to a cheaper surface so the planet can exist.
@@ -122,7 +134,13 @@ Two stocks, TA’s pair, reinterpreted as geology:
 
 Streaming construction exists only on a **logistics graph**: roads, pipes, cables, radio. Inside the graph, a factory feels like TA. Beyond the last road, crates move on trucks, boats, and backs. Convoys are the midgame. Cutting a road is often worth more than winning a duel.
 
-Fabbers and player labor build the same structures. Fabbers are faster in the open and helpless in a smoked stairwell. The commander’s personal rig is the strongest builder in a company and a liability on the line, which is the TA lesson kept intact.
+Fabbers and player labor build the same structures. Fabbers are faster in the open and helpless in a smoked stairwell. The commander’s personal rig is the strongest builder in a company and a liability on the line, which is the TA lesson kept intact. Beyond All Reason’s correction stands next to it: the extractors, the army, and the wreck field do not vanish when that rig dies.
+
+The economy is a picture, not a spreadsheet you alt-tab into. Your graph shows metal, flux, income, and build power. A stall is visible to you, and anyone watching a fabber stop can infer it. Build power is the sum of the hammers and fabbers on that piece, capped so a crowd is not a cheat code. Extra flux forced into a live vein is **overdrive**: more metal, worse efficiency, a hotter machine. Wind gusts. Solar dies in the dark. Geothermal is a rift you have to hold.
+
+Wrecks carry a number you can read, and a beam you can point at them. Reclaim is the job. Standing the same machine back up is not. Scuttling your own piece is legal, loud, and leaves the enemy less metal than a proper wreck.
+
+Tiers are buildings. A **press** opens the next page of one shared catalog. Holds, Hosts, and Veil print from the same pages. What you paid to print is your doctrine. Lose the press and that page closes. Nobody levels into a tank. Radar and jammer are machines you brought. They are not a species.
 
 There is no global auction that teleports ore. Local boards and courier contracts only. Price differences between the day side and the night side are gameplay.
 
@@ -131,6 +149,8 @@ There is no global auction that teleports ore. Local boards and courier contract
 Any specialized commander at a live **war table** — a room, a crawler bridge, a field kit — may take the overhead of their company’s sensed world. The table is furniture. Destroy it and the commander is a person again, standing where the table was.
 
 From the chair you spend **team logistics**, not mana: queues, extractions, radar, fire missions, supply drops, fabber routes. You ping and order people. You do not pilot them. Personal kit is bought with what each soldier carried in or earned; the company wallet cannot dress a hero in a menu and skip the haul.
+
+The overview is the economy picture first and the map second. Four numbers for your graph, then the sensed world. It does not draw the enemy’s bars. You learn those from stalls, wrecks, and what their silhouette is carrying.
 
 Fog is physical. You see what sensors, eyes, and elevation have earned. The overview is not omniscience, and clients are not sent people they have no right to see.
 
@@ -148,7 +168,7 @@ Pass-up is not a hidden siphon of the vassal’s own skill. Vassals emit a **sur
 
 Identity is a key you hold, recovered by a phrase, not an account we own. Names can be vouched by an allegiance. A new key can always be minted; reputation does not follow it. Sybils are cheap, history is not.
 
-The fourth pressure is not a faction select. **The Litho** is the crust’s immune system: spore timber that eats unattended metal, burrow swarms in over-mined cells, storms that follow heavy resonance. It is NS’s “the other side” without forcing you to play an alien. Strip-mine a hemisphere and the hemisphere answers.
+The fourth pressure is not a faction select. **The Litho** is the crust’s immune system: spore timber that eats unattended metal, burrow swarms in over-mined cells, storms that follow heavy resonance. A heap of metal nobody is reclaiming can ring waves, the way a neglected base rings trouble. It is NS’s “the other side,” and BAR’s defense waves, without forcing you to queue as an alien. Strip-mine a hemisphere and the hemisphere answers.
 
 ## How it runs in a browser
 
@@ -193,7 +213,7 @@ Local firefights are capped in the dozens, not the hundreds. Past that, reinforc
 
 Minutes 0–3: a training atoll strike. One rifle, one piece of utility, one site. Die, reinsert, plant or defuse. No monarch, no ore, no globe curvature lecture.
 
-Minutes 3–20: wake on Cairn at a public hearth on the day side, in a fellowship with whoever else just arrived. Dig a trench, carry a crate, get shot at by something that is not a tutorial dummy, bind a hearth if you can afford the stone.
+Minutes 3–20: wake on Cairn at a public hearth on the day side, in a fellowship with whoever else just arrived. The second person should be nameable by their kit before you know their name. Dig a trench, carry a crate, get shot at by something that is not a tutorial dummy, and if something dies the wreck should look like metal rather than a machine that will stand back up. Bind a hearth if you can afford the stone.
 
 First session ends having seen all three clocks once, even briefly: a gun, a contract, a road or a patron’s offer. Command and resonance are withheld until the hands make sense. The planet is already persistent while you learn.
 
@@ -201,6 +221,8 @@ First session ends having seen all three clocks once, even briefly: a gun, a con
 
 - Not a theme park, a battle pass, or a match that calls itself an MMO.
 - Not three games in a launcher.
+- Not a class select, a hat economy, or a crit roll.
+- Not a rez bot. Wrecks are metal. They do not stand back up.
 - Not a blockchain. The log is content-addressed because peers need to agree, not because anyone should mint a kill.
 - Not full-Earth, full-path-traced, or fully Newtonian.
 - Not safe. Deeds are safer than wilderness. Nothing is safe from a patient neighbor.
@@ -215,9 +237,10 @@ These are unresolved on purpose.
 4. **Identity versus grief.** Keys without accounts will be abused. Vouching and witness-logs of structural harm are the tools; we do not yet know if they are enough.
 5. **Strike spectating.** Replays of witnessed fights are a natural esports layer and a cheating surface. Design them after the quorum is real.
 6. **Solo offline.** The seed can show you an empty Cairn. It must not pretend your deeds are safe when no archive holds them.
+7. **How far a pair may throw you.** Short and loud keeps the crust honest. The temptation is to stretch it until it becomes the portal the Asheron’s Call row already refuses.
 
 ## How we know it is working
 
-A new player has fired a rifle in a real contract within three minutes and can leave that contract on foot. A veteran can read a coastline: a drained bay, a slag field, a night-side fort whose geothermal stack is the only light on the curve. Two strangers can cut a road, and if someone pays the upkeep the road is still there next month. People plan offensives for dusk the way they plan executes for a site. Killing a commander does not end a war. Wrecking the road behind them might.
+A new player has fired a rifle in a real contract within three minutes and can leave that contract on foot. A stranger can shout the kit they see. A veteran can read a coastline: a drained bay, a slag field, a night-side fort whose geothermal stack is the only light on the curve. Two strangers can cut a road, and if someone pays the upkeep the road is still there next month. People plan offensives for dusk the way they plan executes for a site. Killing a commander does not end a war. The wrecks they leave are the next pile of metal, and nobody stands the same machine back up. A cart on a hill is an argument. The table shows a stall before the fabber admits it. Wrecking the road behind them might still matter more than the duel.
 
 The sentence the game is for: **we changed the planet, and the planet made that expensive.**

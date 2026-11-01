@@ -30,6 +30,10 @@ If a verb is not in this list, it is not in the game. New verbs are a spec chang
 | Swear, tithe, break allegiance | Dominion | |
 | Open or pay a deed | Dominion | |
 | Drive | Hands | Not in the first slice |
+| Channel a tether, or spend a surge | Hands | Not in the first slice. §5.8 |
+| Push a haul | Hands | Not in the first slice. §6.8 |
+| Scuttle a piece you may build | Hands | Not in the first slice. §11.5 |
+| Step through a pair | Hands | Not in the first slice. §9.3 |
 
 You never change character to do these. You change tools, or you sit down.
 
@@ -239,6 +243,17 @@ Reloading, swapping, and aim are inputs.
 | Any other new contract | Must say explicitly. The engine default is **on** |
 | Wilderness | On, including fellowship |
 
+### 5.8 Kits that read
+
+Not in the first slice. Not a class select. The largest worn or carried piece is the silhouette, and other players **MUST** be able to name it without a nameplate: launcher, beam, nest frame, long gun, or a light pack. Hands and back may mix. Paint, cloth, and a plate **MAY** sit on the body. They **MUST NOT** change hitboxes, armor, spread, or integrity. A taunt is a channel that locks fire. It **MUST NOT** apply a buff.
+
+| Id | Name | Reads as | Rule |
+|---|---|---|---|
+| `loft` | Loft | Tube on the back or in the hands | Always a projectile. Blast radius 3.5 m, 80 damage at the center falling to 0 at the edge, velocity 28 m/s. Mag 4, reload 3.2 s, 25 rpm, scrip 2800. Self-damage is 40% of the blast that reaches your own capsule, and that blast **MAY** add its impulse. There is no separate jump. Audible to 80 m. Spread in the air is the rifle’s air penalty, not an exemption |
+| `tether` | Tether | Chest rig and a visible beam | Channel, 8 m, facing required. 10 strike-health/s, or 4 wilderness integrity/s. Primary fire is locked while the channel holds. Surgery scales the channel time the way it scales a bandage. Six uninterrupted seconds store one surge. Spending it is a 2.5 s brace: damage taken × 0.45 for you and anyone tethered at the pop, wish speed × 0.85, a bright tell. It is not invulnerability. One charge. Allies and enemies both see the beam |
+
+A loft and a tether in the same hands are legal. The silhouette is whichever piece occupies the back. If neither does, the long gun or the light pack is the read. The atoll catalog **MUST NOT** enable these ids.
+
 ---
 
 ## 6. Strikes
@@ -296,7 +311,17 @@ During buy, a player **MAY** bond one wilderness item they own. It appears in th
 
 ### 6.7 What a strike is not
 
-No wilderness inventory in the buy menu. No hearth recall. No terraform. No war-table spend of team metal. Fellowship markers still work for people in the same contract.
+No wilderness inventory in the buy menu. No hearth recall. No terraform. No war-table spend of team metal. Fellowship markers still work for people in the same contract. `atoll-skirmish` is a plant contract only.
+
+### 6.8 The haul
+
+Not in the first slice. A different contract shape, id prefix `haul-`, never a mode flag on `atoll-skirmish`.
+
+- The cart is a body, about 2 m long, with weight. It is not a capture bar and not a prop that teleports.
+- One living player in contact moves it at **2.2 m/s** on flat ground. Slope multiplies that by the cosine of the grade. Above **25°** it does not climb unless two living players are in contact, and then only up to **20°** at **1.2 m/s**. The other side may push it backward under the same rule.
+- The route is a polyline in the contract. The side that keeps the cart’s center inside the end volume for **5 s** continuous wins the round. An outer timer still ends the contract; the cart’s distance along the route breaks a tie.
+- Reclaim and scuttle of the cart are refused for the life of the contract. Weapons may still damage it: 400 structure integrity, and at 0 it stops until a hammer spends 10 s, interruptible.
+- A carried case, if a contract uses one instead of a cart, uses the backpack mass rules and drops on death. It does not return home by itself.
 
 ---
 
@@ -410,6 +435,18 @@ Charges and weapons damage structure integrity only when the ruleset says the pi
 
 Wilderness pieces lose **1 integrity per cairn-day** of unpaid upkeep if they sit on a lapsed deed, and **0** while the deed is paid. Pieces with no deed, the “camp,” lose **1 per cairn-day** always. A person with a hammer can spend 2 metal to restore 25 integrity.
 
+### 9.3 The nest
+
+Not in the first slice. Three pieces, placed with the hammer, powered by flux, legal in the wilderness and only inside a strike if that contract names them. They are machines. A person with a mallet in the same doorway still wins.
+
+| Piece | Metal | Work | Rule |
+|---|---|---|---|
+| Sentry | 28 | 24 | 18 m vision trace. Hits like a weak line: chest 14, 200 rpm, no head bonus, stops in smoke. Draws 8 flux/min. Audible while firing |
+| Drum | 16 | 16 | 3 m. Restores strike reserve ammo slowly and channels the bandage’s heal for one strike body standing in it. 4 flux/min. Does not revive a downed wilderness body |
+| Pair mouth | 18 | 18 | Placed as a pair. Max separation **36 m**. Use is a 2.5 s channel. Audible to 40 m on use. If either mouth breaks, the link breaks. A pair longer than 36 m **MUST NOT** resolve |
+
+A pair is a short walk you built. It is not a portal, and it does not cross a cell boundary in this spec.
+
 ---
 
 ## 10. Land
@@ -469,8 +506,19 @@ Specified so the queue has a type, not built in the slice:
 | Hauler | 40 | 10 | Carries 200 metal at 8 m/s. The crawler |
 | Fabber | 60 | 20 | Builds and reclaims |
 | Lamp | 5 | 1 | A sensor mast, 80 m vision trace |
+| Jammer | 30 | 15 | Cancels lamp vision inside 50 m. Does not hide a body from eyes, and does not hide a silhouette |
 
-No aircraft, no boats, no commander unit that dies to end the war.
+No aircraft, no boats, no commander unit that dies to end the war. A destroyed unit leaves a wreck worth **70%** of its metal under the reclaim rule. Nothing resurrects that unit in place. The metal is the wreck, or it is gone.
+
+### 11.5 Flow
+
+Not in the first slice, except that the words are reserved so the table and the log can grow into them.
+
+- **Build power** is the sum of the work rates of every hammer and fabber within 3 m of the piece. The sum **MUST** cap at **6 work/s**. Ten people do not finish a wall in a second.
+- **Stall.** A queue that lacks metal or flux pauses. The table shows which bar is empty. Neighbors are not sent that number. They can see a fabber stop.
+- **Overdrive.** A live vein extractor **MAY** be ordered to spend 80 flux/min for +1 metal/min, and it loses 1 integrity/min while that order holds. If flux income cannot cover it, the extra metal stops first. The base 2 metal/min does not become free.
+- **Scuttle.** An owner, or a key with `build`, channels 2 s. The piece collapses to a crate of **20%** of its metal, rounded down, not the reclaim 70%. Audible to 40 m. Refused on a hearth that still has a living bind, and refused on a haul cart during its contract.
+- **Press.** Metal 80, work 40. While it stands and is powered, the connected graph may queue page-two records: hauler, fabber, jammer, loft, sentry, drum, pair mouth. Destroy the press and those queues cancel. Pieces already printed remain. Page one is the camp catalog in §9. Tiers are this building, not a character level. Holds, Hosts, and Veil use the same pages.
 
 ---
 
@@ -487,6 +535,8 @@ No aircraft, no boats, no commander unit that dies to end the war.
 - Pan on the WASD of the table, zoom with the wheel. This is not a vehicle: A pans left, it does not yaw the planet.
 
 Command skill raises the table’s sensor radius: 200 m at 0, which is useless for the spec because you cannot sit without the specialization, and **+20 m per 10 skill** once specialized. Specializing Command at skill 0 is legal and weak.
+
+While seated, the table **MUST** show four numbers for the connected graph only: metal on hand, flux on hand, net per minute of each, and build power in use. Enemy stocks are not a field in the packet. Killing the commander does not zero those stocks. The graph keeps them.
 
 A company with no one at the table still functions. It hauls.
 
@@ -514,7 +564,7 @@ Success is defined per skill: a certified hit for marksmanship, a certified edit
 | Fieldcraft | Sprint drain × `1 - 0.30 * skill/140`. Fall damage × the same factor |
 | Run | Sprint speed × `1 + 0.35 * skill/140`. Walking speed is unchanged |
 | Agility | Sprint speed × `1 + 0.5 * skill/140` (cap **1.5×**), jump height × `1 + 0.4 * skill/140` (cap **1.4×**), keyboard turn (A/D) × `1 + 0.5 * skill/140` (cap **1.5×**). Caps are reached only at 140 (specialized); at 100 it is about 1.36× / 1.29× / 1.36×. Stacks with Run and Jump. Mouse and touch look are not scaled. Gained by sprinting and jumping (one use per second at most). `src/sim/agility.js` |
-| Surgery | Bandage and splint times × `1 - 0.40 * skill/140` |
+| Surgery | Bandage and splint times × `1 - 0.40 * skill/140`. The tether’s channel uses the same factor. The surge’s length does not |
 | Building | Structure piece integrity starts at `80 + skill/140*40`. Place work time down by the same fraction as surgery |
 | Mining | Terraform rate, §7 |
 | Smithing | Crafted weapon quality roll ceiling. The roll is `20 + skill * 80/140`, seeded, then clamped to 100 |
@@ -687,7 +737,7 @@ These are player tests, not packet tests. The packet tests in the WebRTC spec st
 
 ### 18.4 Explicitly not in the slice
 
-Allegiance UI, patronage, deeds beyond “you may place in the yard,” war table, fabber, crawler, cracker, vein, Litho creatures, farming, quality rolls on a bench rifle, voice, more than one site, a globe you can walk off. The sea is a boundary. Radial gravity is still the gravity function.
+Allegiance UI, patronage, deeds beyond “you may place in the yard,” war table, fabber, crawler, cracker, vein, Litho creatures, farming, quality rolls on a bench rifle, voice, more than one site, a globe you can walk off. The sea is a boundary. Radial gravity is still the gravity function. Also not in the slice, even though the rules above reserve them: loft, tether, surge, sentry, drum, pair, haul, press, jammer, overdrive, scuttle.
 
 The catalog records for deferred pieces **SHOULD** exist as data with `enabled: false` so the schema is exercised. The sim **MUST NOT** spawn them.
 
@@ -738,6 +788,7 @@ The slice needs these and no others:
 | Hammer | The piece list you can afford |
 | Death | Strike: “reinserting.” Wilderness: the recall |
 | Debug | Sun multiplier, chunk hash, buffered bytes. Off unless asked |
+| Flow | Later. The four numbers in §12. Not a second minimap, and not the enemy’s bars |
 
 No minimap of other players. No allegiance panel. No quest log. Prompts are one line, in the world, not a tutorial modal chain. The first beach crate can have a paper inside it with four lines: compound is north, bit digs, hearth binds, fin drinks sun. That paper is the tutorial.
 

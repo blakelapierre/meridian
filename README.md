@@ -48,7 +48,7 @@ npm start                     # dev server on :8080, signaling on :8787
 
 ## Docs
 
-- [Concept](docs/concept.md) — fantasy, pillars, and what is inherited from Asheron's Call, Wurm Online, Savage, Natural Selection, Counter-Strike, and Total Annihilation.
+- [Concept](docs/concept.md) — fantasy, pillars, and what is inherited from Asheron's Call, Wurm Online, Savage, Natural Selection, Counter-Strike, Team Fortress 2, Total Annihilation, and Beyond All Reason.
 - [Game spec](docs/game.md) — player-facing rules, numbers, and the Atoll slice.
 - [WebRTC spec](docs/implementation-webrtc.md) — how peers agree. Packets, quorum, and the op log.
 - [Engine basis](docs/engine.md) — the nbody-raycaster commit that is the renderer and the physics.
