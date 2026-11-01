@@ -84,6 +84,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
+import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js";
 import { createIdentity, exportKey, importKey, keyPhrase, recoveryPhrase, signBytes } from "../net/identity.js";
 import {
   acceptSheet,
@@ -749,6 +750,22 @@ function pump(link) {
   const channel = link.ops;
   if (!queue || !queue.length || channel.readyState !== "open") return;
   while (queue.length && channel.bufferedAmount < 65536) {
+    // Wire v2: one pack per pump carries every queued signed frame (up to about 16 KB).
+    if ((link.proto || 1) >= 2 && packable(queue[0])) {
+      let take = 0;
+      let size = 0;
+      while (take < queue.length && packable(queue[take]) && size < 16384) size += queue[take++].length;
+      const batch = queue.slice(0, take);
+      const saved = { keys: [...link.packOut.keys], cache: [...link.packOut.cache] };
+      try {
+        channel.send(encodePack(batch, link.packOut));
+      } catch {
+        link.packOut = saved;
+        return;
+      }
+      queue.splice(0, take);
+      continue;
+    }
     try {
       channel.send(queue[0]);
     } catch {
@@ -819,7 +836,11 @@ function sendOps(frame) {
     if (peer) shotFrames.push(frame);
     return;
   }
-  for (const link of open) enqueue(link, [frame]);
+  for (const link of open) {
+    // Wire v2 peers derive footprints from poses, and the archive never keeps them.
+    if (frame[0] === 14 && (link.role === "archive" || (link.proto || 1) >= 2)) continue;
+    enqueue(link, [frame]);
+  }
 }
 const shotFrames = [];
 
@@ -2335,7 +2356,30 @@ async function openLink(to, offer, role) {
     channel.binaryType = "arraybuffer";
     channels[spec[0]] = channel;
   }
-  const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc };
+  const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc, proto: 1, packIn: packState(), packOut: packState(), loreIn: packState(), sent: null };
+  channels.ctrl.onopen = () => {
+    try {
+      channels.ctrl.send(helloMessage(catalogHex));
+    } catch {
+      // No hello means the other side treats this link as v1.
+    }
+  };
+  channels.ctrl.onmessage = (event) => {
+    const hello = readHello(event.data);
+    if (!hello) return;
+    if (hello.catalog && !acceptHello(catalogHex, hello.catalog)) report = "catalog";
+    link.proto = hello.proto;
+  };
+  const deliver = (bytes, state) => {
+    let frames;
+    try {
+      frames = unwrap(bytes, state);
+    } catch {
+      return;
+    }
+    if (frames instanceof Promise) frames.then((list) => { for (const frame of list) onOps(frame, to); }).catch(() => {});
+    else for (const frame of frames) onOps(frame, to);
+  };
   links.push(link);
   if (!ops) ops = channels.ops;
   channels.ops.onopen = () => {
@@ -2345,15 +2389,25 @@ async function openLink(to, offer, role) {
   };
   channels.lore.onmessage = (event) => {
     net.loreIn += 1;
-    onOps(new Uint8Array(event.data), to);
+    deliver(new Uint8Array(event.data), link.loreIn);
   };
   channels.ops.onmessage = (event) => {
     net.opsIn += 1;
-    onOps(new Uint8Array(event.data), to);
+    deliver(new Uint8Array(event.data), link.packIn);
   };
   channels.snap.onmessage = (event) => {
     net.snapIn += 1;
-    const pose = acceptPosition(poses.get(to) || null, new Uint8Array(event.data));
+    const raw = new Uint8Array(event.data);
+    let pose;
+    if (isPoseV2(raw)) {
+      try {
+        const next = decodePoseV2(raw);
+        const latest = poses.get(to);
+        pose = latest && next.tick < latest.tick ? latest : next;
+      } catch {
+        return;
+      }
+    } else pose = acceptPosition(poses.get(to) || null, raw);
     if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]), 80 + skills.mapping.value / 10)) return;
     // Perception sets net priority: peers near the focus update every tick, peripheral ones at the sight refresh period.
     const look = perception.focus.dir;
@@ -2366,6 +2420,8 @@ async function openLink(to, offer, role) {
     const stride = hearStep(peerSteps.get(to) || null, [pose.x, pose.y]);
     peerSteps.set(to, stride.at);
     if (stride.cue) hearFrom(stride.cue, stride.at);
+    // Wire v2 peers send no print frames; each heard stride leaves the footprint here.
+    if (stride.cue && link.proto >= 2) addPrint(prints, { x: pose.x, y: pose.y, yaw: pose.yaw || 0, who: to });
     if (to === followId) followed = pose;
   };
   const linkLine = document.querySelector("#link");
@@ -2448,22 +2504,27 @@ const FOLLOW_M = 3.5;
 
 function publishPose() {
   if (followId) return;
-  const packet = encodePosition({
-    tick,
-    x: player.position[0],
-    y: player.position[1],
-    z: player.position[2],
-    yaw,
-    pitch,
-  });
+  const pose = { tick, x: player.position[0], y: player.position[1], z: player.position[2], yaw, pitch };
+  const packet = encodePosition(pose);
+  let packetV2 = null;
+  const nowMs = performance.now();
   for (const link of links) {
+    // The archive never reads poses.
+    if (link.role === "archive") continue;
     const known = poses.get(link.to);
     const reach = 80 + skills.mapping.value / 10;
     if (known && !inInterest(Math.hypot(known.x - player.position[0], known.y - player.position[1]), reach)) continue;
-    if (link.snap.readyState === "open") {
+    if (link.snap.readyState !== "open") continue;
+    if (link.proto >= 2) {
+      if (!poseDue(link.sent, pose, nowMs)) continue;
+      link.sent = { ...pose, at: nowMs };
+      packetV2 ||= encodePoseV2(pose);
       net.snapOut += 1;
-      link.snap.send(packet);
+      link.snap.send(packetV2);
+      continue;
     }
+    net.snapOut += 1;
+    link.snap.send(packet);
   }
 }
 

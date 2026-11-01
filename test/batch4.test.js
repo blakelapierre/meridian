@@ -68,6 +68,6 @@ test("v1 world saves migrate to 25 cm voxels and drop voxel-indexed frames", () 
   for (const [k, s] of world.crust) crust.overrides.set(k, s);
   assert.equal(columnFloor(crust, 1.1, 1.6), -0.5);
   saveWorld(store, world, "w");
-  assert.equal(JSON.parse(store.get("w")).version, 2);
+  assert.equal(JSON.parse(store.get("w")).version, WORLD_VERSION);
   assert.equal(migrateWorld(world), world);
 });

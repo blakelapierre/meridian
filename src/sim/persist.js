@@ -301,12 +301,17 @@ export function loadPlate(store, slot = "self") {
 }
 
 // World save format. 1 (unversioned): crust keys on a 50 cm voxel grid. 2: 25 cm voxels plus wear.
-export const WORLD_VERSION = 2;
+// 3: frames are tagged with the wire format they are stored in (`frameWire`). Frames stay as verbatim
+// v1 signed frames (hex), which every peer and old build can read. The archive may also keep a
+// `replay` field: a base64 wire-v2 deflated pack of the same frames, rebuilt whenever `replayOf`
+// no longer matches the frame list.
+export const WORLD_VERSION = 3;
+export const FRAME_WIRE = "v1-hex";
 // Frame kinds whose payload carries voxel indices (terrain ops 1-4, terrain chain blocks 11).
 const VOXEL_FRAME_KINDS = new Set([1, 2, 3, 4, 11]);
 
 export function emptyWorld() {
-  return { version: WORLD_VERSION, blocks: [], frames: [], sheets: {} };
+  return { version: WORLD_VERSION, blocks: [], frames: [], sheets: {}, frameWire: FRAME_WIRE };
 }
 
 // v1 -> v2: each 50 cm voxel override becomes the 8 25 cm voxels it covers, with its signed distance
@@ -314,7 +319,10 @@ export function emptyWorld() {
 // chain blocks name old indices and cannot be re-signed, so they are dropped; the expanded crust
 // snapshot already holds their result. Wall/yard frames use the separate 0.5 m build grid and stay.
 export function migrateWorld(world) {
-  if ((world.version || 1) >= WORLD_VERSION) return world;
+  const version = world.version || 1;
+  if (version >= WORLD_VERSION) return world;
+  // v2 -> v3 only adds the frame wire tag; the frames themselves are already verbatim v1.
+  if (version === 2) return { ...world, version: WORLD_VERSION, frameWire: FRAME_WIRE };
   const crust = [];
   for (const [key, sample] of world.crust || []) {
     const [i, j, k] = String(key).split(",").map(Number);
@@ -325,7 +333,7 @@ export function migrateWorld(world) {
     }
   }
   const frames = (world.frames || []).filter((text) => !VOXEL_FRAME_KINDS.has(parseInt(String(text).slice(0, 2), 16)));
-  return { ...world, version: WORLD_VERSION, blocks: [], frames, crust };
+  return { ...world, version: WORLD_VERSION, blocks: [], frames, crust, frameWire: FRAME_WIRE };
 }
 
 export function loadWorld(store, key = "meridian-world") {
@@ -340,6 +348,9 @@ export function loadWorld(store, key = "meridian-world") {
       sheets: parsed.sheets && typeof parsed.sheets === "object" ? parsed.sheets : {},
       crust: Array.isArray(parsed.crust) ? parsed.crust : [],
       wear: typeof parsed.wear === "string" || Array.isArray(parsed.wear) ? parsed.wear : undefined,
+      frameWire: typeof parsed.frameWire === "string" ? parsed.frameWire : undefined,
+      replay: typeof parsed.replay === "string" ? parsed.replay : undefined,
+      replayOf: typeof parsed.replayOf === "string" ? parsed.replayOf : undefined,
     });
     // Write a migrated save back at once so the old grid is never read again.
     if (parsed.version !== WORLD_VERSION) saveWorld(store, world, key);
@@ -350,7 +361,7 @@ export function loadWorld(store, key = "meridian-world") {
 }
 
 export function saveWorld(store, world, key = "meridian-world") {
-  store.set(key, JSON.stringify({ ...world, version: WORLD_VERSION }));
+  store.set(key, JSON.stringify({ ...world, version: WORLD_VERSION, frameWire: FRAME_WIRE }));
 }
 
 export function packBlock(block) {
