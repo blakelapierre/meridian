@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { duneHeight, fauna, floraBoxes, groundLook, HILL, standHeight } from "../src/sim/life.js";
+import { duneHeight, fauna, floraBoxes, groundLook, gullParts, HILL, standHeight } from "../src/sim/life.js";
 
 test("hills reach about three body heights and a pit is still the floor", () => {
   let low = 99;
@@ -45,4 +45,35 @@ test("the crab steps away and the plants sit on the roll", () => {
     assert.ok(plant.max[2] > plant.min[2]);
     assert.ok(plant.min[2] > -0.5);
   }
+});
+
+test("the gull has a wingspan, a beak, and a wingbeat", () => {
+  const gull = fauna(0, [80, 80]).find((animal) => animal.kind === "gull");
+  const later = gullParts(420);
+  assert.ok(gull.parts.length >= 24, gull.parts.length);
+  let reach = 0;
+  for (const part of gull.parts) {
+    reach = Math.max(reach, Math.hypot(part.at[0] - gull.at[0], part.at[1] - gull.at[1], part.at[2] - gull.at[2]));
+  }
+  assert.ok(reach > 0.8, reach);
+  const pose = gullParts(0);
+  const forward = [Math.sin(pose.yaw), Math.cos(pose.yaw), 0];
+  const beak = pose.parts.find((part) => part.color[0] > 0.8 && part.color[1] < 0.8);
+  assert.ok(beak);
+  const ahead = (beak.at[0] - pose.at[0]) * forward[0] + (beak.at[1] - pose.at[1]) * forward[1];
+  assert.ok(ahead > 0.3, ahead);
+  assert.ok(pose.parts.some((part) => part.color[0] < 0.2));
+  const tipLift = (frame) => {
+    let best = null;
+    let far = -1;
+    for (const part of frame.parts) {
+      const flat = Math.hypot(part.at[0] - frame.at[0], part.at[1] - frame.at[1]);
+      if (flat > far) {
+        far = flat;
+        best = part;
+      }
+    }
+    return best.at[2] - frame.at[2];
+  };
+  assert.ok(Math.abs(tipLift(pose) - tipLift(later)) > 0.08);
 });

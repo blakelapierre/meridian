@@ -4,7 +4,7 @@ import { chaseOrigin, playerParts } from "../sim/body.js?v=52";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
-import { duneHeight, fauna, floraBoxes } from "../sim/life.js?v=69";
+import { duneHeight, fauna, floraBoxes } from "../sim/life.js?v=70";
 import { PEOPLE } from "../sim/people.js?v=1";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
@@ -105,14 +105,17 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
   }
   for (const box of floraBoxes()) objects.push(box);
   for (const animal of fauna(Date.now(), feet)) {
-    objects.push({
-      type: "sphere",
-      origin: animal.at,
-      radius: animal.radius,
-      color: animal.color,
-      reflectivity: 0.02,
-      body: animal.kind,
-    });
+    const parts = animal.parts?.length ? animal.parts : [animal];
+    for (const part of parts) {
+      objects.push({
+        type: "sphere",
+        origin: part.at,
+        radius: part.radius,
+        color: part.color,
+        reflectivity: 0.03,
+        body: animal.kind,
+      });
+    }
   }
   for (const person of PEOPLE) {
     const z = duneHeight(person.at[0], person.at[1]);
