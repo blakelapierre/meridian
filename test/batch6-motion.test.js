@@ -139,6 +139,19 @@ test("a dropped correction is resent until the peer confirms it", () => {
   assert.equal(shouldSend(near, { ...moved, tick: 1008 }, 0), null);
 });
 
+test("a page behind 30 Hz sends before that coast leaves the body", () => {
+  const rec = createSendState();
+  const now = { tick: 1000, p: [0, 0, 0], v: [6, 0, 0], a: [0, 0, 0], yaw: 0, yawRate: 0, pitch: 0, floor: 0, mode: 1, wallMs: 5000 };
+  sendNow(rec, now, 2);
+  noteAck(rec, rec.verified.tick);
+  const tick = now.tick + 10;
+  const matched = predict(rec.verified, tick);
+  const slow = { ...now, tick, p: matched.p, yaw: matched.yaw, wallMs: now.wallMs + 1000 };
+  assert.equal(shouldSend(rec, slow, 2), "wall");
+  const kept = { ...slow, wallMs: now.wallMs + (10 / 30) * 1000 };
+  assert.equal(shouldSend(rec, kept, 2), null);
+});
+
 test("simulated 10 clients: v3 is far cheaper than v2 with small near error", () => {
   const v2 = simulate({ n: 10, seconds: 20, mode: "v2" });
   const v3 = simulate({ n: 10, seconds: 20, mode: "v3" });

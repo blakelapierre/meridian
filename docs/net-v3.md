@@ -9,6 +9,7 @@ Negotiated with the existing ctrl hello (`proto: 3`). Peers that say 1 or 2 keep
 * **Sender estimates** velocity, acceleration and yaw rate from its local history (least squares). Acceleration is clamped to ±8 m/s² (±12 vertical).
 * **Send triggers** per receiver: first, movement mode change (idle/move/air), the receiver moving into a sharper tier,
   a yaw turn > 0.3 rad (that steers *their* frustum test), drift past the tier's error, a loss guard (the previous state has drifted badly too), keepalive.
+  A page behind 30 Hz also sends when a receiver still coasting at 30 Hz would be more than 1.25 m off. The tick prediction can match while that coast cannot.
 * **Tiers** come from the receiver's own pose as we draw it plus fov and perception range. No view messages are sent.
 
 | tier | when | error | max rate | keepalive |

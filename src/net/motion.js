@@ -15,6 +15,7 @@ export const POSE_V3 = 0xb3;
 export const TICK_HZ = 30;
 export const CORRECT_S = 0.2;
 const MAX_PREDICT_S = 1.5; // past this, hold position rather than extrapolate into walls
+const WALL_COAST_M = 1.25; // a 30 Hz coast this far off the body is resent, even when the tick prediction still matches
 const A_MAX = [8, 8, 12]; // m/s^2
 const ACCEL_S = 0.5; // acceleration only shapes the first half second
 
@@ -190,7 +191,7 @@ export function isMotion(bytes) {
 
 // Sender: one record per receiver.
 export function createSendState() {
-  return { verified: null, acked: null, ackTick: -1, sent: [], lastTick: -1e9, mode: -1, tier: 3 };
+  return { verified: null, acked: null, ackTick: -1, sent: [], lastTick: -1e9, mode: -1, tier: 3, sentWallMs: null };
 }
 
 export function noteAck(rec, tick) {
@@ -217,6 +218,14 @@ export function shouldSend(rec, now, tierIndex) {
   // minGap caps chatter that is still inside the tier's error. A sprint covers the unseen
   // 1 m bound in a handful of ticks, so the bound has to be allowed to send inside the gap.
   if (err > tier.err && gap >= 1) return "error";
+  // The receiver coasts by wall time. A page behind 30 Hz still matches its own tick
+  // prediction, so it would not send, and the peer holds a 30 Hz coast until keepalive.
+  if (gap >= 1 && Number.isFinite(now.wallMs) && Number.isFinite(rec.sentWallMs)) {
+    const dtSec = Math.max(0, Math.min(MAX_PREDICT_S, (now.wallMs - rec.sentWallMs) / 1000));
+    const wallGuess = predict(rec.verified, rec.verified.tick + dtSec * TICK_HZ);
+    const wallErr = Math.hypot(wallGuess.p[0] - now.p[0], wallGuess.p[1] - now.p[1], wallGuess.p[2] - now.p[2]);
+    if (wallErr > WALL_COAST_M) return "wall";
+  }
   // A coarse tier will not send again while its newest state still predicts the body.
   // If the peer has not confirmed that state, it is still on the last one it acked,
   // and one missed sprint correction is how a pose ends up 7 m off.
@@ -240,6 +249,7 @@ export function sendNow(rec, now, tierIndex = 3) {
   rec.verified = state;
   rec.lastTick = now.tick;
   rec.mode = now.mode;
+  if (Number.isFinite(now.wallMs)) rec.sentWallMs = now.wallMs;
   return bytes;
 }
 

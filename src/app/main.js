@@ -98,7 +98,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { ackMessage, createEstimator, createSendState, createView, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=6";
+import { ackMessage, createEstimator, createSendState, createView, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=7";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=2";
 import { carryPhrase, createIdentity, exportKey, importKey, importPhrase, keyPhrase, packBook, recoveryPhrase, rememberKey, restoreKey, signBytes, unpackBook } from "../net/identity.js";
 import {
@@ -2996,7 +2996,7 @@ function publishPose() {
       if (!motion) {
         const e = estimate(motionEst);
         const airborne = Math.abs(player.velocity?.[2] || 0) > 0.5;
-        motion = { tick, p: [...player.position], v: e.v, a: e.a, yaw, yawRate: e.yawRate, pitch, floor: player.position[2], mode: modeOf(e.v, airborne) };
+        motion = { tick, p: [...player.position], v: e.v, a: e.a, yaw, yawRate: e.yawRate, pitch, floor: player.position[2], mode: modeOf(e.v, airborne), wallMs: nowMs };
       }
       const them = poses.get(link.to);
       const view = them ? { x: them.x, y: them.y, yaw: them.yaw || 0, fov: link.fov || 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * 16 / 9), range: 80 + skills.mapping.value / 10 } : null;
