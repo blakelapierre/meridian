@@ -10,16 +10,16 @@ Off the beach, once the resonance word is showing, one swarm sphere stands near 
 
 ## This pass
 
-A spore spreads to the other atoll cell.
+A dig on the beach can be answered. The off-beach swarm is unchanged.
 
 ## Proves
 
-`test/slice.test.js` covers the two cells.
+`test/slice.test.js` covers the answer. `test/pass.test.js` still has no swarm on the beach.
 
 ## Next
 
-A crust that answers a dig on the beach. Not in this build.
+More than one swarm. Not in this build.
 
 ## Later
 
-More than one swarm.
+The beach answer is a mark, not a second swarm.

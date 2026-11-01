@@ -10,16 +10,16 @@ Once a minute a bound hearth spends 1 metal. If you cannot pay, the claim lapses
 
 ## This pass
 
-The deed a peer checks carries grace, the cell, the holder, and the radius.
+A lapse is sent. The other client is told.
 
 ## Proves
 
-`test/slice.test.js` covers the grace flag on that deed.
+`test/slice.test.js` covers the message.
 
 ## Next
 
-A deed that lapses in front of the other client. Not in this build.
+Keys you can hand over. Not in this build.
 
 ## Later
 
-Keys you can hand over.
+A key is still only granted on this client.

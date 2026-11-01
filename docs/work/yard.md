@@ -8,16 +8,16 @@ F places a floor for 2 stone. A post may stand on that floor, and the floor coun
 
 ## This pass
 
-A beam holds a floor.
+A door on a beam closes that span.
 
 ## Proves
 
-`test/slice.test.js` covers the held flag.
+`test/slice.test.js` covers the closed span.
 
 ## Next
 
-Doors that close a span. Not in this build.
+Deed masks. Not in this build.
 
 ## Later
 
-Collapse into a crate you can see. Deed masks.
+Collapse already leaves a crate.

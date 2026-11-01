@@ -10,16 +10,16 @@ Using the table while you are beside it and not in a strike sits you down. Walki
 
 ## This pass
 
-The order is given to the other bodies, not only drawn on the chart.
+The company can refuse. 4 sends the refusal. The line says `ordered hold` until they do.
 
 ## Proves
 
-`test/slice.test.js` covers the order word on an id. The chart still draws `hold`.
+`test/slice.test.js` covers the refusal.
 
 ## Next
 
-A company that can refuse. Not in this build.
+A chair that can be broken. Not in this build.
 
 ## Later
 
-A chair that can be broken.
+The table still cannot be broken.

@@ -52,3 +52,11 @@ export function takeTold(notes, skills, line, by = "", sig = 0) {
   if (notes.length > 12) notes.shift();
   return note;
 }
+
+// The paper is an object. Picking it up is what makes the sentence yours to read.
+export function pickupPaper(paper) {
+  if (!paper || paper.kind !== "paper") return null;
+  const text = String(paper.text || paper.detail || "");
+  if (!text) return null;
+  return { id: paper.id || "paper", text, carried: true };
+}

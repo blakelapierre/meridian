@@ -10,16 +10,16 @@ The animals use the wall clock, so a slow extra view does not make them crawl. C
 
 ## This pass
 
-The graze mark is an animal in the world picture. Herds are not.
+The graze is a herd of three. They do not walk.
 
 ## Proves
 
-`test/slice.test.js` covers the animal. `test/life.test.js` counts four.
+`test/slice.test.js` covers the herd. `test/life.test.js` counts six.
 
 ## Next
 
-Herds. Not in this build.
+A track you can follow off the chart. Not in this build.
 
 ## Later
 
-A track you can follow off the chart.
+The herd stays where it spawned.

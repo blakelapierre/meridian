@@ -10,16 +10,16 @@ T plants a mission marker. A bolt in the air is pulled toward it. A pull also sh
 
 ## This pass
 
-A pull changes which way a miss leaves the line. No pull leaves the line as aimed.
+Melee connects inside 2 m. F swings it while the line or the bit is in hand. It is not the line.
 
 ## Proves
 
-`test/slice.test.js` covers the side component.
+`test/slice.test.js` covers the reach.
 
 ## Next
 
-Melee. Not in this build.
+Wrecks that are not the dummy. Not in this build.
 
 ## Later
 
-Wrecks that are not the dummy. Artillery.
+Artillery.

@@ -30,3 +30,14 @@ export function payPurse(kind) {
   if (kind === "round") return { purse: "round", metal: 8 };
   return { purse: "none", metal: 0 };
 }
+
+// The three clocks. Nothing here is a choice the player makes.
+export function threeClocks() {
+  return ["hands", "strike", "dominion"];
+}
+
+export function unpickedClock(now) {
+  const names = threeClocks();
+  if (!names.includes(now)) return null;
+  return { names, now, picked: false };
+}

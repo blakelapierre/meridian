@@ -8,16 +8,16 @@ G throws smoke when you are out of stone and you still have a smoke. A bolt that
 
 ## This pass
 
-The reload beat spends a magazine.
+2 turns the hammer's piece a quarter turn. R is still the optic.
 
 ## Proves
 
-`test/slice.test.js` covers the spend. The line shows `mag` during the beat.
+`test/slice.test.js` covers the key. R does not turn.
 
 ## Next
 
-The hammer's 90° turn is not on its own key. R is still the optic. Not in this build.
+Smooth. Not in this build.
 
 ## Later
 
-Smooth. Throw.
+Throw.

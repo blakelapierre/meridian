@@ -18,25 +18,25 @@ The beach makes short tones with the Web Audio oscillator. No samples are shippe
 
 K toggles the listener. The line says `muted` while it is off. The first cue also resumes the audio context, which browsers block until a key or a click.
 
-A shot behind you is half as loud. It is not silent. Distance falloff is unchanged.
+A shot behind you is half as loud. It is not silent. Past 80 m the crack is silent. Inside that range the falloff is unchanged.
 
 Ambient sources are scheduled: surf, gusts, birds, gulls, insects, rustle, distant activity, and rare sounds. There is no music bed.
 
 ## This pass
 
-The note now records that ambient schedule. No new cue was added.
+A shot cracks only inside its range. Farther than 80 m it is silent. Inside that range the old falloff is unchanged.
 
 ## Proves
 
-`test/slice.test.js` covers the noon gain. `src/audio/ambient.js` schedules the sources.
+`test/slice.test.js` covers the cutoff. `crackGain` at 80 m is still 0.25.
 
 ## Next
 
-A shot that cracks only inside its range. Not in this build.
+No music bed. Not in this build.
 
 ## Later
 
-No music bed.
+The design stops at cues.
 
 ## Ambient soundscape (batch 3)
 

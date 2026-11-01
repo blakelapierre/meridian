@@ -1,4 +1,4 @@
-import { hashes, keygen, sign, verify } from "@noble/ed25519";
+import { getPublicKey, hashes, keygen, sign, verify } from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha2.js";
 import { certifyShot } from "../sim/cert.js";
 
@@ -32,6 +32,38 @@ export function restoreKey(book, phrase) {
   const found = book?.[phrase];
   if (!found?.secret || !found?.pubkey) return null;
   return { secret: found.secret.slice(), pubkey: found.pubkey.slice() };
+}
+
+// Two words per secret byte. The phrase is the key. The book is not required.
+export function carryPhrase(identity) {
+  const bytes = identity?.secret;
+  if (!bytes?.length) return "";
+  const words = [];
+  for (const byte of bytes) {
+    words.push(RECOVERY[Math.floor(byte / RECOVERY.length)] || RECOVERY[0]);
+    words.push(RECOVERY[byte % RECOVERY.length]);
+  }
+  return words.join(" ");
+}
+
+export function importPhrase(phrase) {
+  const words = String(phrase || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length !== 64) return null;
+  const secret = new Uint8Array(32);
+  for (let i = 0; i < 32; i += 1) {
+    const hi = RECOVERY.indexOf(words[i * 2]);
+    const lo = RECOVERY.indexOf(words[i * 2 + 1]);
+    if (hi < 0 || lo < 0) return null;
+    const byte = hi * RECOVERY.length + lo;
+    if (byte > 255) return null;
+    secret[i] = byte;
+  }
+  try {
+    const pubkey = getPublicKey(secret);
+    return { secret, pubkey };
+  } catch {
+    return null;
+  }
 }
 
 function hexOf(bytes) {

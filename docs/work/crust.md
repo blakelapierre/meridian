@@ -8,16 +8,16 @@ An edit whose mode is slump is refused. Certified sand does not slump through th
 
 ## This pass
 
-Off the beach the slump can be certified. On the beach it cannot.
+Peers accept a certified slump from off the beach. A beach slump is still refused. The bit does not send the slump it writes.
 
 ## Proves
 
-`test/slice.test.js` covers both. `test/pass.test.js` still refuses the mode on an edit.
+`test/slice.test.js` covers both. `refuseSlump` is still true for the mode.
 
 ## Next
 
-Slump that the peers accept off the beach. Not in this build.
+The slump the bit writes is not the proposal a peer applies. Not in this build.
 
 ## Later
 
-Certified sand that still does not slump.
+Certified sand still does not slump.

@@ -37,8 +37,8 @@ test("the crab steps away and the plants sit on the roll", () => {
   const crab = calm.find((animal) => animal.kind === "crab");
   const near = fauna(0, [crab.at[0], crab.at[1]]).find((animal) => animal.kind === "crab");
   assert.ok(Math.hypot(near.at[0] - crab.at[0], near.at[1] - crab.at[1]) > 0.8);
-  assert.equal(calm.length, 4);
-  assert.equal(calm.some((animal) => animal.kind === "graze"), true);
+  assert.equal(calm.length, 6);
+  assert.equal(calm.filter((animal) => animal.kind === "graze").length, 3);
   const plants = floraBoxes();
   assert.ok(plants.length >= 6);
   for (const plant of plants) {

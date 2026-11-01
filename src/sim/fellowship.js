@@ -37,6 +37,19 @@ export function buyFromPurse(purse, patron, kind) {
   return spendPurse(purse, patron, 1);
 }
 
+// The township purse is not the patron's purse.
+export function payTownship(purse, amount) {
+  if (!purse || !(amount > 0)) return purse || null;
+  purse.town = (purse.town || 0) + amount;
+  return purse;
+}
+
+export function spendTownship(purse, cost) {
+  if (!purse || !(cost > 0) || (purse.town || 0) < cost) return false;
+  purse.town -= cost;
+  return true;
+}
+
 export function dragMessage(id) {
   if (!id) return "";
   return JSON.stringify({ t: "drag", id, walk: true });
@@ -47,6 +60,21 @@ export function readDragMessage(text) {
     const message = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
     if (message?.t !== "drag" || !message.walk || !message.id) return null;
     return { id: String(message.id), walk: true };
+  } catch {
+    return null;
+  }
+}
+
+export function refuseDrag(id) {
+  if (!id) return "";
+  return JSON.stringify({ t: "drag", id, walk: false });
+}
+
+export function readDragRefuse(text) {
+  try {
+    const message = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
+    if (message?.t !== "drag" || message.walk !== false || !message.id) return null;
+    return { id: String(message.id), walk: false };
   } catch {
     return null;
   }

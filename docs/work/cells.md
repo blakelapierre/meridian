@@ -10,16 +10,16 @@ A hit waits for a quorum of your cell. Everyone in your cell counts as a yes. A 
 
 ## This pass
 
-A stored yes from the other cell is ignored. One local yes and one stored no is not a pass.
+The vote is on the line, `vote N/M`.
 
 ## Proves
 
-`test/slice.test.js` covers the stored tally.
+`test/slice.test.js` covers the line.
 
 ## Next
 
-A vote you can see. Not in this build.
+An archive that is not this browser. Not in this build.
 
 ## Later
 
-An archive that is not this browser.
+The archive is still this client.

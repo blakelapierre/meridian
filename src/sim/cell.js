@@ -29,6 +29,11 @@ export function tallyStored(localYes, stored) {
   return tally(localYes, nos);
 }
 
+export function voteLine(result) {
+  if (!result) return "";
+  return `vote ${result.yes}/${result.present}${result.pass ? " pass" : ""}`;
+}
+
 export function inInterest(distance, reach = 80) {
   return distance <= reach;
 }

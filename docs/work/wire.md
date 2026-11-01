@@ -18,16 +18,16 @@ A harm note can be packed as a lore record with the harm byte beside the text. A
 
 ## This pass
 
-A peer reads the harm byte into the harm log.
+A harm note is its own channel, named `harm`. It is a harm message, not a lore frame. It still rides the control socket.
 
 ## Proves
 
-`test/slice.test.js` covers the byte on the frame. The client calls `noteHarm` when the record carries one.
+`test/slice.test.js` covers the channel name and the message. `socketOf("lore")` is still lore.
 
 ## Next
 
-The harm note is not its own channel. Not in this build.
+A reply that carries the harm log back. Not in this build.
 
 ## Later
 
-A reply that carries the harm log back.
+The harm message is not answered.

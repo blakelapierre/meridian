@@ -153,8 +153,28 @@ export function finCredit(metal) {
   return { credit: "fin", metal };
 }
 
+// While the sun is up the fin faces it. At night it stops tracking.
+export function trackFin(piece, tick) {
+  if (!piece || piece.broken) return piece || null;
+  const sun = sunDirection(tick);
+  if (sun[2] <= 0) {
+    piece.aim = null;
+    return piece;
+  }
+  piece.aim = Math.atan2(sun[0], sun[2]);
+  piece.yaw = 0;
+  return piece;
+}
+
 export function bleed(vitals, seconds = 1 / 30) {
   if ((vitals.integrity ?? 100) >= 40) return vitals.blood ?? 100;
   vitals.blood = Math.max(0, (vitals.blood ?? 100) - 4 * seconds);
   return vitals.blood;
+}
+
+// Empty blood drops the body the same way a killing blow does.
+export function bloodDrop(vitals) {
+  if (!vitals || (vitals.blood ?? 100) > 0 || vitals.down > 0) return false;
+  vitals.down = 8;
+  return true;
 }

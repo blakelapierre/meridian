@@ -10,16 +10,16 @@ J places a cart on a road and loads one metal. The cart rolls along the road and
 
 ## This pass
 
-The turned cart remembers the cell it came from.
+A cart can fork, and then fork again. It does not turn back the way it came.
 
 ## Proves
 
-`test/slice.test.js` covers the look. A cart with no side road still dumps.
+`test/slice.test.js` covers two forks.
 
 ## Next
 
-A road that forks more than once. Not in this build.
+Reclaim. Not in this build.
 
 ## Later
 
-Reclaim.
+A load still goes back to metal when the road ends.

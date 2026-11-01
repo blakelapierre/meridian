@@ -10,16 +10,16 @@ Using a wall pins your latest told sentence onto it. Salvaging that wall drops t
 
 ## This pass
 
-The slip checks its signature.
+The atoll paper can be picked up and read, because it is an object.
 
 ## Proves
 
-`test/slice.test.js` covers the check.
+`test/slice.test.js` covers the pickup.
 
 ## Next
 
-A paper you can pick up and read because it is an object. Not in this build.
+A sentence someone else wrote into the world. Not in this build.
 
 ## Later
 
-A sentence someone else wrote into the world.
+The paper's sentence is still the one in the crate.

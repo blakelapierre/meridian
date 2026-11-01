@@ -31,12 +31,24 @@ export function crackGain(distance) {
   return 1 - ((distance - 40) / 40) * 0.75;
 }
 
+// A shot cracks inside its range and is silent past it. The old falloff is unchanged inside.
+export function crackInside(distance, range = 80) {
+  if (distance == null) return 1;
+  if (distance > range) return 0;
+  return crackGain(distance);
+}
+
 export function finGain(yaw = 0) {
   return yaw ? 0.6 : 1;
 }
 
 export function charterReady(bondCount, bound) {
   return Boolean(bound) && bondCount >= 2;
+}
+
+export function charterObject(ready, at) {
+  if (!ready || !at) return null;
+  return { id: "charter", at: [at[0], at[1]], anchors: true, text: "charter" };
 }
 
 export function companyWallet() {
@@ -64,6 +76,7 @@ export function resonanceWord(digs) {
 export function socketOf(kind) {
   if (kind === "pose") return "snap";
   if (kind === "lore") return "lore";
+  if (kind === "harm") return "harm";
   return "ops";
 }
 
@@ -103,6 +116,13 @@ export function bodyLean(wind, moving) {
   if (!moving || !wind) return 0;
   const push = windPush(wind);
   return Math.max(-0.15, Math.min(0.15, push[0] * 40));
+}
+
+// An open sail multiplies the push. A furled sail, or no sail, adds nothing.
+export function fillSail(wind, open) {
+  if (!open || !wind) return [0, 0, 0];
+  const push = windPush(wind);
+  return [push[0] * 8, push[1] * 8, 0];
 }
 
 export function frontGain(dot) {

@@ -1,23 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addFire, createYard, repairFin, rollCart, slipChecks, tryPlaceBeam, tryPlaceFloor, tryPlacePost, trySalvage } from "../src/sim/build.js";
-import { applySplint, countLanding, fallFromCount, finCredit, fluxMetal, landingNote, seedLanding } from "../src/sim/hearth.js";
+import { addFire, createYard, raiseSail, repairFin, roadForks, rollCart, slipChecks, tryPlaceBeam, tryPlaceDoor, tryPlaceFloor, tryPlacePost, trySalvage, turnKey } from "../src/sim/build.js";
+import { applySplint, bloodDrop, countLanding, fallFromCount, finCredit, fluxMetal, landingNote, seedLanding, trackFin } from "../src/sim/hearth.js";
 import { createSkills, teachAtCap, teachEmpty, teachMore } from "../src/sim/skills.js";
-import { afterShot, boltInSmoke, firePull, missDir, spendMagazine, stepShotWait } from "../src/sim/bolt.js";
-import { fillCell, lowerPool, notePool, spillPool } from "../src/sim/pool.js";
-import { buyFromPurse, dragAsk, dragMessage, payTithe, readDragMessage, spendPurse, stepDrag } from "../src/sim/fellowship.js";
-import { keepSig, loreHarm } from "../src/sim/identityharm.js";
-import { raiseSpore, spreadSpore, stepSwarm } from "../src/sim/litho.js";
-import { clearVoucher, giveOrder, readVoucher, sitOrder, writeVoucher } from "../src/sim/command.js";
-import { castVote, tally, tallyStored } from "../src/sim/cell.js";
-import { bodyLean, frontGain, storeWind, windPush } from "../src/sim/rules.js";
-import { acceptCertifiedSlump, applySlump, bitMode, certifySlump, Crust, offBeachSlump } from "../src/sim/crust.js";
-import { graze, grazeAnimal } from "../src/sim/life.js";
-import { defusePay, dominionFrame, overheadCamera, payPurse } from "../src/sim/clocks.js";
+import { afterShot, boltInSmoke, firePull, meleeHit, missDir, spendMagazine, stepShotWait } from "../src/sim/bolt.js";
+import { fillCell, lowerPool, notePool, rainPool, spillPool } from "../src/sim/pool.js";
+import { buyFromPurse, dragAsk, dragMessage, payTithe, payTownship, readDragMessage, readDragRefuse, refuseDrag, spendPurse, spendTownship, stepDrag } from "../src/sim/fellowship.js";
+import { harmMessage, keepSig, loreHarm, readHarmMessage } from "../src/sim/identityharm.js";
+import { beachAnswer, raiseSpore, spreadSpore, stepSwarm } from "../src/sim/litho.js";
+import { clearVoucher, giveOrder, orderMessage, readOrderMessage, readVoucher, refuseOrder, sitOrder, writeVoucher } from "../src/sim/command.js";
+import { castVote, tally, tallyStored, voteLine } from "../src/sim/cell.js";
+import { bodyLean, charterObject, crackInside, fillSail, frontGain, socketOf, storeWind, windPush } from "../src/sim/rules.js";
+import { acceptCertifiedSlump, applySlump, bitMode, certifySlump, Crust, offBeachSlump, peerAcceptsSlump } from "../src/sim/crust.js";
+import { acceptEdit } from "../src/sim/edit.js";
+import { graze, grazeAnimal, herd } from "../src/sim/life.js";
+import { defusePay, dominionFrame, overheadCamera, payPurse, unpickedClock } from "../src/sim/clocks.js";
 import { seaGain } from "../src/audio/cues.js";
-import { graceMark, peerDeed } from "../src/sim/deed.js";
+import { graceMark, lapseMessage, peerDeed, readLapse } from "../src/sim/deed.js";
 import { acceptLore, encodeLore } from "../src/net/lore.js";
-import { createIdentity, packBook, recoveryPhrase, rememberKey, restoreKey, unpackBook } from "../src/net/identity.js";
+import { carryPhrase, createIdentity, importPhrase, packBook, recoveryPhrase, rememberKey, restoreKey, unpackBook } from "../src/net/identity.js";
+import { pickupPaper } from "../src/sim/notes.js";
+import { shedKit } from "../src/sim/culture.js";
+import { createEntry, stepEntry } from "../src/sim/enter.js";
+import { loadCatalog } from "../src/sim/catalog.js";
 
 test("a floor holds a post and a salvaged sentence falls as a slip", () => {
   const yard = createYard({ x: 0, y: 0 });
@@ -240,4 +245,101 @@ test("the slice that followed a scale run: soak, a stored yes, a lean, and a phr
   assert.equal(grazeAnimal(graze({ stock: 1 })).kind, "graze");
   assert.deepEqual(finCredit(2), { credit: "fin", metal: 2 });
   assert.equal(finCredit(0), null);
+});
+
+test("the next cycle: a crack inside its range, a herd, and a phrase without the book", () => {
+  assert.equal(crackInside(10), 1);
+  assert.equal(crackInside(90), 0);
+  assert.equal(crackInside(80), 0.25);
+  const bleeding = { blood: 0, down: 0, integrity: 20 };
+  assert.equal(bloodDrop(bleeding), true);
+  assert.equal(bleeding.down, 8);
+  assert.equal(bloodDrop({ blood: 10, down: 0 }), false);
+  assert.equal(voteLine({ yes: 1, present: 2, pass: false }), "vote 1/2");
+  const clocks = unpickedClock("hands");
+  assert.equal(clocks.picked, false);
+  assert.equal(clocks.names.length, 3);
+  assert.equal(meleeHit(1).hitbox, "body");
+  assert.equal(meleeHit(4), null);
+  const orders = new Map([["ada", "hold"]]);
+  assert.equal(refuseOrder(orders, "ada"), true);
+  assert.equal(orders.get("ada"), "refused");
+  assert.deepEqual(readOrderMessage(orderMessage("ada", "hold")), { id: "ada", word: "hold" });
+  assert.equal(peerAcceptsSlump({ beach: true, certified: true }), false);
+  assert.equal(peerAcceptsSlump({ beach: false, certified: true }), true);
+  const slump = new Crust();
+  const edit = {
+    eye: [25, 25, 165],
+    aim: [25, 25, 15],
+    chunk: [0, 0, -1],
+    before: slump.hash(0, 0, -1),
+    mode: "slump",
+    beach: true,
+    spoilRoom: 1,
+    writes: [{ i: 0, j: 0, k: -1, sdf_mm: 250 }],
+  };
+  assert.equal(acceptEdit(slump, edit, { certified: true }).reason, "slump");
+  edit.beach = false;
+  assert.equal(acceptEdit(slump, edit, { certified: true }).ok, true);
+  assert.equal(shedKit({ metal: 30, stone: 10 }, { culture: "holds", metal: 20, stone: 12 }).metal, 10);
+  assert.deepEqual(readLapse(lapseMessage([2, 3])).cell, [2, 3]);
+  assert.equal(turnKey("Digit2"), true);
+  assert.equal(turnKey("KeyR"), false);
+  const who = createIdentity();
+  const carried = importPhrase(carryPhrase(who));
+  assert.deepEqual([...carried.pubkey], [...who.pubkey]);
+  assert.equal(importPhrase(recoveryPhrase(who)), null);
+  const forked = createYard({ x: 0, y: 0 });
+  const at = forked.pieces[0].at.slice();
+  forked.pieces.push({ id: "cart", at: at.slice(), anchors: false, load: 1, wait: 2 });
+  forked.pieces.push({ id: "road", at: [at[0] + 1, at[1]], anchors: true });
+  forked.pieces.push({ id: "road", at: [at[0] + 2, at[1]], anchors: true });
+  assert.equal(rollCart(forked), true);
+  assert.equal(rollCart(forked), false);
+  assert.equal(rollCart(forked), false);
+  assert.equal(rollCart(forked), true);
+  assert.equal(forked.pieces.find((piece) => piece.id === "cart").forks, 2);
+  assert.equal(roadForks(forked.pieces, [at[0] + 1, at[1]]).length >= 1, true);
+  assert.equal(herd(graze({ stock: 1 })).length, 3);
+  const fin = { yaw: 1, broken: false };
+  trackFin(fin, 72 * 60 * 30 / 4);
+  assert.equal(fin.yaw, 0);
+  assert.equal(typeof fin.aim, "number");
+  trackFin(fin, 72 * 60 * 30 * 3 / 4);
+  assert.equal(fin.aim, null);
+  assert.deepEqual(beachAnswer(true, 8), { answer: "crust", digs: 8 });
+  assert.equal(beachAnswer(false, 20), null);
+  assert.equal(charterObject(true, [1, 2]).id, "charter");
+  assert.equal(charterObject(false, [1, 2]), null);
+  assert.deepEqual(readDragRefuse(refuseDrag("ada")), { id: "ada", walk: false });
+  assert.ok(fillSail([1, 0, 0], true)[0] > windPush([1, 0, 0])[0]);
+  const sailed = createYard({ x: 0, y: 0 });
+  sailed.fiber = 1;
+  assert.equal(raiseSail(sailed, [1, 1]).ok, true);
+  assert.equal(pickupPaper({ kind: "paper", text: "the compound is north" }).carried, true);
+  const town = {};
+  payTownship(town, 2);
+  assert.equal(spendTownship(town, 1), true);
+  assert.equal(town.town, 1);
+  const wet = rainPool({ x: 1, y: 1, floor: -0.5, rain: 0 }, 0);
+  assert.equal(wet.rain, 1);
+  assert.equal(rainPool({ rain: 0 }, 900).rain, 0);
+  assert.equal(socketOf("harm"), "harm");
+  assert.equal(readHarmMessage(harmMessage("ada", "lore", 3)).channel === undefined, true);
+  assert.equal(readHarmMessage(harmMessage("ada", "lore", 3)).sig, 3);
+  const { atoll } = loadCatalog();
+  const entry = createEntry(atoll);
+  const yard = { metal: 30 };
+  stepEntry(entry, { position: [0, -109, 0], use: true, yard });
+  entry.match.phase = "live";
+  const planted = stepEntry(entry, { position: [0, -109, 0], use: true, still: true, yard });
+  assert.equal(planted.channel, "plant");
+  const span = createYard({ x: 0, y: 0 });
+  const cell = span.pieces[0].at.slice();
+  const beamAt = [cell[0], cell[1] + 1];
+  span.metal = 20;
+  span.pieces.push({ id: "post", at: [beamAt[0] - 1, beamAt[1]], anchors: false });
+  span.pieces.push({ id: "post", at: [beamAt[0] + 1, beamAt[1]], anchors: false });
+  assert.equal(tryPlaceBeam(span, beamAt).ok, true);
+  assert.equal(tryPlaceDoor(span, beamAt).closes, true);
 });

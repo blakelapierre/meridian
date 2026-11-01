@@ -10,16 +10,16 @@ Z on a road opens a gate. Water steps through an open gate and is dammed by a sh
 
 ## This pass
 
-A spilled pool fills the cell it enters.
+Rain marks a pool for the first quarter of each minute. It does not make a new pool.
 
 ## Proves
 
-`test/slice.test.js` covers the filled mark.
+`test/slice.test.js` covers the mark, and a dry quarter that does not add one.
 
 ## Next
 
-Rain. Not in this build.
+A river that is the crust, not a list of pools. Not in this build.
 
 ## Later
 
-A river that is the crust, not a list of pools.
+Rain does not fall on dry sand.

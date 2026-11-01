@@ -8,16 +8,16 @@ While you drag someone, they are drawn just ahead of you. Their client is sent o
 
 ## This pass
 
-The asked walk is sent. Their client steps once.
+The other person can refuse a drag. 4 sends it, and the drag stops.
 
 ## Proves
 
-`test/slice.test.js` covers the message. Their client calls the same step.
+`test/slice.test.js` covers the refusal.
 
 ## Next
 
-A drag the other person can refuse. Not in this build.
+Friendliness that is not only a number. Not in this build.
 
 ## Later
 
-Friendliness that is not only a number.
+The score is still a number.

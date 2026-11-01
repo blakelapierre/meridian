@@ -10,16 +10,16 @@ A trainer stands by the table. Using them can mark a specialty, and a third is r
 
 ## This pass
 
-A skill at 40 is left where it is. The trainer moves on, or refuses when nothing else is open.
+Walking into the north cell puts down the kit you woke with. Metal and stone earned after that stay.
 
 ## Proves
 
-`test/slice.test.js` covers the cap.
+`test/slice.test.js` covers the shed.
 
 ## Next
 
-A culture you can leave without the kit you woke with. Not in this build.
+The kit you put down is not a crate you can pick back up. Not in this build.
 
 ## Later
 
-The kit you woke with still comes with you.
+Hosts and the Veil still start from a crate.

@@ -10,6 +10,21 @@ export function peerDeed(deed, grace) {
   return { cell: marked.cell, holder: marked.holder || null, radius: marked.radius, grace: marked.grace };
 }
 
+export function lapseMessage(cell) {
+  if (!cell) return "";
+  return JSON.stringify({ t: "lapse", cell: [cell[0], cell[1]] });
+}
+
+export function readLapse(text) {
+  try {
+    const message = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
+    if (message?.t !== "lapse" || !message.cell) return null;
+    return { cell: [message.cell[0], message.cell[1]] };
+  } catch {
+    return null;
+  }
+}
+
 export function deedVolume(cell, holder, radius = 6) {
   if (!cell || !holder) return null;
   return { cell: cell.slice(), holder, radius };

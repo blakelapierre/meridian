@@ -6,7 +6,7 @@ The focused view aims at vsync. It starts coarse and steps one octave toward the
 
 ## This pass
 
-The sim slice that followed did not touch the ray trace. The edge still does not drop the second bounce.
+The sim slice that followed did not touch the ray trace. This cycle did not either. The edge still does not drop the second bounce.
 
 The sand grid was the grain tile. It repeated every few meters and did not meet at its edges. The grain is periodic now, and the broad color is world noise, so it does not follow that tile. Lows stay sand. Grass covers the middle of a slope. Rock covers a steep crest. A light haze sits in the hollows. Five samples of cloud drift in the sky. Neither one clips the island.
 

@@ -39,6 +39,16 @@ export function fillCell(pool) {
   return { ...spilled, filled: Math.round(spilled.y * 2) / 2 };
 }
 
+// Rain is on for the first quarter of each minute. It marks a pool; it does not make a river.
+export function rainOn(tick = 0) {
+  return (Math.floor(tick) % 1800) < 450;
+}
+
+export function rainPool(pool, tick = 0) {
+  if (!pool || !rainOn(tick)) return pool || null;
+  return { ...pool, rain: (pool.rain || 0) + 1 };
+}
+
 export function flowOnce(pool, floorHere, floorThere) {
   if (!pool || floorThere >= floorHere) return pool;
   return { ...pool, y: pool.y + 0.5, floor: floorThere, key: `${pool.x},${pool.y + 0.5}` };

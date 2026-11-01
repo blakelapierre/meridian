@@ -10,16 +10,16 @@ Wind comes from where you are standing, not from one constant. Night still multi
 
 ## This pass
 
-A moving body leans. The picture camera does not.
+An open sail multiplies the wind on a body that is already moving. A still body is left alone. 2 on open ground, with fiber, raises the sail.
 
 ## Proves
 
-`test/slice.test.js` covers the lean. The status line still shows the push.
+`test/slice.test.js` covers the extra push.
 
 ## Next
 
-Wind that fills a sail. Not in this build.
+A lean the first-person view can show. Not in this build.
 
 ## Later
 
-A lean the first-person view can show.
+The lean is still only on the third-person mesh.

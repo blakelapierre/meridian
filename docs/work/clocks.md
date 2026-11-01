@@ -10,16 +10,16 @@ Sitting at the table names the clock `dominion`. Standing returns it to `hands`.
 
 ## This pass
 
-The overhead point is a second camera pose. The picture does not use it.
+The line names the clock you are in and says there are three. No key selects one.
 
 ## Proves
 
-`test/slice.test.js` covers the pose. The chart still draws the point.
+`test/slice.test.js` covers the three names and that none is picked.
 
 ## Next
 
-Three clocks you do not pick. Not in this build.
+A strike clock that is not the beach body. Not in this build.
 
 ## Later
 
-A strike clock that is not the beach body.
+The strike clock is still the body that walked in.

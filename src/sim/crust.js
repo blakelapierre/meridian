@@ -182,6 +182,11 @@ export function certifySlump(beach) {
   return { mode: "slump", certified: !beach, beach: Boolean(beach) };
 }
 
+// Off the beach a certified slump is one the peers can apply. On the beach it is not.
+export function peerAcceptsSlump({ beach = true, certified = false } = {}) {
+  return certified === true && beach === false;
+}
+
 export function acceptCertifiedSlump(crust, aim, slip) {
   if (!slip?.certified || slip.beach) return null;
   return applySlump(crust, aim);

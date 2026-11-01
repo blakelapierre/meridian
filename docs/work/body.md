@@ -12,16 +12,16 @@ B uses a stick on a hurt leg and does not spend fiber. The stick lowers pain by 
 
 ## This pass
 
-The body line shows the soak that landing counter buys.
+Blood loss drops the body. Empty blood sets the same eight-second down a killing blow does.
 
 ## Proves
 
-`test/slice.test.js` covers the soak.
+`test/slice.test.js` covers the drop.
 
 ## Next
 
-Blood loss does not drop the body. Not in this build.
+A fall that reads a soak you can change. Not in this build.
 
 ## Later
 
-A fall that reads a soak you can change.
+The soak is still only a number on the line.

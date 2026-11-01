@@ -10,16 +10,16 @@ A charter names its first person as voucher, on the line. Identifying the table 
 
 ## This pass
 
-Standing up clears the voucher.
+A charter is a piece. It appears when the charter is ready.
 
 ## Proves
 
-`test/slice.test.js` covers the clear.
+`test/slice.test.js` covers the piece.
 
 ## Next
 
-A charter that is an object. Not in this build.
+A sentence the beach is not allowed to invent. Not in this build.
 
 ## Later
 
-A sentence the beach is not allowed to invent.
+The charter text is the word charter.

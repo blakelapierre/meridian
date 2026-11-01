@@ -1,4 +1,4 @@
-import { DIG_SAMPLE_MM, VOXEL_CM } from "./crust.js";
+import { DIG_SAMPLE_MM, VOXEL_CM, peerAcceptsSlump } from "./crust.js";
 import { refuseSlump } from "./rules.js";
 
 function center(i, j, k) {
@@ -26,7 +26,9 @@ export function acceptEdit(crust, proposal, { certified = false, localEdits = fa
     const hash = crust.hash(proposal.chunk[0], proposal.chunk[1], proposal.chunk[2]);
     if (!sameBytes(hash, proposal.before)) return { ok: false, reason: "hash" };
   }
-  if (refuseSlump(proposal.mode)) return { ok: false, reason: "slump" };
+  if (refuseSlump(proposal.mode) && !peerAcceptsSlump({ beach: proposal.beach === false ? false : true, certified })) {
+    return { ok: false, reason: "slump" };
+  }
   if (proposal.mode === "dig" && (proposal.spoilRoom ?? 0) < proposal.writes.length) {
     return { ok: false, reason: "spoil" };
   }

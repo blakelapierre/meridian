@@ -63,3 +63,9 @@ export function spendMagazine(rounds, beat) {
   if (!beat || beat.lock > 0 || !(beat.reload > 0)) return left;
   return Math.max(0, left - 1);
 }
+
+// A swing only connects inside a short reach. It is not the line.
+export function meleeHit(distance, reach = 2) {
+  if (!(distance >= 0) || distance > reach) return null;
+  return { hitbox: "body", damage: 12, reach };
+}

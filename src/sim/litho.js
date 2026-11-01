@@ -33,3 +33,9 @@ export function swarmPoint(x, y, digs) {
   if (y >= -190 || digs < 20) return null;
   return [x + 1.6, y, 1.1];
 }
+
+// The beach itself can answer a dig. The off-beach swarm is unchanged.
+export function beachAnswer(beach, digs) {
+  if (!beach || digs < 8) return null;
+  return { answer: "crust", digs };
+}

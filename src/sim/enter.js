@@ -93,13 +93,16 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
     if (!notice) notice = defused ? "defused" : "paid";
   }
   yard.metal = player.beach.metal;
-  if (entry.joined && inside && player.channel === "defuse" && (fired || !still)) {
+  if (entry.joined && inside && (player.channel === "defuse" || player.channel === "plant") && (fired || !still)) {
     player.channel = null;
     player.channelTicks = 0;
     if (!notice) notice = fired ? "shot" : "puzzle";
   } else if (entry.joined && inside && use && still && entry.match.core && entry.match.core.side !== player.side) {
     setChannel(entry.match, entry.id, "defuse");
     if (!notice) notice = "defuse";
+  } else if (entry.joined && inside && use && still && !entry.match.core && entry.match.phase === "live") {
+    setChannel(entry.match, entry.id, "plant");
+    if (!notice) notice = "plant";
   }
   if (player.abandoned && !notice) notice = "beach";
   return status(entry, inside, notice);

@@ -10,16 +10,16 @@ A harm line keeps one signature byte. It is not delivered to an archive. An arch
 
 ## This pass
 
-The phrase restores a key that the book still holds. It does not rebuild a key from the words alone.
+Alt O prints a phrase that imports the key. The book is not required. A six-word phrase still needs the book.
 
 ## Proves
 
-`test/slice.test.js` covers the round trip, and a phrase with an empty book.
+`test/slice.test.js` covers the round trip, and that the short phrase does not import.
 
 ## Next
 
-A phrase that imports the key without the book. Not in this build.
+A name that is not the pubkey. Not in this build.
 
 ## Later
 
-A name that is not the pubkey.
+The name on the line is still the key.

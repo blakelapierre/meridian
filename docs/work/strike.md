@@ -8,16 +8,16 @@ Holding still and pressing E on a live core starts a defuse. Moving cancels it. 
 
 ## This pass
 
-Defuse and a round that runs out do not share a purse name. The metal is still 8 either way.
+Holding still and using the core site while the round is live and no core is down starts a plant. Moving cancels it. Defuse pay is still 8.
 
 ## Proves
 
-`test/slice.test.js` covers the two names. `test/enter.test.js` still covers the buy. `defusePay` is still 8.
+`test/slice.test.js` covers the channel. `test/enter.test.js` still covers the buy.
 
 ## Next
 
-Plant. Not in this build.
+Smoke as a volume, not only a purchased name. Not in this build.
 
 ## Later
 
-Reinsert. Smoke as a volume, not only a purchased name.
+Reinsert is already a notice when you walk back in.

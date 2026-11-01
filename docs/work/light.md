@@ -8,16 +8,16 @@ Using a fin breaks it. A broken fin gives no flux. Four metal repairs a broken f
 
 ## This pass
 
-Fin metal is shown apart from the yard's metal.
+While the sun is up, a fin turns to face it. Night pays no flux, which was already true.
 
 ## Proves
 
-`test/slice.test.js` covers the credit. The line shows `fin` once any has been gained.
+`test/slice.test.js` covers the aim by day and the clear aim at night.
 
 ## Next
 
-A fin that tracks the sun. Not in this build.
+A cloud that cuts the fin. Not in this build.
 
 ## Later
 
-Night with no flux at all.
+Night already pays nothing.

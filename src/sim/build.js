@@ -184,11 +184,26 @@ export function tryPlaceRoad(yard, cell) {
 export function tryPlaceDoor(yard, cell) {
   if (!cell) return { ok: false, reason: "aim" };
   if (yard.metal < 3) return { ok: false, reason: "metal" };
-  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "footing")) return { ok: false, reason: "occupied" };
+  const beam = yard.pieces.some((piece) => piece.id === "beam" && sameCell(piece.at, cell));
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "footing" && piece.id !== "beam")) return { ok: false, reason: "occupied" };
   if (!support(yard.pieces, cell)) return { ok: false, reason: "support" };
   yard.metal -= 3;
-  yard.pieces.push({ id: "door", at: cell.slice(), anchors: true, open: false });
-  return { ok: true, metal: yard.metal };
+  yard.pieces.push({ id: "door", at: cell.slice(), anchors: true, open: false, closes: beam });
+  return { ok: true, metal: yard.metal, closes: beam };
+}
+
+// The hammer's quarter turn is Digit2. R stays the optic.
+export function turnKey(code) {
+  return code === "Digit2";
+}
+
+export function raiseSail(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if ((yard.fiber || 0) < 1) return { ok: false, reason: "fiber" };
+  if (yard.pieces.some((piece) => piece.id === "sail")) return { ok: false, reason: "sail" };
+  yard.fiber -= 1;
+  yard.pieces.push({ id: "sail", at: cell.slice(), anchors: false, open: true });
+  return { ok: true };
 }
 
 export function turnWall(yard, cell) {
@@ -276,12 +291,12 @@ export function rollCart(yard) {
   if (!road) {
     cart.wait = (cart.wait || 0) + 1;
     if (cart.wait < 3) return false;
-    const side = [cart.at[0] + 1, cart.at[1]];
-    const other = yard.pieces.find((piece) => piece.id === "road" && sameCell(piece.at, side));
-    if (other) {
+    const options = roadForks(yard.pieces, cart.at).filter((at) => !cart.look || at[0] !== cart.look[0] || at[1] !== cart.look[1]);
+    if (options.length) {
       const from = cart.at.slice();
-      cart.at = side.slice();
+      cart.at = options[0].slice();
       cart.look = from;
+      cart.forks = (cart.forks || 0) + 1;
       cart.wait = 0;
       return true;
     }
@@ -293,6 +308,14 @@ export function rollCart(yard) {
   cart.wait = 0;
   cart.at = next;
   return true;
+}
+
+export function roadForks(pieces, cell) {
+  if (!cell || !pieces) return [];
+  const steps = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  return steps
+    .map(([dx, dy]) => [cell[0] + dx, cell[1] + dy])
+    .filter((at) => pieces.some((piece) => piece.id === "road" && sameCell(piece.at, at)));
 }
 
 export function pieceBoxes(pieces) {

@@ -10,16 +10,16 @@ The first fellowship is a patron. A vein tap pays them 1 metal, counted on you, 
 
 ## This pass
 
-The patron purse refuses a wall.
+A township purse is separate from the patron purse. A ready charter drops 1 into it. Upkeep can spend it. It still cannot buy a wall.
 
 ## Proves
 
-`test/slice.test.js` covers the refusal. Placing a wall still spends yard metal.
+`test/slice.test.js` covers the spend.
 
 ## Next
 
-A township purse. Not in this build.
+Allegiance that is not a score. Not in this build.
 
 ## Later
 
-Allegiance that is not a score.
+Friendliness is still a number.
