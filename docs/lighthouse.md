@@ -9,6 +9,17 @@ The github.io build reads `content/lighthouse.json` for its lighthouse.
 
 On a shared lighthouse a page meets the other players in its cell by itself (the lower id offers, at most 8 player links). `?solo=1` turns that off. `?id=`/`?to=` tabs work as before.
 
+## Status and redeploy
+
+The earlier public lighthouse (a quick tunnel to a home machine) is retired, so `url` is `null` and the github.io build plays solo with a "multiplayer server offline · playing solo" note. No error is raised and nothing retries.
+
+To bring multiplayer back:
+
+1. Run `tools/signal/serve-public.js` (below) on an always-on host you control, behind TLS on a stable name (a named tunnel or a VPS with Caddy). Quick tunnels change name on every restart; don't ship one as the default.
+2. Set `url` in `content/lighthouse.json` to the `wss://` address and bump `lighthouse.json?v=` in `src/app/main.js` (the `?v=` drift test checks importers agree).
+3. Check with `?debug=1`: the net panel should read `lighthouse up`. Until then, testers can pass `?lighthouse=wss://...` per visit.
+4. Optional: `node tools/scale/run.mjs --lighthouse wss://... --max 50` from a machine where WebRTC is allowed.
+
 ## Running one
 
     SIGNAL_PORT=8781 ORIGINS=https://blakelapierre.github.io node tools/signal/serve-public.js

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meridian scaling bench</title>
+    <link rel="icon" href="../../favicon.svg?v=1" type="image/svg+xml" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b1016; color: #cde; font: 13px/1.4 system-ui, sans-serif; }
+      header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 10px; background: #111a24; }
+      header button, header input { font: inherit; background: #1d2a38; color: #cde; border: 1px solid #456; border-radius: 4px; padding: 3px 8px; }
+      #status { font-family: ui-monospace, monospace; white-space: pre; }
+      #stage { position: relative; height: calc(100% - 44px); }
+      #stage iframe { position: absolute; border: 2px solid #345; background: #000; }
+      #stage iframe.primary { left: 0; top: 0; width: 66%; height: 100%; border-color: #6ae; }
+      #stage .shield { position: absolute; cursor: pointer; z-index: 2; }
+      #stage .shield span { position: absolute; left: 2px; top: 2px; padding: 0 4px; background: rgba(0,0,0,.7); font: 11px ui-monospace, monospace; }
+      #stage .shield.bad span { color: #f88; }
+      #log { position: absolute; right: 0; bottom: 0; width: 34%; height: 30%; overflow: auto; margin: 0; padding: 6px; background: #05080c; font: 11px/1.35 ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Scaling bench</strong>
+      <button id="start">Start</button>
+      <button id="stop">Stop</button>
+      <button id="botToggle" title="Main pane: wander bot or your keyboard">Main: bot</button>
+      <button id="export">Export JSON</button>
+      <label>max <input id="max" size="3" value="50" /></label>
+      <span id="status">idle</span>
+    </header>
+    <div id="stage"><pre id="log"></pre></div>
+    <script type="module" src="./bench.js?v=1"></script>
+  </body>
+</html>

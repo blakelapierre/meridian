@@ -1,12 +1,14 @@
 <!doctype html>
 <html>
   <head>
+    <link rel="icon" href="../../favicon.svg?v=1" type="image/svg+xml" />
+    <script src="../../src/app/ns.js?v=1"></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Meridian</title>
     <style>
       html, body { margin: 0; background: #111; height: 100%; color: #eee; }
-      body > canvas { width: 100vw; height: 100vh; display: block; background: #123; cursor: crosshair; }
+      body > canvas { width: 100vw; height: 100vh; display: block; cursor: crosshair; }
       #fps { position: fixed; top: 12px; right: 14px; z-index: 6; font: 16px/1 sans-serif; color: #9f9; text-shadow: 0 1px 2px #000; }
       #net { position: fixed; top: 12px; left: 12px; z-index: 6; margin: 0; padding: 8px 10px; max-width: 22rem; background: rgba(0,0,0,.78); color: #9cf; font: 12px/1.45 ui-monospace, monospace; white-space: pre; pointer-events: none; }
       html.quiet #net { font-size: 10px; padding: 4px 6px; max-width: 16rem; }
@@ -27,7 +29,7 @@
       #map { display: block; width: 220px; height: 220px; background: #081218; cursor: grab; touch-action: none; }
       #fix { margin: 4px 0 0; font: 12px/1.3 ui-monospace, monospace; color: #9cf; text-align: center; text-shadow: 0 1px 2px #000; }
       #skills { position: fixed; right: 14px; bottom: 12px; z-index: 3; margin: 0; padding: 8px 10px; list-style: none; background: rgba(0,0,0,.72); font: 12px/1.4 sans-serif; min-width: 11rem; }
-      #cues { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2; }
+      #cues { background: transparent; position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2; }
       #notices { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 6; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; max-width: min(90vw, 34rem); }
       #notices .notice { background: rgba(10,14,20,.78); color: #eef; border: 1px solid rgba(160,200,255,.35); border-radius: 6px; padding: 6px 12px; font: 13px/1.35 sans-serif; text-align: center; animation: notice 5s ease forwards; }
       @keyframes notice { 0% { opacity: 0; transform: translateY(-6px); } 10% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
@@ -122,6 +124,12 @@
       html.touch #fps { font-size: 11px; top: 10px; }
       /* Phone portrait: the tour line sits under the demo links, left of the map, instead of over both. */
       @media (orientation: portrait) { html.touch #hint { left: 12px; top: 98px; transform: none; min-width: 0; max-width: calc(100vw - 180px); text-align: left; } }
+      #glerr { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; max-width: 90vw; padding: 8px 12px; background: #400; color: #fdd; font: 13px/1.4 system-ui, sans-serif; border: 1px solid #a44; }
+      #mpnote { position: fixed; right: 12px; bottom: 12px; z-index: 7; padding: 4px 8px; background: rgba(0,0,0,.6); color: #fc9; font: 12px/1.4 system-ui, sans-serif; pointer-events: none; }
+      #corner { position: fixed; top: 10px; right: 10px; z-index: 12; display: flex; gap: 6px; }
+      #corner button, #fullscreen { min-width: 36px; height: 36px; padding: 0 8px; border: 1px solid #567; background: rgba(0,0,0,.6); color: #cde; font: 14px system-ui, sans-serif; border-radius: 6px; }
+      #fullscreen.on { color: #9f9; }
+      html.touch #corner { top: 200px; }
     </style>
     <script type="importmap">
       {
@@ -187,8 +195,11 @@
     <div id="goal" hidden></div>
     <div id="shotfx"></div>
     <pre id="net">alone</pre>
+    <div id="glerr" role="alert" hidden></div>
+    <div id="mpnote" hidden></div>
+    <div id="corner"><button id="reset" type="button" title="Reset / new session: forget saved data and start over">Reset</button></div>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=124"></script>
+    <script type="module" src="../../src/app/main.js?v=125"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {

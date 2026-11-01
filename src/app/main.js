@@ -1,6 +1,8 @@
 import { paintFrame } from "../engine/frame.js";
-import { mountTouch, wantsTouch } from "./touch.js?v=3";
-import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=3";
+import { mountFullscreen, mountTouch, wantsTouch } from "./touch.js?v=4";
+import { BOT_KEYS, createWander, stepWander } from "./bot.js?v=1";
+import { resetEverything } from "./reset.js?v=1";
+import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=4";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js?v=2";
 import { createAmbient, planAmbient } from "../audio/ambient.js";
@@ -9,8 +11,8 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=56";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=75";
+import { buildScene } from "../render/scene.js?v=57";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=76";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=4";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
@@ -84,8 +86,8 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { createEstimator, createSendState, createView, estimate, isMotion, modeOf, observe, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js";
-import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js";
+import { createEstimator, createSendState, createView, estimate, isMotion, modeOf, observe, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=2";
+import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=2";
 import { createIdentity, exportKey, importKey, keyPhrase, recoveryPhrase, signBytes } from "../net/identity.js";
 import {
   acceptSheet,
@@ -155,7 +157,20 @@ if (painter) {
   context = canvas.getContext("2d", { alpha: false });
   if (context) context.imageSmoothingEnabled = false;
   canvas.dataset.renderer = "cpu";
+  showGlError(canvas.dataset.gpuError || "WebGL2 is not available");
 }
+// A visible note when the GPU path fails, so a blank screen never looks like a working one.
+function showGlError(reason) {
+  const node = document.querySelector("#glerr");
+  if (!node) return;
+  node.hidden = false;
+  node.textContent = `Graphics: ${String(reason).split("\n")[0].slice(0, 160)}. Using the slower CPU picture.`;
+}
+canvas.addEventListener("webglcontextlost", (event) => {
+  event.preventDefault();
+  canvas.dataset.gpuError = "context lost";
+  showGlError("the GPU context was lost; reload to recover");
+});
 const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
@@ -194,7 +209,7 @@ const catalogHex = await Promise.all([
   fetch(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.arrayBuffer()),
   fetch(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
 ]).then(([atollBytes, catalogBytes]) => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
-const lighthouseConfig = await fetch(new URL("../../content/lighthouse.json?v=1", import.meta.url))
+const lighthouseConfig = await fetch(new URL("../../content/lighthouse.json?v=2", import.meta.url))
   .then((response) => (response.ok ? response.json() : null))
   .catch(() => null);
 const signalUrl = lighthouseUrl(params, location.hostname, lighthouseConfig);
@@ -211,6 +226,14 @@ const spawn = home
   ? { x: TOUR_START.x * 100, y: TOUR_START.y * 100, z: 0 }
   : params.get("look") === "dummy" ? atoll.placements.accuracyPad : atoll.placements.spawnFeet;
 const player = createPlayer([spawn.x / 100, spawn.y / 100, spawn.z / 100]);
+// ?bot=<seed>: a seeded wander controller holds the same keys a player would (tools/scale/).
+const bot = params.get("bot") ? createWander(Number.parseInt(params.get("bot"), 10) || 1, { center: [spawn.x / 100, spawn.y / 100], radius: 24 }) : null;
+let botOn = Boolean(bot);
+let paintCap = Math.max(0, Number(params.get("paintfps")) || 0);
+let lastCapped = 0;
+const pageErrors = [];
+addEventListener("error", (event) => pageErrors.push(String(event.message || event.error || "error").slice(0, 200)));
+addEventListener("unhandledrejection", (event) => pageErrors.push(String(event.reason?.message || event.reason || "rejection").slice(0, 200)));
 const world = createPlayerWorld(player);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
@@ -622,7 +645,9 @@ if (kept && keepSlot) {
 }
 if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 let linkNote = "";
-let lighthouseState = "off";
+const askedSolo = ["off", "none"].includes(params.get("lighthouse") || params.get("signal") || "");
+// No lighthouse configured (and solo not asked for): say the multiplayer server is offline.
+let lighthouseState = signalUrl || askedSolo ? "off" : "offline";
 const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0, motionIn: 0 };
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const wear = keptWorld?.wear ? unpackWear(keptWorld.wear) : createWear();
@@ -1019,12 +1044,40 @@ addEventListener("mousemove", (event) => {
   pitch = Math.max(-1.2, Math.min(1.2, pitch - event.movementY * 0.0022));
 });
 
+document.querySelector("#reset")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  resetEverything({ hold: () => { holdKeep = true; } });
+});
+{
+  const full = mountFullscreen();
+  if (full) document.querySelector("#corner")?.append(full);
+}
+if (lighthouseState === "offline") {
+  const note = document.querySelector("#mpnote");
+  if (note) {
+    note.textContent = "multiplayer server offline · playing solo";
+    note.hidden = false;
+    setTimeout(() => { note.hidden = true; }, 10000);
+  }
+}
 mountTouch({
   keys,
   look(dx, dy) {
     if (followId) return;
     yaw += dx * 0.006;
     pitch = Math.max(-1.2, Math.min(1.2, pitch - dy * 0.006));
+  },
+  // Two-finger drag orbits the camera like a held right mouse; it swings back when let go.
+  orbit(dx, dy, down) {
+    rightDown = down;
+    if (!down) return;
+    orbitYaw += dx * 0.008;
+    orbitPitch = Math.max(-1, Math.min(0.8, orbitPitch - dy * 0.008));
+    if (dx || dy) rightMoved = true;
+  },
+  // Pinch is the wheel: spread pulls the camera in, pinch pushes it out.
+  zoom(direction) {
+    turnWheel(direction);
   },
   fire(down) {
     trigger = down;
@@ -1980,6 +2033,7 @@ function markTarget(scene) {
   el.dataset.edge = screen.x < 0 || screen.x > 1 || screen.y < 0 || screen.y > 1 ? "edge" : "";
 }
 
+let lastScene = null;
 function paint(sample, width = canvas.width, height = canvas.height) {
   const scene = sceneFor(sample, width, height);
   scene.wear = wearScene();
@@ -2027,6 +2081,7 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   if (painter) {
     const drew = painter.paint(scene, width, height);
     if (!drew) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
+    lastScene = scene;
     return scene;
   }
   if (!context) {
@@ -2357,10 +2412,11 @@ async function openLink(to, offer, role) {
     channel.binaryType = "arraybuffer";
     channels[spec[0]] = channel;
   }
-  const link = { to, role, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc, proto: 1, packIn: packState(), packOut: packState(), loreIn: packState(), sent: null, motion: createSendState(), view: createView() };
+  const link = { to, role, ctrl: channels.ctrl, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc, proto: 1, packIn: packState(), packOut: packState(), loreIn: packState(), sent: null, motion: createSendState(), view: createView() };
   channels.ctrl.onopen = () => {
     try {
-      channels.ctrl.send(helloMessage(catalogHex));
+      channels.ctrl.send(helloMessage(catalogHex, viewFov()));
+      link.sentFov = viewFov();
     } catch {
       // No hello means the other side treats this link as v1.
     }
@@ -2370,6 +2426,7 @@ async function openLink(to, offer, role) {
     if (!hello) return;
     if (hello.catalog && !acceptHello(catalogHex, hello.catalog)) report = "catalog";
     link.proto = hello.proto;
+    if (hello.fov) link.fov = hello.fov;
   };
   const deliver = (bytes, state) => {
     let frames;
@@ -2488,6 +2545,56 @@ if (painter) fitCanvas(canvas, viewScale);
 paint(first);
 publish();
 canvas.dataset.ready = "1";
+// Horizontal field of view in radians, from the last painted camera.
+function viewFov() {
+  const cam = lastScene?.camera;
+  const fov = cam?.fov || BASE_FOV;
+  const aspect = cam?.aspect || canvas.width / Math.max(1, canvas.height) || 16 / 9;
+  return 2 * Math.atan(Math.tan((fov * Math.PI) / 360) * aspect);
+}
+function terrainKey() {
+  const entries = [...terrain.log.crust.overrides].map(([key, value]) => `${key}=${Math.round(value * 1000)}`).sort();
+  let h = 2166136261;
+  for (const entry of entries) for (let i = 0; i < entry.length; i += 1) h = Math.imul(h ^ entry.charCodeAt(i), 16777619) >>> 0;
+  return `${entries.length}:${h.toString(16)}`;
+}
+// Read-only probe for test benches (tools/scale/). Only setBot, setPaintFps and dig change anything,
+// and they press the same buttons a player can.
+globalThis.meridianProbe = {
+  id: () => meId,
+  ns: () => globalThis.meridianNs || "",
+  pose: () => ({ x: player.position[0], y: player.position[1], z: player.position[2], yaw, pitch, tick }),
+  remotes: () => [...poses].map(([id, pose]) => ({ id, x: pose.x, y: pose.y, z: pose.z || 0, tick: pose.tick, seenMs: performance.now() - (poseSeenAt.get(id) || 0) })),
+  links: () => links.map((link) => ({ to: link.to, role: link.role, proto: link.proto, open: link.snap?.readyState === "open", fov: link.fov || null })),
+  net: () => ({ ...net }),
+  lighthouse: () => lighthouseState,
+  fps: () => Number(canvas.dataset.fps || 0),
+  renderer: () => canvas.dataset.renderer || "",
+  gpuError: () => canvas.dataset.gpuError || "",
+  errors: () => [...pageErrors, ...(canvas.dataset.err ? [canvas.dataset.err] : [])],
+  terrain: () => terrainKey(),
+  fov: () => viewFov(),
+  memory: () => performance.memory?.usedJSHeapSize || 0,
+  bot: () => (bot ? { on: botOn, moved: bot.moved, picks: bot.picks, rescues: bot.rescues, mode: bot.mode } : null),
+  setBot(on) {
+    if (!bot) return false;
+    botOn = Boolean(on);
+    if (!botOn) for (const code of BOT_KEYS) keys.delete(code);
+    return botOn;
+  },
+  setPaintFps(fps) {
+    paintCap = Math.max(0, Number(fps) || 0);
+    return paintCap;
+  },
+  // Swing the bit like ?autobit=1 does: `strokes` digs at the ground ahead and below.
+  dig(strokes = 20, look = -0.9) {
+    const before = terrainKey();
+    const aim = bitAim(player.position, yaw, look);
+    for (let i = 0; i < strokes; i += 1) terrain.dig(aim.eye, aim.aim, { peer });
+    return { before, after: terrainKey(), changed: before !== terrainKey() };
+  },
+  reset: () => resetEverything({ confirm: () => true, hold: () => { holdKeep = true; } }),
+};
 if (agent) {
   const note = document.querySelector("#agenda");
   if (note) note.textContent = `${AGENDAS[agendaName].title}: ${AGENDAS[agendaName].agenda}`;
@@ -2542,7 +2649,12 @@ function publishPose() {
     observe(motionEst, tick, player.position, yaw);
     stepPeers();
   }
+  const fovNow = viewFov();
   for (const link of links) {
+    // A zoom or rotation changes what we can see: tell the peer so its tiers follow.
+    if (link.proto >= 3 && link.sentFov && Math.abs(fovNow - link.sentFov) > 0.05 && link.ctrl?.readyState === "open") {
+      try { link.ctrl.send(helloMessage(catalogHex, fovNow)); link.sentFov = fovNow; } catch {}
+    }
     // The archive never reads poses.
     if (link.role !== "archive" && link.proto >= 3 && link.snap.readyState === "open") {
       // v3: the receiver's own pose (as drawn here) plus our fov decides its tier; send on drift.
@@ -2552,7 +2664,7 @@ function publishPose() {
         motion = { tick, p: [...player.position], v: e.v, a: e.a, yaw, yawRate: e.yawRate, pitch, floor: player.position[2], mode: modeOf(e.v, airborne) };
       }
       const them = poses.get(link.to);
-      const view = them ? { x: them.x, y: them.y, yaw: them.yaw || 0, fov: 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * 16 / 9), range: 80 + skills.mapping.value / 10 } : null;
+      const view = them ? { x: them.x, y: them.y, yaw: them.yaw || 0, fov: link.fov || 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * 16 / 9), range: 80 + skills.mapping.value / 10 } : null;
       const tierIdx = tierFor(view, player.position);
       if (!shouldSend(link.motion, motion, tierIdx)) continue;
       net.snapOut += 1;
@@ -2626,6 +2738,13 @@ if (params.get("still") !== "1") {
         tick,
         wall: yard.pieces.some((piece) => piece.id === "wall"),
       }));
+    }
+    if (bot && botOn && !followId && !agent) {
+      const held = stepWander(bot, { x: player.position[0], y: player.position[1], yaw }, dt);
+      for (const code of BOT_KEYS) {
+        if (held.has(code)) keys.add(code);
+        else keys.delete(code);
+      }
     }
     if (!followId && !agent) {
       const turn = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
@@ -3261,7 +3380,10 @@ if (params.get("still") !== "1") {
     const interval = extra ? Math.max(decision.interval || 1000, 250) : traceInterval(settled, accel, paced.refresh || decision.refresh);
     canvas.dataset.traceMs = String(Math.round(interval));
     const due = extra ? decision.paint : active ? now - lastTrace >= interval * 0.85 : decision.paint;
-    if (params.get("nopaint") !== "1" && due) {
+    // ?paintfps= (or the probe) caps drawing only; the sim and network keep full speed.
+    const capped = paintCap > 0 && now - lastCapped < 1000 / paintCap - 2;
+    if (params.get("nopaint") !== "1" && due && !capped) {
+      lastCapped = now;
       const started = performance.now();
       paint(sample, trace.width, trace.height);
       const paintMs = performance.now() - started;
@@ -3279,7 +3401,7 @@ if (params.get("still") !== "1") {
     }
     const fade = Math.min(0.12, Math.max(0.03, interval / 1000));
     blend = Math.min(1, blend + dt / fade);
-    if (painter && painter.present) painter.present(blend);
+    if (painter && painter.present && !capped) painter.present(blend);
     canvas.dataset.fps = String(fps.paint(now));
     const fpsNode = document.querySelector("#fps");
     if (fpsNode) fpsNode.style.color = String(canvas.dataset.pace || "").includes("recover") ? "#fc8" : "#9f9";

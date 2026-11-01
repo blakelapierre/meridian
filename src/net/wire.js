@@ -19,15 +19,21 @@ export const PACK_DEFLATE = 0xf3;
 const REF_MIN = 64;
 const CACHE = 32;
 
-export function helloMessage(catalog = "") {
-  return JSON.stringify({ t: "hello", proto: PROTO, catalog });
+// fov (horizontal radians) is optional: the peer uses it to pick what we can see.
+export function helloMessage(catalog = "", fov = 0) {
+  const message = { t: "hello", proto: PROTO, catalog };
+  if (Number.isFinite(fov) && fov > 0.1 && fov < 3.1) message.fov = Math.round(fov * 1000) / 1000;
+  return JSON.stringify(message);
 }
 
 export function readHello(text) {
   try {
     const message = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
     if (message?.t !== "hello") return null;
-    return { proto: Math.max(1, Math.min(PROTO, Number(message.proto) || 1)), catalog: String(message.catalog || "") };
+    const hello = { proto: Math.max(1, Math.min(PROTO, Number(message.proto) || 1)), catalog: String(message.catalog || "") };
+    const fov = Number(message.fov);
+    if (Number.isFinite(fov) && fov > 0.1 && fov < 3.1) hello.fov = fov;
+    return hello;
   } catch {
     return null;
   }

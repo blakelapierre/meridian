@@ -136,6 +136,17 @@ export function createGpuPainter(canvas) {
     return null;
   }
   if (!gl) return fail(canvas, "no context");
+  // GLES checks. The shaders need highp floats in the fragment stage (ES3 guarantees it, but
+  // some drivers report 0 bits). Data textures are RGBA32F sampled NEAREST (core in ES3, no
+  // OES_texture_float_linear needed); every render target is RGBA8/R8, so no float render
+  // targets are required and EXT_color_buffer_float is only a bonus.
+  const high = gl.getShaderPrecisionFormat?.(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+  if (high && high.precision < 16) return fail(canvas, `fragment highp unsupported (${high.precision} bits)`);
+  if (gl.getParameter(gl.MAX_TEXTURE_SIZE) < 1024) return fail(canvas, `max texture ${gl.getParameter(gl.MAX_TEXTURE_SIZE)} < 1024`);
+  try {
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    canvas.dataset.gpuInfo = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).slice(0, 80);
+  } catch {}
   gl.getExtension("EXT_color_buffer_float");
   const vert = `#version 300 es
 in vec2 aPos;
