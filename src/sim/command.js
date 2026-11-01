@@ -7,6 +7,18 @@ export function sitOrder(seated) {
   return seated ? "hold" : null;
 }
 
+export function giveOrder(orders, id, word) {
+  if (!orders || !id || !word) return orders || null;
+  orders.set(id, word);
+  return orders;
+}
+
+export function clearVoucher(table, standing) {
+  if (!table || !standing) return table || null;
+  table.voucher = "";
+  return table;
+}
+
 export function readVoucher(table) {
   if (!table) return "";
   return table.voucher || "unsigned";

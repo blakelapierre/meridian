@@ -98,6 +98,13 @@ export function pushNote(wind) {
   return ` · wind push ${(strength * 1000).toFixed(1)}`;
 }
 
+// A moving body leans into the push. A still body stays upright. Radians, small.
+export function bodyLean(wind, moving) {
+  if (!moving || !wind) return 0;
+  const push = windPush(wind);
+  return Math.max(-0.15, Math.min(0.15, push[0] * 40));
+}
+
 export function frontGain(dot) {
   return dot < 0 ? 0.5 : 1;
 }

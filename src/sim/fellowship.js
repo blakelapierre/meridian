@@ -31,6 +31,27 @@ export function spendPurse(purse, patron, cost) {
   return true;
 }
 
+// The patron purse pays upkeep. It does not buy a wall.
+export function buyFromPurse(purse, patron, kind) {
+  if (kind === "wall") return false;
+  return spendPurse(purse, patron, 1);
+}
+
+export function dragMessage(id) {
+  if (!id) return "";
+  return JSON.stringify({ t: "drag", id, walk: true });
+}
+
+export function readDragMessage(text) {
+  try {
+    const message = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
+    if (message?.t !== "drag" || !message.walk || !message.id) return null;
+    return { id: String(message.id), walk: true };
+  } catch {
+    return null;
+  }
+}
+
 export function stepDrag(feet, ask, yaw = 0, tick = 0) {
   if (!ask?.walk || !feet) return feet ? feet.slice() : null;
   const stride = Math.sin(tick * 0.8) * 0.15;

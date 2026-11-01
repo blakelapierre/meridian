@@ -247,10 +247,16 @@ export function toggleGate(yard, cell) {
 export function tryPlaceFloor(yard, cell) {
   if (!cell) return { ok: false, reason: "aim" };
   if ((yard.stone || 0) < 2) return { ok: false, reason: "stone" };
-  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "footing")) return { ok: false, reason: "occupied" };
+  const beam = yard.pieces.some((piece) => piece.id === "beam" && sameCell(piece.at, cell));
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "footing" && piece.id !== "beam")) return { ok: false, reason: "occupied" };
   yard.stone -= 2;
-  yard.pieces.push({ id: "floor", at: cell.slice(), anchors: true });
-  return { ok: true, stone: yard.stone };
+  yard.pieces.push({ id: "floor", at: cell.slice(), anchors: true, held: beam });
+  return { ok: true, stone: yard.stone, held: beam };
+}
+
+export function slipChecks(slip, sig) {
+  if (!slip || slip.id !== "slip" || !(sig > 0)) return false;
+  return slip.sig === sig;
 }
 
 export function tryPlaceCart(yard, cell) {
@@ -273,7 +279,9 @@ export function rollCart(yard) {
     const side = [cart.at[0] + 1, cart.at[1]];
     const other = yard.pieces.find((piece) => piece.id === "road" && sameCell(piece.at, side));
     if (other) {
+      const from = cart.at.slice();
       cart.at = side.slice();
+      cart.look = from;
       cart.wait = 0;
       return true;
     }

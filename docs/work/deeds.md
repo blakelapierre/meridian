@@ -6,20 +6,20 @@ From the concept. Deeds reserve volume. They are crude law the sim enforces. The
 
 A bound hearth claims a 6 m radius. The binder may edit it. A stranger's certified dig inside it is refused. Upkeep is not charged.
 
-Once a minute a bound hearth spends 1 metal. If you cannot pay, the claim lapses. One missed upkeep is grace. The next missed upkeep lapses the claim.
+Once a minute a bound hearth spends 1 metal. If you cannot pay, the claim lapses. One missed upkeep is grace. The next missed upkeep lapses the claim. Grace is on the deed a peer checks.
 
 ## This pass
 
-Grace is marked on the deed line while the claim is in grace.
+The deed a peer checks carries grace, the cell, the holder, and the radius.
 
 ## Proves
 
-`test/slice.test.js` covers the mark.
+`test/slice.test.js` covers the grace flag on that deed.
 
 ## Next
 
-Grace is not written into the deed a peer checks. Not in this build.
+A deed that lapses in front of the other client. Not in this build.
 
 ## Later
 
-A deed that lapses in front of the other client. Keys you can hand over.
+Keys you can hand over.

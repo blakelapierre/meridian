@@ -3,6 +3,13 @@ export function graceMark(deed, grace) {
   return { ...deed, grace: Boolean(grace) };
 }
 
+// The deed a peer checks, grace included.
+export function peerDeed(deed, grace) {
+  const marked = graceMark(deed, grace);
+  if (!marked) return null;
+  return { cell: marked.cell, holder: marked.holder || null, radius: marked.radius, grace: marked.grace };
+}
+
 export function deedVolume(cell, holder, radius = 6) {
   if (!cell || !holder) return null;
   return { cell: cell.slice(), holder, radius };

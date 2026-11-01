@@ -12,6 +12,17 @@ export function graze(patch) {
   return { stock, track: (patch?.stock || 0) > 0, dead: stock <= 0 };
 }
 
+// A grazed patch is an animal the world picture can draw. It does not walk.
+export function grazeAnimal(patch, at = [12, -150, 0]) {
+  if (!patch?.track && !patch?.dead) return null;
+  return {
+    kind: "graze",
+    at: [at[0], at[1], (at[2] || 0) + 0.2],
+    radius: 0.3,
+    color: [0.45, 0.32, 0.18, 1],
+  };
+}
+
 export function standHeight(x, y, dug = 0) {
   if (dug < -0.01) return dug;
   return duneHeight(x, y);
@@ -91,9 +102,11 @@ export function fauna(nowMs, from) {
   const skinkHome = [-7 + Math.sin(t * 0.5) * 2.1, -136 + Math.sin(t * 0.17) * 1.5];
   const skink = shy(skinkHome, from, 6, 2.4);
   const gull = [Math.cos(t * 0.15) * 16, -138 + Math.sin(t * 0.15) * 12, 6 + Math.sin(t * 0.4) * 0.7];
+  const grazed = grazeAnimal(graze({ stock: 1 }), [12, -150, duneHeight(12, -150)]);
   return [
     { kind: "crab", at: [crab[0], crab[1], duneHeight(crab[0], crab[1]) + 0.12], radius: 0.22, color: [0.62, 0.28, 0.16, 1] },
     { kind: "skink", at: [skink[0], skink[1], duneHeight(skink[0], skink[1]) + 0.1], radius: 0.16, color: [0.42, 0.5, 0.2, 1] },
     { kind: "gull", at: gull, radius: 0.28, color: [0.92, 0.92, 0.88, 1] },
-  ];
+    grazed,
+  ].filter(Boolean);
 }

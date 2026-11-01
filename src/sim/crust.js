@@ -177,6 +177,16 @@ export function applySlump(crust, aim) {
   return next;
 }
 
+// Off the beach a slump write can be certified. On the beach it cannot.
+export function certifySlump(beach) {
+  return { mode: "slump", certified: !beach, beach: Boolean(beach) };
+}
+
+export function acceptCertifiedSlump(crust, aim, slip) {
+  if (!slip?.certified || slip.beach) return null;
+  return applySlump(crust, aim);
+}
+
 export function slumpChoice(here, neighbor) {
   if (here - neighbor < DIG_SAMPLE_MM) return null;
   return here - DIG_SAMPLE_MM / 2;

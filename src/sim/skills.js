@@ -63,8 +63,12 @@ export function teachEmpty(skills) {
   return name;
 }
 
+export function teachAtCap(skill) {
+  return !skill || skill.value >= 40;
+}
+
 export function teachMore(skills) {
-  const name = SKILL_NAMES.find((item) => skills[item] && skills[item].value > 0 && skills[item].value < 40);
+  const name = SKILL_NAMES.find((item) => skills[item] && skills[item].value > 0 && !teachAtCap(skills[item]));
   if (!name) return null;
   skills[name].value = Math.min(40, skills[name].value + 4);
   skills[name].xp = skills[name].value;

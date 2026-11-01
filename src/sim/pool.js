@@ -32,6 +32,13 @@ export function spillPool(pool) {
   return { ...pool, y: pool.y + 0.5, key: `${pool.x},${pool.y + 0.5}` };
 }
 
+// A spill fills the cell it enters.
+export function fillCell(pool) {
+  const spilled = spillPool(pool);
+  if (!spilled || spilled === pool || spilled.y === pool.y) return pool || null;
+  return { ...spilled, filled: Math.round(spilled.y * 2) / 2 };
+}
+
 export function flowOnce(pool, floorHere, floorThere) {
   if (!pool || floorThere >= floorHere) return pool;
   return { ...pool, y: pool.y + 0.5, floor: floorThere, key: `${pool.x},${pool.y + 0.5}` };

@@ -14,20 +14,20 @@ Peers meet through the lighthouse and a WebRTC data channel. Positions are unrel
 | 12 | Lore |
 | 13 | Hearth or fin |
 
-A harm note can be packed as a lore record with the harm byte beside the text.
+A harm note can be packed as a lore record with the harm byte beside the text. A peer that accepts the record writes that byte into the harm log. Hello already carries the catalog hash. The harm note still rides the lore channel.
 
 ## This pass
 
-The lore frame the live socket sends includes the harm byte.
+A peer reads the harm byte into the harm log.
 
 ## Proves
 
-`test/slice.test.js` covers the byte on the frame.
+`test/slice.test.js` covers the byte on the frame. The client calls `noteHarm` when the record carries one.
 
 ## Next
 
-A peer does not read that byte into the harm log. Not in this build.
+The harm note is not its own channel. Not in this build.
 
 ## Later
 
-A catalog hash on hello. Interest filters. Channels that are not all on one ops socket.
+A reply that carries the harm log back.

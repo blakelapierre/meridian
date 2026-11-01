@@ -21,6 +21,44 @@ export function recoveryPhrase(identity, count = 6) {
   return words.join(" ");
 }
 
+export function rememberKey(book, identity) {
+  const phrase = recoveryPhrase(identity);
+  if (!book || !phrase || !identity?.secret || !identity?.pubkey) return book || null;
+  book[phrase] = { secret: identity.secret.slice(), pubkey: identity.pubkey.slice() };
+  return book;
+}
+
+export function restoreKey(book, phrase) {
+  const found = book?.[phrase];
+  if (!found?.secret || !found?.pubkey) return null;
+  return { secret: found.secret.slice(), pubkey: found.pubkey.slice() };
+}
+
+function hexOf(bytes) {
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function packBook(book) {
+  const packed = {};
+  for (const [phrase, key] of Object.entries(book || {})) {
+    if (!key?.secret || !key?.pubkey) continue;
+    packed[phrase] = { secret: hexOf(key.secret), pubkey: hexOf(key.pubkey) };
+  }
+  return JSON.stringify(packed);
+}
+
+export function unpackBook(text) {
+  let packed = null;
+  try { packed = JSON.parse(String(text || "")); } catch { return {}; }
+  if (!packed || typeof packed !== "object") return {};
+  const book = {};
+  for (const [phrase, key] of Object.entries(packed)) {
+    const restored = importKey(`${key?.secret || ""}${key?.pubkey || ""}`);
+    if (restored) book[phrase] = restored;
+  }
+  return book;
+}
+
 export function exportKey(identity) {
   const bytes = new Uint8Array(identity.secret.length + identity.pubkey.length);
   bytes.set(identity.secret, 0);

@@ -23,6 +23,12 @@ export function raiseSpore(bite, at) {
   return { at: [at[0], at[1], (at[2] || 1) + 0.4], spore: true };
 }
 
+export function spreadSpore(spore, cell) {
+  if (!spore?.spore || !cell) return spore || null;
+  const other = cell === "atoll-0" ? "atoll-1" : "atoll-0";
+  return { ...spore, cells: [cell, other] };
+}
+
 export function swarmPoint(x, y, digs) {
   if (y >= -190 || digs < 20) return null;
   return [x + 1.6, y, 1.1];

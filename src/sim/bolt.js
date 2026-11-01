@@ -49,3 +49,17 @@ export function stepShotWait(lock = 0, reload = 0) {
 export function firePull(fires = []) {
   return 0.04 + (fires.length > 1 ? 0.03 : 0);
 }
+
+// A pull shifts a miss off the aim line. No pull leaves the line as aimed.
+export function missDir(dir, pull = 0) {
+  if (!dir) return [0, 1, 0];
+  const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+  const side = pull > 0 ? pull : 0;
+  return [dir[0] / len + side, dir[1] / len, dir[2] / len];
+}
+
+export function spendMagazine(rounds, beat) {
+  const left = Math.max(0, rounds | 0);
+  if (!beat || beat.lock > 0 || !(beat.reload > 0)) return left;
+  return Math.max(0, left - 1);
+}

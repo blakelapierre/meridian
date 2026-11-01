@@ -4,7 +4,7 @@ import { chaseOrigin, playerParts } from "../sim/body.js";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
-import { fauna, floraBoxes } from "../sim/life.js?v=67";
+import { fauna, floraBoxes } from "../sim/life.js?v=68";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const DUMMY = [0.86, 0.22, 0.18, 1];
@@ -14,7 +14,7 @@ export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [] }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], lean = 0 }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -95,7 +95,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     });
   }
   if (view === "third" && self) {
-    for (const part of playerParts(feet, yaw, crouch, { self: true })) objects.push(part);
+    for (const part of playerParts(feet, yaw + (lean || 0), crouch, { self: true })) objects.push(part);
   }
   for (const other of others) {
     for (const part of playerParts(other.feet, other.yaw, !!other.crouch, { self: false, color: other.color || OTHER })) objects.push(part);

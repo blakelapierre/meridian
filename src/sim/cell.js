@@ -22,6 +22,13 @@ export function tally(yes, nos) {
   return { yes, present, pass: quorum(yes, present) };
 }
 
+// A stored yes from another cell is not a vote here. A stored no still counts.
+export function tallyStored(localYes, stored) {
+  let nos = 0;
+  if (stored) for (const accept of stored.values()) if (!accept) nos += 1;
+  return tally(localYes, nos);
+}
+
 export function inInterest(distance, reach = 80) {
   return distance <= reach;
 }

@@ -127,10 +127,15 @@ export function countLanding(skills) {
   return skill.falls;
 }
 
-// Body-line note for the landing counter once it has been seeded or counted.
+// Body-line note for the landing counter, including the soak that counter buys.
+export function landingSoak(falls = 0) {
+  return Math.min(6, Math.max(0, falls | 0));
+}
+
 export function landingNote(skills) {
   const falls = skills?.landing?.falls;
-  return falls > 0 ? ` land ${falls}` : "";
+  if (!(falls > 0)) return "";
+  return ` land ${falls} soak ${landingSoak(falls)}`;
 }
 
 export function fallFromCount(integrity, speedDown, falls = 0) {
@@ -141,6 +146,11 @@ export function fluxMetal(tick, yaw = 0, broken = false) {
   if (broken) return 0;
   const gain = yaw ? 0.6 : 1;
   return Math.floor((finOutput(tick) * gain) / 10);
+}
+
+export function finCredit(metal) {
+  if (!(metal > 0)) return null;
+  return { credit: "fin", metal };
 }
 
 export function bleed(vitals, seconds = 1 / 30) {

@@ -12,7 +12,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=57";
+import { buildScene } from "../render/scene.js?v=58";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=76";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=4";
 import { createFps } from "../render/fps.js";
@@ -34,15 +34,16 @@ import {
   windAt,
   storeWind,
   windPush,
+  bodyLean,
   pushNote,
 } from "../sim/rules.js";
-import { dominionFrame } from "../sim/clocks.js";
+import { overheadCamera } from "../sim/clocks.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { dayWord, DAY_TICKS } from "../sim/sun.js";
-import { columnFloor, applySlump, bitMode } from "../sim/crust.js";
+import { columnFloor, acceptCertifiedSlump, bitMode, certifySlump } from "../sim/crust.js";
 import { bitAim, crustFeet } from "../sim/bit.js?v=2";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, repairFin, rollCart, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -64,11 +65,12 @@ import {
   landingNote,
   countLanding,
   fluxMetal,
+  finCredit,
   bleed,
 } from "../sim/hearth.js";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
 import { createJump } from "../sim/jump.js";
-import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=2";
+import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=3";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { createWear, decayWear, DECAY_TICKS, mergeWear, packWear, stepWear, takeWearBatches, unpackWear, WEAR_KIND, wearWindow } from "../sim/wear.js?v=1";
@@ -89,7 +91,7 @@ import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.
 import { acceptHello, bytesHash } from "../net/hello.js";
 import { ackMessage, createEstimator, createSendState, createView, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=6";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=2";
-import { createIdentity, exportKey, importKey, keyPhrase, recoveryPhrase, signBytes } from "../net/identity.js";
+import { createIdentity, exportKey, importKey, keyPhrase, packBook, recoveryPhrase, rememberKey, restoreKey, signBytes, unpackBook } from "../net/identity.js";
 import {
   acceptSheet,
   applyCharacter,
@@ -111,15 +113,15 @@ import {
   unpackPlate,
 } from "../sim/persist.js";
 import { firstCrate } from "../sim/culture.js";
-import { createPools, drainPool, flowOnce, lowerPool, notePool, poolLift, spillPool } from "../sim/pool.js";
-import { deedVolume, graceMark, grantKey, mayEdit } from "../sim/deed.js";
-import { bondOpen, dragAsk, dragPace, hearBond, offerBond, payTithe, spendPurse, stepDrag } from "../sim/fellowship.js";
-import { afterShot, boltHit, boltInSmoke, firePull, penFactor, startBolt, stepBolt, stepShotWait } from "../sim/bolt.js";
+import { createPools, drainPool, fillCell, flowOnce, lowerPool, notePool, poolLift, spillPool } from "../sim/pool.js";
+import { deedVolume, grantKey, mayEdit, peerDeed } from "../sim/deed.js";
+import { bondOpen, buyFromPurse, dragAsk, dragMessage, dragPace, hearBond, offerBond, payTithe, readDragMessage, spendPurse, stepDrag } from "../sim/fellowship.js";
+import { afterShot, boltHit, boltInSmoke, firePull, missDir, penFactor, spendMagazine, startBolt, stepBolt, stepShotWait } from "../sim/bolt.js";
 import { noteHarm } from "../sim/identityharm.js";
-import { cellId, castVote, inInterest, sameCell, tally } from "../sim/cell.js";
-import { maySit, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=67";
-import { raiseSpore, sporeMetal, stepSwarm, swarmPoint } from "../sim/litho.js";
+import { cellId, castVote, inInterest, sameCell, tallyStored } from "../sim/cell.js";
+import { clearVoucher, giveOrder, maySit, sitOrder, writeVoucher } from "../sim/command.js";
+import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=68";
+import { raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
 import { radialDown, shellDrop, shellTilt } from "../sim/shell.js";
@@ -260,11 +262,18 @@ if (freshBoot) {
   clean.searchParams.delete("fresh");
   history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
 }
-const identity = importKey(params.get("key") || "") || (keepSlot && loadIdentity(keptStore, keepSlot)) || createIdentity();
+let identity = importKey(params.get("key") || "") || (keepSlot && loadIdentity(keptStore, keepSlot)) || createIdentity();
+const bootPhrase = params.get("phrase") || "";
+if (bootPhrase && !params.get("key")) {
+  const restored = restoreKey(unpackBook(keptStore.get("meridian-book")), bootPhrase);
+  if (restored) identity = { secret: restored.secret, pubkey: restored.pubkey };
+}
 if (keepSlot && !params.get("key")) saveIdentity(keptStore, identity, keepSlot);
+identity.book = unpackBook(keptStore.get("meridian-book"));
 const culture = firstCrate(params.get("culture") || "holds");
 const pools = createPools();
 const bonds = new Map();
+const orders = new Map();
 const bolts = [];
 const deedKeys = new Set();
 const vein = createVein([8, -148]);
@@ -315,6 +324,8 @@ let shotQueued = false;
 let cooldown = 0;
 let report = "";
 let windNote = "";
+let lean = 0;
+let magazine = 6;
 let useEdge = false;
 let buyEdge = false;
 let selectEdge = false;
@@ -937,7 +948,14 @@ addEventListener("keydown", (event) => {
     offerBond(bonds, selection.id);
     report = bonds.get(selection.id) === "both" ? "fellowship" : "offered";
   }
-  if (event.code === "KeyO" && !event.repeat) report = event.shiftKey ? recoveryPhrase(identity) : keyPhrase(identity);
+  if (event.code === "KeyO" && !event.repeat) {
+    if (event.shiftKey) {
+      if (!identity.book) identity.book = {};
+      rememberKey(identity.book, identity);
+      keptStore.set("meridian-book", packBook(identity.book));
+    }
+    report = event.shiftKey ? recoveryPhrase(identity) : keyPhrase(identity);
+  }
   if (event.code === "KeyG" && !event.repeat) {
     if (yard.stone > 0) {
       yard.stone -= 1;
@@ -1002,6 +1020,12 @@ addEventListener("keydown", (event) => {
   if (event.code === "KeyX" && !event.repeat && selection?.kind === "player") {
     dragging = !dragging;
     report = dragging ? "drag" : "let go";
+    if (dragging) {
+      for (const link of links) {
+        if (link.ctrl?.readyState !== "open") continue;
+        try { link.ctrl.send(dragMessage(selection.id)); } catch { /* the next pose still moves you */ }
+      }
+    }
   }
   if (event.code === "KeyN" && !event.repeat && notes.length) {
     const at = [Math.round(player.position[0] / 0.5), Math.round(player.position[1] / 0.5)];
@@ -1331,6 +1355,7 @@ function sceneFor(sample, width, height) {
     cameraOrigin: cameraPos,
     cameraDir: cameraLook,
     fov: aim.fov,
+    lean,
     smoke: smokeTicks > 0 ? (smokeAt || player.position) : null,
     swarm: swarmAt || swarmPoint(player.position[0], player.position[1], digs),
     pools,
@@ -1556,7 +1581,7 @@ function drawChart() {
   }
   if (seated) {
     plotted.marks.push({ kind: "order", point: [player.position[0], player.position[1]], name: sitOrder(true) });
-    const overhead = dominionFrame(true, player.position[0], player.position[1]);
+    const overhead = overheadCamera(true, player.position[0], player.position[1]);
     if (overhead) plotted.marks.push({ kind: "overhead", point: [overhead.x, overhead.y] });
   }
   if ((yard.tracks || 0) > 0) {
@@ -1631,6 +1656,9 @@ function actOn(sample) {
       if (seated) {
         const table = yard.pieces.find((piece) => piece.id === "table");
         writeVoucher(table, "self");
+        for (const actor of otherActors()) giveOrder(orders, actor.id, sitOrder(true));
+      } else {
+        clearVoucher(yard.pieces.find((piece) => piece.id === "table"), true);
       }
       report = seated ? sitOrder(true) : "stood";
     } else report = "closed";
@@ -1665,7 +1693,12 @@ function actOn(sample) {
   if (selection.kind === "slip" && selection.cell) {
     const slip = yard.pieces.find((piece) => piece.id === "slip" && piece.at[0] === selection.cell[0] && piece.at[1] === selection.cell[1]);
     if (slip) {
-      takeTold(notes, skills, slip.text || "", slip.by || "");
+      const kept = harmLog.find((row) => row.sig)?.sig || slip.sig;
+      if (slip.sig > 0 && !slipChecks(slip, kept)) {
+        report = "mismatch";
+        return;
+      }
+      takeTold(notes, skills, slip.text || "", slip.by || "", slip.sig || 0);
       yard.pieces = yard.pieces.filter((piece) => piece !== slip);
       report = "picked up";
       return;
@@ -1952,7 +1985,8 @@ function publish() {
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const fluxPiece = yard.pieces.find((piece) => piece.id === "fin");
   const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0))}` : "";
-  const bound = yard.bound ? graceMark({ cell: yard.bound }, yard.grace) : null;
+  const finNote = (yard.finMetal || 0) > 0 ? ` · fin ${yard.finMetal}` : "";
+  const bound = yard.bound ? peerDeed({ cell: yard.bound, holder: pubkeyHex(identity.pubkey), radius: 6 }, yard.grace) : null;
   const boundNote = bound ? ` · bound${bound.grace ? " grace" : ""}` : "";
   const legNote = (vitals.left < 100 || vitals.right < 100) ? ` · L${Math.ceil(vitals.left)} R${Math.ceil(vitals.right)}` : "";
   const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${landingNote(skills)}${legNote}${windNote}`;
@@ -1967,9 +2001,10 @@ function publish() {
     : "";
   const withYou = [...bonds.entries()].filter(([, state]) => state === "both").map(([id]) => id);
   const bondNote = withYou.length ? ` · with ${withYou.join(" ")}` : "";
+  const orderNote = orders.size ? ` · hold ${orders.size}` : "";
   const drop = shellDrop(player.position[0], player.position[1]);
   const dropNote = drop > 0.02 ? ` · drop ${drop.toFixed(2)}` : "";
-  const reloadNote = shotLock > 0 ? ` · lock ${shotLock}` : reloadBeat > 0 ? ` · reload ${reloadBeat}` : "";
+  const reloadNote = shotLock > 0 ? ` · lock ${shotLock}` : reloadBeat > 0 ? ` · reload ${reloadBeat} mag ${magazine}` : "";
   const harmNote = harmLog.length ? ` · harm ${harmLog.length}` : "";
   const clockNote = ` · ${clockName(entryState.joined, seated)}`;
   const cultureNote = ` · ${cultureName}`;
@@ -2006,7 +2041,7 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${orderNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${finNote}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   paintNet();
   paintHint();
   const range = document.querySelector("#range");
@@ -2165,14 +2200,14 @@ function fire(sample) {
       const pose = poses.get(link.to);
       return pose && sameCell(cellId(player.position[1]), cellId(pose.y));
     }).length;
-    let nos = 0;
+    const outside = new Map();
     for (const link of links) {
       const pose = poses.get(link.to);
       if (!pose || sameCell(cellId(player.position[1]), cellId(pose.y))) continue;
       castVote(ballots, cellId(pose.y), false);
-      nos += 1;
+      castVote(outside, cellId(pose.y), false);
     }
-    if (tally(voters, nos).pass) {
+    if (tallyStored(voters, outside).pass) {
       const applied = applyDummyHit(dummy, shot.hitbox);
       const scaled = Math.round(applied.damage * penFactor(0, 1));
       grantUse(skills, "marksmanship", { tick });
@@ -2191,11 +2226,15 @@ function fire(sample) {
   const armed = afterShot();
   shotLock = armed.lock;
   reloadBeat = armed.reload;
+  magazine = spendMagazine(magazine, { lock: 0, reload: armed.reload });
   if (selection?.kind === "player") {
     friends.set(selection.id, -1);
     bonds.delete(selection.id);
   }
-  if (!shot.hitbox) bolts.push(startBolt(eye, shot.dir));
+  if (!shot.hitbox) {
+    const pull = firePull(yard.pieces.find((piece) => piece.id === "mission")?.fires || []);
+    bolts.push(startBolt(eye, missDir(shot.dir, pull)));
+  }
   if (shot.hitbox) tourFacts.hits += 1;
   else if (tourStep(tour)?.id === "shoot") {
     const d = atoll.placements.dummy;
@@ -2314,6 +2353,7 @@ function onOps(bytes, from) {
     for (const line of accepted.notes || []) {
       if (takeTold(notes, skillBag(), line, from || "", accepted.sig || 0)) told += 1;
     }
+    if (accepted.harm) noteHarm(harmLog, from || "peer", "lore", accepted.harm);
     if (learned.ground || learned.places) {
       net.heard += learned.ground + learned.places;
       loreNote = `heard ${learned.ground + learned.places}`;
@@ -2447,6 +2487,14 @@ async function openLink(to, offer, role) {
     const ack = readAck(text);
     if (ack) {
       noteAck(link.motion, ack.tick);
+      return;
+    }
+    const drag = readDragMessage(text);
+    if (drag?.id === meId) {
+      const stepped = stepDrag(player.position, dragAsk(true), yaw, tick);
+      player.position[0] = stepped[0];
+      player.position[1] = stepped[1];
+      report = "dragged";
       return;
     }
     const hello = readHello(text);
@@ -2909,7 +2957,11 @@ if (params.get("still") !== "1") {
       if (tick > 0 && tick % 1800 === 0) {
         for (const piece of yard.pieces) {
           if (piece.id !== "fin") continue;
-          yard.metal += fluxMetal(tick, piece.yaw || 0, piece.broken);
+          const gained = fluxMetal(tick, piece.yaw || 0, piece.broken);
+          if (gained && finCredit(gained)) {
+            yard.metal += gained;
+            yard.finMetal = (yard.finMetal || 0) + gained;
+          }
         }
       }
       if (tick % 30 === 0) {
@@ -2930,7 +2982,9 @@ if (params.get("still") !== "1") {
             if (stepped.bite) {
               vitals.pain = Math.min(100, (vitals.pain || 0) + 1);
               if (raiseSpore(true, swarmAt)) {
+                const spread = spreadSpore({ spore: true, at: swarmAt }, cellId(player.position[1]));
                 yard.spores = (yard.spores || 0) + 1;
+                yard.sporeCells = spread?.cells || yard.sporeCells;
                 yard.metal = sporeMetal(yard.metal, { beach: player.position[1] >= -190, wood: true, nearest: 30 });
               }
             }
@@ -3036,11 +3090,14 @@ if (params.get("still") !== "1") {
           };
           report = `work ${Math.floor(raising.ticks / 30)}s`;
           if (raising.ticks >= need) {
-            const placed = job === "hearth"
-              ? tryFinishHearth(yard, raising.cell)
-              : job === "fin"
-                ? tryFinishFin(yard, raising.cell)
-                : tryPlaceWall(yard, raising.cell, skills.building.value);
+            let placed;
+            if (job === "hearth") placed = tryFinishHearth(yard, raising.cell);
+            else if (job === "fin") placed = tryFinishFin(yard, raising.cell);
+            else {
+              const patron = Object.keys(yard.purse || {}).find((id) => (yard.purse[id] || 0) > 0);
+              if (patron) buyFromPurse(yard.purse, patron, "wall");
+              placed = tryPlaceWall(yard, raising.cell, skills.building.value);
+            }
             report = placed.ok ? job : placed.reason;
             if (placed.ok) {
               hear("place");
@@ -3084,7 +3141,7 @@ if (params.get("still") !== "1") {
           const aim = bitAim(bitFeet(), sample.yaw, sample.pitch, sample.crouch);
           const mode = bitMode(player.position[1] >= -190, brush);
           if (mode === "slump") {
-            const wrote = applySlump(terrain.log.crust, aim.aim);
+            const wrote = acceptCertifiedSlump(terrain.log.crust, aim.aim, certifySlump(player.position[1] >= -190));
             report = wrote == null ? "firm" : "slump";
             hear("dig");
           } else {
@@ -3142,13 +3199,17 @@ if (params.get("still") !== "1") {
       world.gravity[2] += poolLift(pools, player.position);
       const falling = player.velocity[2];
       const drifting = Math.hypot(player.velocity[0], player.velocity[1]) > 0.15;
-      if (!drifting || vitals.down > 0) windNote = "";
+      if (!drifting || vitals.down > 0) {
+        windNote = "";
+        lean = 0;
+      }
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, sample, jump, skills.jump.value);
       if (drifting && vitals.down <= 0) {
         const felt = cellWind.get(cellId(player.position[1]));
         windNote = pushNote(felt);
+        lean = bodyLean(felt, true);
         const push = windPush(felt);
         player.velocity[0] += push[0];
         player.velocity[1] += push[1];
@@ -3306,10 +3367,11 @@ if (params.get("still") !== "1") {
         report = gate.ok ? (gate.gate ? "gate" : "shut") : gate.reason;
         if (gate.ok && gate.gate) {
           const lowered = lowerPool(pools, true);
-          const spilled = spillPool(lowered);
+          const spilled = fillCell(lowered);
           if (lowered && spilled && spilled !== lowered) {
             lowered.y = spilled.y;
             lowered.key = spilled.key;
+            lowered.filled = spilled.filled;
           }
         }
       } else if (mark.inRange && mark.kind === "door") {

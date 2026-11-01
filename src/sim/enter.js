@@ -1,5 +1,5 @@
 import { buyOffer, createMatch, joinMatch, rejoin, setChannel, setInside, stepMatch } from "./strike.js";
-import { defusePay, roundMaterials } from "./clocks.js";
+import { defusePay, payPurse, roundMaterials } from "./clocks.js";
 
 export const SMOKE = { id: "smoke", scrip: 300 };
 
@@ -87,7 +87,9 @@ export function stepEntry(entry, { position, use = false, buy = false, yard, off
     ? defusePay({ defused: true, abandoned: player.abandoned })
     : roundMaterials({ abandoned: player.abandoned, phase: entry.match.phase, previous });
   if (paid) {
-    player.beach.metal += paid;
+    const purse = payPurse(defused ? "defuse" : "round");
+    player.beach.metal += purse.metal;
+    player.purseName = purse.purse;
     if (!notice) notice = defused ? "defused" : "paid";
   }
   yard.metal = player.beach.metal;

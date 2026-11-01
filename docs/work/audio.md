@@ -20,21 +20,23 @@ K toggles the listener. The line says `muted` while it is off. The first cue als
 
 A shot behind you is half as loud. It is not silent. Distance falloff is unchanged.
 
+Ambient sources are scheduled: surf, gusts, birds, gulls, insects, rustle, distant activity, and rare sounds. There is no music bed.
+
 ## This pass
 
-The sea cue is half as loud at noon. It is not silent.
+The note now records that ambient schedule. No new cue was added.
 
 ## Proves
 
-`test/slice.test.js` covers the noon gain.
+`test/slice.test.js` covers the noon gain. `src/audio/ambient.js` schedules the sources.
 
 ## Next
 
-The sea drops to 0.3 at night (0.5 at noon). Sounds from other players (shots, digs, steps) are placed by distance and side through the hearing sense (`hearAt` in `src/sim/perception.js`). Ambient sources are not in this build.
+A shot that cracks only inside its range. Not in this build.
 
 ## Later
 
-A shot that cracks only inside its range. No music bed.
+No music bed.
 
 ## Ambient soundscape (batch 3)
 
