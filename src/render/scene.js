@@ -4,7 +4,7 @@ import { chaseOrigin, playerParts } from "../sim/body.js";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
-import { fauna, floraBoxes } from "../sim/life.js?v=56";
+import { fauna, floraBoxes } from "../sim/life.js?v=67";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const DUMMY = [0.86, 0.22, 0.18, 1];

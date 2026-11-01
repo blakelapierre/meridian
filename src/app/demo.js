@@ -33,6 +33,7 @@ export function lighthouseLine(state) {
   if (state === "unreachable") return "lighthouse unreachable, playing solo";
   if (state === "connecting") return "lighthouse connecting";
   if (state === "up") return "lighthouse up";
+  if (state === "offline") return "multiplayer server offline · playing solo";
   return "";
 }
 

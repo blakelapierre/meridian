@@ -9,7 +9,7 @@
 // Frame (snap channel): 0xB3, flags, varint tick, zigzag x/y/z (cm), [zigzag vx/vy/vz (2 cm/s)],
 // [int8 ax/ay/az (0.25 m/s²)], uint16 yaw (2pi/65536), [int8 yaw rate (0.04 rad/s)], int8 pitch
 // (0.0125 rad). Quantization errors are well below the smallest error bound (5 cm).
-import { wrapYaw } from "./wire.js";
+import { wrapYaw } from "./wire.js?v=2";
 
 export const POSE_V3 = 0xb3;
 export const TICK_HZ = 30;
