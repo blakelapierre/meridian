@@ -68,9 +68,16 @@ export function createEstimator(size = 6) {
   return { size, hist: [] };
 }
 
-export function observe(est, tick, pos, yaw) {
-  est.hist.push({ tick, p: [pos[0], pos[1], pos[2]], yaw });
+export function observe(est, tick, pos, yaw, nowMs) {
+  const sample = { tick, p: [pos[0], pos[1], pos[2]], yaw };
+  // Wall time, when the page has it. A throttled sim tick is not one thirtieth of a second.
+  if (Number.isFinite(nowMs)) sample.ms = nowMs;
+  est.hist.push(sample);
   if (est.hist.length > est.size * 2) est.hist.shift();
+}
+
+function timeOf(sample) {
+  return sample.ms !== undefined ? sample.ms / 1000 : sample.tick / TICK_HZ;
 }
 
 function slope(samples, pick) {
@@ -78,13 +85,14 @@ function slope(samples, pick) {
   if (n < 2) return 0;
   let st = 0;
   let sv = 0;
-  for (const s of samples) { st += s.tick; sv += pick(s); }
+  const ts = samples.map(timeOf);
+  for (let i = 0; i < n; i += 1) { st += ts[i]; sv += pick(samples[i]); }
   const mt = st / n;
   const mv = sv / n;
   let num = 0;
   let den = 0;
-  for (const s of samples) { num += (s.tick - mt) * (pick(s) - mv); den += (s.tick - mt) ** 2; }
-  return den ? (num / den) * TICK_HZ : 0;
+  for (let i = 0; i < n; i += 1) { num += (ts[i] - mt) * (pick(samples[i]) - mv); den += (ts[i] - mt) ** 2; }
+  return den ? num / den : 0;
 }
 
 export function estimate(est) {
@@ -93,11 +101,14 @@ export function estimate(est) {
   const older = h.slice(-est.size, -est.size + 3 || undefined);
   const v = [0, 1, 2].map((k) => slope(recent, (s) => s.p[k]));
   const vOld = [0, 1, 2].map((k) => slope(older, (s) => s.p[k]));
-  const span = older.length && recent.length ? (recent.at(-1).tick - older.at(-1).tick) / TICK_HZ : 0;
+  const span = older.length && recent.length ? timeOf(recent.at(-1)) - timeOf(older.at(-1)) : 0;
   // Clamp to what a body can actually do; start/stop spikes would otherwise fling the prediction.
   const a = span > 0 ? v.map((value, k) => Math.max(-A_MAX[k], Math.min(A_MAX[k], (value - vOld[k]) / span))) : [0, 0, 0];
-  const yawRate = recent.length >= 2 ? wrapYaw(recent.at(-1).yaw - recent[0].yaw) / ((recent.at(-1).tick - recent[0].tick) / TICK_HZ) : 0;
-  return { v, a, yawRate };
+  const yawDt = recent.length >= 2 ? timeOf(recent.at(-1)) - timeOf(recent[0]) : 0;
+  const yawRate = yawDt > 0 ? wrapYaw(recent.at(-1).yaw - recent[0].yaw) / yawDt : 0;
+  // A one-frame tick burst must not be reported as a sprint the body cannot do.
+  const V_MAX = [12, 12, 30];
+  return { v: v.map((value, k) => Math.max(-V_MAX[k], Math.min(V_MAX[k], value))), a, yawRate };
 }
 
 // Shared deterministic predictor. Both sides call this on the same verified state.
@@ -220,14 +231,14 @@ export function createView() {
   return { state: null, offset: [0, 0, 0], yawOffset: 0, corrections: 0, arrivalTick: 0 };
 }
 
-export function receive(view, bytes, tick, floor) {
+export function receive(view, bytes, tick, floor, nowMs) {
   const next = decodeMotion(bytes, floor);
   if (view.state && next.tick < view.state.tick) return false;
   // `tick` is this page's sim clock, not the sender's. A client opened later is behind by
   // every tick the others have already run, so predicting to the local tick flings them.
   const arrival = tick ?? next.tick;
   if (view.state) {
-    const was = shown(view, arrival);
+    const was = shown(view, arrival, nowMs);
     const now = predict(next, next.tick);
     view.offset = [0, 1, 2].map((k) => was.p[k] - now.p[k]);
     // A jump of more than 3 m is a teleport (respawn, tour): snap.
@@ -237,14 +248,20 @@ export function receive(view, bytes, tick, floor) {
   }
   view.state = next;
   view.arrivalTick = arrival;
+  if (Number.isFinite(nowMs)) view.arrivalMs = nowMs;
   return true;
 }
 
-export function shown(view, tick, dt = 1 / TICK_HZ) {
+export function shown(view, tick, nowMs) {
   if (!view.state) return null;
-  // Advance only by the ticks since this packet arrived, starting from the packet's own tick.
-  const elapsed = view.arrivalTick === undefined ? tick - view.state.tick : tick - view.arrivalTick;
-  const at = view.state.tick + Math.max(0, elapsed);
+  // Wall time since the packet. A stalled sim does not move the body, and must not be asked to.
+  let dtSec;
+  if (Number.isFinite(view.arrivalMs) && Number.isFinite(nowMs)) dtSec = Math.max(0, (nowMs - view.arrivalMs) / 1000);
+  else {
+    const elapsed = view.arrivalTick === undefined ? tick - view.state.tick : tick - view.arrivalTick;
+    dtSec = Math.max(0, elapsed) / TICK_HZ;
+  }
+  const at = view.state.tick + dtSec * TICK_HZ;
   const base = predict(view.state, at);
   return { p: base.p.map((x, k) => x + view.offset[k]), yaw: wrapYaw(base.yaw + view.yawOffset), pitch: base.pitch };
 }

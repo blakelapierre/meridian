@@ -100,6 +100,20 @@ test("estimator recovers speed from local history", () => {
   assert.ok(Math.abs(e.a[0]) < 1e-6);
 });
 
+test("a throttled sim reports wall speed, and a peer coasts on that", () => {
+  const est = createEstimator();
+  observe(est, 100, [0, 0, 0], 0, 0);
+  observe(est, 103, [0.66, 0, 0], 0, 1000);
+  const slow = estimate(est);
+  assert.ok(Math.abs(slow.v[0] - 0.66) < 0.05, `wall ${slow.v[0]}`);
+  const view = createView();
+  const rec = createSendState();
+  const moving = { ...base, v: [4, 0, 0], a: [0, 0, 0], yawRate: 0, mode: 1 };
+  receive(view, sendNow(rec, moving), base.tick, 0, 5000);
+  const parked = shown(view, base.tick, 5500);
+  assert.ok(Math.abs(parked.p[0] - view.state.p[0] - 2) < 0.05, `coasted ${parked.p[0]} from ${view.state.p[0]}`);
+});
+
 test("simulated 10 clients: v3 is far cheaper than v2 with small near error", () => {
   const v2 = simulate({ n: 10, seconds: 20, mode: "v2" });
   const v3 = simulate({ n: 10, seconds: 20, mode: "v3" });

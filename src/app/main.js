@@ -87,7 +87,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { createEstimator, createSendState, createView, estimate, isMotion, modeOf, observe, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=4";
+import { createEstimator, createSendState, createView, estimate, isMotion, modeOf, observe, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=5";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=2";
 import { createIdentity, exportKey, importKey, keyPhrase, recoveryPhrase, signBytes } from "../net/identity.js";
 import {
@@ -2481,7 +2481,7 @@ async function openLink(to, offer, role) {
     if (isMotion(raw)) {
       // v3: keep the dead-reckoned state; the pose itself is drawn every tick by stepPeers().
       try {
-        if (receive(link.view, raw, tick)) net.motionIn += 1;
+        if (receive(link.view, raw, tick, undefined, performance.now())) net.motionIn += 1;
       } catch {
         // A malformed state is dropped; the next send repairs it.
       }
@@ -2589,7 +2589,20 @@ globalThis.meridianProbe = {
   id: () => meId,
   ns: () => globalThis.meridianNs || "",
   pose: () => ({ x: player.position[0], y: player.position[1], z: player.position[2], yaw, pitch, tick }),
-  remotes: () => [...poses].map(([id, pose]) => ({ id, x: pose.x, y: pose.y, z: pose.z || 0, tick: pose.tick, seenMs: performance.now() - (poseSeenAt.get(id) || 0) })),
+  remotes: () => {
+    const nowMs = performance.now();
+    const fresh = new Map();
+    for (const link of links) {
+      const seen = shown(link.view, tick, nowMs);
+      if (!seen) continue;
+      fresh.set(link.to, { id: link.to, x: seen.p[0], y: seen.p[1], z: seen.p[2], tick, seenMs: 0 });
+    }
+    for (const [id, pose] of poses) {
+      if (fresh.has(id)) continue;
+      fresh.set(id, { id, x: pose.x, y: pose.y, z: pose.z || 0, tick: pose.tick, seenMs: nowMs - (poseSeenAt.get(id) || 0) });
+    }
+    return [...fresh.values()];
+  },
   links: () => links.map((link) => ({ to: link.to, role: link.role, proto: link.proto, open: link.snap?.readyState === "open", fov: link.fov || null })),
   net: () => ({ ...net }),
   lighthouse: () => lighthouseState,
@@ -2653,8 +2666,9 @@ function acceptPeerPose(to, link, pose, live = false) {
 
 // v3 peers: draw the shared prediction each tick, with the last correction fading out.
 function stepPeers() {
+  const nowMs = performance.now();
   for (const link of links) {
-    const seen = shown(link.view, tick);
+    const seen = shown(link.view, tick, nowMs);
     if (!seen) continue;
     settle(link.view);
     acceptPeerPose(link.to, link, { tick, x: seen.p[0], y: seen.p[1], z: seen.p[2], yaw: seen.yaw, pitch: seen.pitch }, true);
@@ -2673,7 +2687,7 @@ function publishPose() {
   let motion = null;
   if (tick !== motionTick) {
     motionTick = tick;
-    observe(motionEst, tick, player.position, yaw);
+    observe(motionEst, tick, player.position, yaw, nowMs);
     stepPeers();
   }
   const fovNow = viewFov();
