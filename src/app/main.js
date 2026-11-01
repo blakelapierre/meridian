@@ -12,7 +12,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=61";
+import { buildScene } from "../render/scene.js?v=62";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=76";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=4";
 import { createFps } from "../render/fps.js";
@@ -76,6 +76,7 @@ import {
 } from "../sim/hearth.js";
 import { haltFeet } from "../sim/town.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=1";
+import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=3";
@@ -132,7 +133,7 @@ import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.j
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
-import { radialDown, shellDrop, shellTilt } from "../sim/shell.js";
+import { shellDrop, shellTilt } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom } from "../net/room.js";
 import { acceptShot, encodeShot } from "../net/shots.js";
@@ -259,6 +260,7 @@ const pageErrors = errorLog.errors;
 addEventListener("error", (event) => errorLog.add(errorInfoFromEvent(event)));
 addEventListener("unhandledrejection", (event) => errorLog.add(errorInfoFromEvent(event)));
 const world = createPlayerWorld(player);
+attachPlanet(world);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
 const keepSlot = followId || params.get("look") || params.get("gate") || digDemo || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
@@ -1018,7 +1020,7 @@ addEventListener("keydown", (event) => {
     if (yard.stone > 0) {
       yard.stone -= 1;
       const eye = [player.position[0], player.position[1], player.position[2] + 1.4];
-      bolts.push(startBolt(eye, lookDirection(yaw, pitch), 18));
+      throwStone(world, eye, lookDirection(yaw, pitch));
       hear("shot", 0.4);
       report = "thrown";
     } else if (yard.smokes > 0) {
@@ -1432,6 +1434,7 @@ function sceneFor(sample, width, height) {
     swarm: swarmAt || swarmPoint(player.position[0], player.position[1], digs),
     pools,
     bolts,
+    loose: looseBodies(world),
   });
 }
 
@@ -3408,12 +3411,10 @@ if (params.get("still") !== "1") {
       }
       const roadHere = yard.pieces.some((piece) => piece.id === "road" && piece.at[0] === Math.round(player.position[0] / 0.5) && piece.at[1] === Math.round(player.position[1] / 0.5));
       if (roadHere && !dragging) sample.forward *= 1.15;
-      const down = radialDown(player.position[0], player.position[1], player.position[2]);
-      world.gravity = [down[0] * 9.81, down[1] * 9.81, down[2] * 9.81];
       const ground = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
       world.ground = ground;
       world.drop = shellDrop(player.position[0], player.position[1]) - ground;
-      world.gravity[2] += poolLift(pools, player.position);
+      world.buoyancy = poolLift(pools, player.position);
       const falling = player.velocity[2];
       const drifting = Math.hypot(player.velocity[0], player.velocity[1]) > 0.15;
       if (!drifting || vitals.down > 0) {
@@ -3423,6 +3424,7 @@ if (params.get("still") !== "1") {
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, sample, jump, skills.jump.value);
+      settleLoose(world, (x, y) => standHeight(x, y, columnFloor(terrain.log.crust, x, y)));
       if (drifting && vitals.down <= 0) {
         const felt = cellWind.get(cellId(player.position[1]));
         windNote = pushNote(felt);

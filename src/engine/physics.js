@@ -150,6 +150,16 @@ export function tick(state) {
   }
 
   resolveCollisions(state, collisionList);
+  for (let i = 0; i < state.universe.length; i++) {
+    const mass = state.universe[i];
+    if (!mass.pinned || !mass.home) continue;
+    mass.position[0] = mass.home[0];
+    mass.position[1] = mass.home[1];
+    mass.position[2] = mass.home[2];
+    mass.velocity[0] = 0;
+    mass.velocity[1] = 0;
+    mass.velocity[2] = 0;
+  }
   return state;
 }
 

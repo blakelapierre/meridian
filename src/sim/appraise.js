@@ -72,6 +72,17 @@ export function subjectFromHit(hit, pieces = []) {
   const object = hit.object;
   if (object.body === "self") return null;
   if (object.body === "dummy") return { ...SUBJECTS.dummy, kind: "dummy", point: hit.point };
+  if (object.body === "stone") {
+    return {
+      name: "Stone",
+      material: "a thrown rock",
+      action: "nothing, it is loose",
+      detail: "the pairwise step is holding it",
+      difficulty: 0,
+      kind: "stone",
+      point: hit.point,
+    };
+  }
   if (object.body === "person") {
     return {
       name: object.name || "Someone",

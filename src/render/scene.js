@@ -56,7 +56,7 @@ export function orderForCamera(objects, feet) {
   return rest.concat(spheres, boxes);
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], lean = 0 }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0 }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -154,6 +154,19 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       color: [0.95, 0.9, 0.4, 1],
       reflectivity: 0.2,
       body: "bolt",
+    });
+  }
+  for (const body of loose) {
+    const color = body.color || [140, 136, 124, 255];
+    objects.push({
+      type: "sphere",
+      origin: body.position,
+      radius: body.size || 0.14,
+      color: [color[0] / 255, color[1] / 255, color[2] / 255, 1],
+      reflectivity: 0.08,
+      body: "stone",
+      id: "stone",
+      name: "Stone",
     });
   }
   if (view === "third" && self) {
