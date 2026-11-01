@@ -21,7 +21,7 @@ const clients = [];
 let primary = 0;
 let running = false;
 let mainBot = true;
-const report = { started: new Date().toISOString(), max: MAX, settleS: SETTLE_S, budgetM: BUDGET_M, expectNet, lighthouse: lighthouse ? "custom" : "none", levels: [], result: "running" };
+const report = { started: new Date().toISOString(), max: MAX, settleS: SETTLE_S, budgetM: BUDGET_M, expectNet, lighthouse: lighthouse ? "custom" : "none", levels: [], ignoredErrors: { count: 0, samples: [] }, result: "running" };
 window.benchResult = null;
 
 const log = (line) => {
@@ -102,7 +102,7 @@ function checkLevel(n) {
   const snap = clients.map((c) => {
     const p = probe(c);
     if (!p) return { index: c.index, missing: true };
-    return { index: c.index, id: p.id(), pose: p.pose(), remotes: p.remotes(), links: p.links().length, bot: p.bot(), fps: p.fps(), errors: p.errors(), gpuError: p.gpuError() };
+    return { index: c.index, id: p.id(), pose: p.pose(), remotes: p.remotes(), links: p.links().length, bot: p.bot(), fps: p.fps(), errors: p.errors(), ignoredErrors: p.ignoredErrors?.() || { count: 0, samples: [] }, gpuError: p.gpuError() };
   });
   const byId = new Map(snap.filter((s) => s.id).map((s) => [s.id, s]));
   let worst = 0;
@@ -127,7 +127,11 @@ function checkLevel(n) {
     }
     c.shield.classList.toggle("bad", failures.some((f) => f.startsWith(`#${s.index} `)));
   }
-  return { clients: n, ok: failures.length === 0, failures, worstPoseErrorM: Math.round(worst * 100) / 100, net: expectNet ? "checked" : "not checked (no lighthouse)", snap: snap.map(({ remotes, ...rest }) => ({ ...rest, remotes: remotes?.length ?? 0 })) };
+  const ignoredErrors = { count: 0, samples: [] };
+  for (const s of snap) for (const m of s.ignoredErrors?.samples || []) if (ignoredErrors.samples.length < 10) ignoredErrors.samples.push(`#${s.index} ${m}`);
+  for (const s of snap) ignoredErrors.count += s.ignoredErrors?.count || 0;
+  report.ignoredErrors = ignoredErrors;
+  return { clients: n, ok: failures.length === 0, ignoredErrors, failures, worstPoseErrorM: Math.round(worst * 100) / 100, net: expectNet ? "checked" : "not checked (no lighthouse)", snap: snap.map(({ remotes, ...rest }) => ({ ...rest, remotes: remotes?.length ?? 0 })) };
 }
 
 async function run() {
