@@ -12,7 +12,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=64";
+import { buildScene } from "../render/scene.js?v=65";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=78";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=4";
 import { createFps } from "../render/fps.js";
@@ -129,7 +129,7 @@ import { afterShot, boltHit, boltInSmoke, firePull, meleeHit, missDir, penFactor
 import { harmMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=71";
+import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=72";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -730,7 +730,7 @@ function sceneLive() {
   const origin = cameraPos || [player.position[0], player.position[1], player.position[2] + 1.65];
   const dir = cameraLook || lookDirection(yaw, pitch);
   const samples = [];
-  for (const animal of fauna(Date.now(), player.position)) {
+  for (const animal of fauna(Date.now(), player.position, { parts: false })) {
     if (!inFront(origin, dir, animal.at, 56)) continue;
     samples.push({ id: animal.kind, key: animal.at.map((value) => value.toFixed(2)).join(","), live: true });
   }
@@ -1436,6 +1436,7 @@ function sceneFor(sample, width, height) {
     pools,
     bolts,
     loose: looseBodies(world),
+    sparse: Boolean(bot),
   });
 }
 
@@ -1443,8 +1444,13 @@ function refreshAim(sample = {}) {
   if (slot !== "bit" && slot !== "hammer") return { inRange: false, kind: "" };
   const yawNow = sample.yaw ?? yaw;
   const pitchNow = sample.pitch ?? pitch;
+  const eye = eyeOf(sample);
+  const dir = lookDirection(yawNow, pitchNow);
+  if (slot === "bit") {
+    return toolAim("bit", eye, dir, [{ type: "crust", field: terrain.log.crust }], yard.pieces);
+  }
   const objects = sceneFor(sample, 16, 9).objects.filter((object) => !object.self);
-  return toolAim(slot, eyeOf(sample), lookDirection(yawNow, pitchNow), objects, yard.pieces);
+  return toolAim(slot, eye, dir, objects, yard.pieces);
 }
 
 function adoptTarget(subject) {

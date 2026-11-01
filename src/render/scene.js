@@ -4,7 +4,7 @@ import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=53";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
-import { duneHeight, fauna, floraParts } from "../sim/life.js?v=71";
+import { duneHeight, fauna, floraParts } from "../sim/life.js?v=72";
 import { PEOPLE } from "../sim/people.js?v=1";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
@@ -55,7 +55,11 @@ export function orderForCamera(objects, feet) {
   return rest.concat(spheres, boxes);
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0 }) {
+function coarse(parts, keep = 3) {
+  return [...parts].sort((a, b) => b.radius - a.radius).slice(0, keep);
+}
+
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -102,18 +106,20 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       body: "swarm",
     });
   }
-  for (const part of floraParts()) {
-    objects.push({
-      type: "sphere",
-      origin: part.at,
-      radius: part.radius,
-      color: part.color,
-      reflectivity: 0.02,
-      body: "flora",
-    });
+  if (!sparse) {
+    for (const part of floraParts()) {
+      objects.push({
+        type: "sphere",
+        origin: part.at,
+        radius: part.radius,
+        color: part.color,
+        reflectivity: 0.02,
+        body: "flora",
+      });
+    }
   }
-  for (const animal of fauna(Date.now(), feet)) {
-    const parts = animal.parts?.length ? animal.parts : [animal];
+  for (const animal of fauna(Date.now(), feet, { parts: !sparse })) {
+    const parts = !sparse && animal.parts?.length ? animal.parts : [animal];
     for (const part of parts) {
       objects.push({
         type: "sphere",
@@ -127,7 +133,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
   }
   for (const person of PEOPLE) {
     const z = duneHeight(person.at[0], person.at[1]);
-    for (const part of playerParts([person.at[0], person.at[1], z], person.yaw, false, {
+    const figure = playerParts([person.at[0], person.at[1], z], person.yaw, false, {
       self: false,
       color: person.color,
       body: "person",
@@ -135,10 +141,15 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       name: person.name,
       detail: person.detail,
       speech: person.speech,
-    })) objects.push(part);
+    });
+    for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
   }
   const dummy = atoll.placements.dummy;
-  for (const part of dummyParts([dummy.x / 100, dummy.y / 100, 0])) {
+  const dummyAt = [dummy.x / 100, dummy.y / 100, 0];
+  const dummyFigure = sparse
+    ? [{ origin: [dummyAt[0], dummyAt[1], 0.9], radius: 0.35, color: [0.86, 0.22, 0.18, 1], texture: true }]
+    : dummyParts(dummyAt);
+  for (const part of dummyFigure) {
     objects.push({
       type: "sphere",
       origin: part.origin,
@@ -183,10 +194,12 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     });
   }
   if (view === "third" && self) {
-    for (const part of playerParts(feet, yaw + (lean || 0), crouch, { self: true })) objects.push(part);
+    const figure = playerParts(feet, yaw + (lean || 0), crouch, { self: true });
+    for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
   }
   for (const other of others) {
-    for (const part of playerParts(other.feet, other.yaw, !!other.crouch, { self: false, color: other.color || OTHER })) objects.push(part);
+    const figure = playerParts(other.feet, other.yaw, !!other.crouch, { self: false, color: other.color || OTHER });
+    for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
   }
   const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
   const dir = cameraDir || lookDirection(yaw, pitch);

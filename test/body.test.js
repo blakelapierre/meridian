@@ -56,6 +56,17 @@ test("the walk scene defaults to the eyes, and third person adds the body", () =
   assert.equal(watched.objects.filter((object) => object.body === "player").length, 25);
 });
 
+test("a sparse scene is a stand-in, not the full figures", () => {
+  const feet = [0, -150, 0];
+  const full = buildScene({ feet, yaw: 0, pitch: 0, atoll, width: 16, height: 9, view: "third" });
+  const thin = buildScene({ feet, yaw: 0, pitch: 0, atoll, width: 16, height: 9, view: "third", sparse: true });
+  const count = (scene) => scene.objects.filter((object) => object.type === "sphere").length;
+  assert.equal(thin.objects.filter((object) => object.self).length, 3);
+  assert.equal(thin.objects.some((object) => object.body === "flora"), false);
+  assert.ok(full.objects.some((object) => object.body === "flora"));
+  assert.ok(count(thin) * 4 < count(full), `${count(thin)} vs ${count(full)}`);
+});
+
 test("the camera stretches behind a sudden move and then settles", () => {
   const spring = createCameraSpring([0, 0, 2]);
   stepCamera(spring, [0, 6, 2], 1 / 30);

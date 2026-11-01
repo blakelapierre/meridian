@@ -24,7 +24,7 @@ export function grazeAnimal(patch, at = [12, -150, 0]) {
 }
 
 // A herd is several of the same animal. They do not walk.
-export function herd(patch, at = [12, -150, 0], count = 3) {
+export function herd(patch, at = [12, -150, 0], count = 3, parts = true) {
   const one = grazeAnimal(patch, at);
   if (!one) return [];
   const animals = [];
@@ -36,7 +36,7 @@ export function herd(patch, at = [12, -150, 0], count = 3) {
       ...one,
       at: foot,
       herd: count,
-      parts: goatParts(foot, yaw, Boolean(patch?.dead)),
+      ...(parts ? { parts: goatParts(foot, yaw, Boolean(patch?.dead)) } : {}),
     });
   }
   return animals;
@@ -331,7 +331,7 @@ export function gullParts(nowMs) {
   return { ...pose, parts };
 }
 
-export function fauna(nowMs, from) {
+export function fauna(nowMs, from, { parts = true } = {}) {
   const t = nowMs / 1000;
   const crabHome = [9 + Math.sin(t * 0.35) * 3.2, -168 + Math.cos(t * 0.22) * 2.1];
   const crabAt = shy(crabHome, from, 4.5, 1.6);
@@ -341,12 +341,12 @@ export function fauna(nowMs, from) {
   const skinkAt = shy(skinkHome, from, 6, 2.4);
   const skinkYaw = Math.atan2(Math.cos(t * 0.5) * 2.1 * 0.5, Math.cos(t * 0.17) * 1.5 * 0.17);
   const skink = [skinkAt[0], skinkAt[1], duneHeight(skinkAt[0], skinkAt[1]) + 0.02];
-  const gull = gullParts(nowMs);
-  const grazed = herd(graze({ stock: 1 }), [12, -150, duneHeight(12, -150)]);
+  const gull = parts ? gullParts(nowMs) : gullPose(nowMs);
+  const grazed = herd(graze({ stock: 1 }), [12, -150, duneHeight(12, -150)], 3, parts);
   return [
-    { kind: "crab", at: crab, radius: 0.12, color: SHELL, parts: crabParts(crab, crabYaw) },
-    { kind: "skink", at: skink, radius: 0.05, color: SCALE, parts: skinkParts(skink, skinkYaw) },
-    { kind: "gull", at: gull.at, radius: 0.1, color: WHITE, parts: gull.parts },
+    { kind: "crab", at: crab, radius: 0.12, color: SHELL, ...(parts ? { parts: crabParts(crab, crabYaw) } : {}) },
+    { kind: "skink", at: skink, radius: 0.05, color: SCALE, ...(parts ? { parts: skinkParts(skink, skinkYaw) } : {}) },
+    { kind: "gull", at: gull.at, radius: 0.1, color: WHITE, ...(parts ? { parts: gull.parts } : {}) },
     ...grazed,
   ];
 }

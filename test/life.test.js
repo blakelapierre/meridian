@@ -55,6 +55,16 @@ test("the crab steps away and the plants sit on the roll", () => {
   assert.ok(treeTop > 2, treeTop);
 });
 
+test("skipping meshes still places the same animals", () => {
+  const light = fauna(0, [80, 80], { parts: false });
+  const full = fauna(0, [80, 80]);
+  assert.deepEqual(light.map((animal) => animal.kind), full.map((animal) => animal.kind));
+  assert.equal(light.every((animal) => !animal.parts), true);
+  const gull = light.find((animal) => animal.kind === "gull");
+  const placed = full.find((animal) => animal.kind === "gull");
+  assert.deepEqual(gull.at, placed.at);
+});
+
 test("the gull has a wingspan, a beak, and a wingbeat", () => {
   const gull = fauna(0, [80, 80]).find((animal) => animal.kind === "gull");
   const later = gullParts(420);
