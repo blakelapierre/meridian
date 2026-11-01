@@ -62,22 +62,31 @@ export function readView(text) {
   }
 }
 
+// The snap channel does not retransmit. The receiver confirms the sender tick it actually
+// applied, on the reliable ctrl channel, so a dropped sprint is repeated until it lands.
+export function ackMessage(tick) {
+  return JSON.stringify({ t: "ack", tick });
+}
+
+export function readAck(text) {
+  try {
+    const m = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
+    if (m?.t !== "ack" || !Number.isFinite(+m.tick)) return null;
+    return { tick: +m.tick };
+  } catch {
+    return null;
+  }
+}
+
 // Velocity and acceleration from local history (sender side): least-squares slope over the
 // last few ticks, then the difference of two such slopes for acceleration.
 export function createEstimator(size = 6) {
   return { size, hist: [] };
 }
 
-export function observe(est, tick, pos, yaw, nowMs) {
-  const sample = { tick, p: [pos[0], pos[1], pos[2]], yaw };
-  // Wall time, when the page has it. A throttled sim tick is not one thirtieth of a second.
-  if (Number.isFinite(nowMs)) sample.ms = nowMs;
-  est.hist.push(sample);
+export function observe(est, tick, pos, yaw) {
+  est.hist.push({ tick, p: [pos[0], pos[1], pos[2]], yaw });
   if (est.hist.length > est.size * 2) est.hist.shift();
-}
-
-function timeOf(sample) {
-  return sample.ms !== undefined ? sample.ms / 1000 : sample.tick / TICK_HZ;
 }
 
 function slope(samples, pick) {
@@ -85,14 +94,13 @@ function slope(samples, pick) {
   if (n < 2) return 0;
   let st = 0;
   let sv = 0;
-  const ts = samples.map(timeOf);
-  for (let i = 0; i < n; i += 1) { st += ts[i]; sv += pick(samples[i]); }
+  for (const s of samples) { st += s.tick; sv += pick(s); }
   const mt = st / n;
   const mv = sv / n;
   let num = 0;
   let den = 0;
-  for (let i = 0; i < n; i += 1) { num += (ts[i] - mt) * (pick(samples[i]) - mv); den += (ts[i] - mt) ** 2; }
-  return den ? num / den : 0;
+  for (const s of samples) { num += (s.tick - mt) * (pick(s) - mv); den += (s.tick - mt) ** 2; }
+  return den ? (num / den) * TICK_HZ : 0;
 }
 
 export function estimate(est) {
@@ -101,14 +109,11 @@ export function estimate(est) {
   const older = h.slice(-est.size, -est.size + 3 || undefined);
   const v = [0, 1, 2].map((k) => slope(recent, (s) => s.p[k]));
   const vOld = [0, 1, 2].map((k) => slope(older, (s) => s.p[k]));
-  const span = older.length && recent.length ? timeOf(recent.at(-1)) - timeOf(older.at(-1)) : 0;
+  const span = older.length && recent.length ? (recent.at(-1).tick - older.at(-1).tick) / TICK_HZ : 0;
   // Clamp to what a body can actually do; start/stop spikes would otherwise fling the prediction.
   const a = span > 0 ? v.map((value, k) => Math.max(-A_MAX[k], Math.min(A_MAX[k], (value - vOld[k]) / span))) : [0, 0, 0];
-  const yawDt = recent.length >= 2 ? timeOf(recent.at(-1)) - timeOf(recent[0]) : 0;
-  const yawRate = yawDt > 0 ? wrapYaw(recent.at(-1).yaw - recent[0].yaw) / yawDt : 0;
-  // A one-frame tick burst must not be reported as a sprint the body cannot do.
-  const V_MAX = [12, 12, 30];
-  return { v: v.map((value, k) => Math.max(-V_MAX[k], Math.min(V_MAX[k], value))), a, yawRate };
+  const yawRate = recent.length >= 2 ? wrapYaw(recent.at(-1).yaw - recent[0].yaw) / ((recent.at(-1).tick - recent[0].tick) / TICK_HZ) : 0;
+  return { v, a, yawRate };
 }
 
 // Shared deterministic predictor. Both sides call this on the same verified state.
@@ -185,7 +190,16 @@ export function isMotion(bytes) {
 
 // Sender: one record per receiver.
 export function createSendState() {
-  return { verified: null, lastTick: -1e9, mode: -1, tier: 3 };
+  return { verified: null, acked: null, ackTick: -1, sent: [], lastTick: -1e9, mode: -1, tier: 3 };
+}
+
+export function noteAck(rec, tick) {
+  const got = +tick;
+  if (!Number.isFinite(got) || got < rec.ackTick) return;
+  rec.ackTick = got;
+  let held = null;
+  for (const sent of rec.sent) if (sent.tick <= got) held = sent.state;
+  if (held) rec.acked = held;
 }
 
 // Decide whether to send `now` (local truth plus estimate) to a receiver with this tier.
@@ -203,15 +217,17 @@ export function shouldSend(rec, now, tierIndex) {
   // minGap caps chatter that is still inside the tier's error. A sprint covers the unseen
   // 1 m bound in a handful of ticks, so the bound has to be allowed to send inside the gap.
   if (err > tier.err && gap >= 1) return "error";
+  // A coarse tier will not send again while its newest state still predicts the body.
+  // If the peer has not confirmed that state, it is still on the last one it acked,
+  // and one missed sprint correction is how a pose ends up 7 m off.
+  if (rec.verified && rec.ackTick < rec.verified.tick && tier.minGap > 3 && gap >= 3) {
+    if (!rec.acked) return "loss";
+    const old = predict(rec.acked, now.tick);
+    const oldErr = Math.hypot(old.p[0] - now.p[0], old.p[1] - now.p[1], old.p[2] - now.p[2]);
+    if (oldErr > tier.err) return "loss";
+  }
   if (gap < tier.minGap) return null;
   if (gap >= tier.keepalive) return "keepalive";
-  // Loss guard: sends are unreliable, so the receiver may still hold the previous state. If that one
-  // has drifted badly, resend (cheap: only after big changes, and both copies agree otherwise).
-  if (rec.prev) {
-    const old = predict(rec.prev, now.tick);
-    const oldErr = Math.hypot(old.p[0] - now.p[0], old.p[1] - now.p[1], old.p[2] - now.p[2]);
-    if (oldErr > Math.max(4 * tier.err, 0.5) && gap >= Math.max(3, tier.minGap)) { rec.prev = null; return "loss"; }
-  }
   if (turned > tier.yawErr) return "yaw";
   return null;
 }
@@ -219,7 +235,8 @@ export function shouldSend(rec, now, tierIndex) {
 export function sendNow(rec, now, tierIndex = 3) {
   rec.tier = tierIndex;
   const { bytes, state } = encodeMotion(now, now.mode);
-  rec.prev = rec.verified;
+  rec.sent.push({ tick: state.tick, state });
+  if (rec.sent.length > 8) rec.sent.shift();
   rec.verified = state;
   rec.lastTick = now.tick;
   rec.mode = now.mode;
@@ -237,8 +254,18 @@ export function receive(view, bytes, tick, floor, nowMs) {
   // `tick` is this page's sim clock, not the sender's. A client opened later is behind by
   // every tick the others have already run, so predicting to the local tick flings them.
   const arrival = tick ?? next.tick;
-  if (view.state) {
-    const was = shown(view, arrival, nowMs);
+  const was = view.state ? shown(view, arrival, nowMs) : null;
+  if (view.state && Number.isFinite(view.arrivalMs) && Number.isFinite(nowMs)) {
+    const dMs = nowMs - view.arrivalMs;
+    const dTick = next.tick - view.state.tick;
+    // How fast *their* sim tick actually advances. A busy client falls behind 30 Hz;
+    // coasting them at 30 would run the body ahead of where they are.
+    if (dMs >= 40 && dTick > 0) {
+      const hz = Math.max(4, Math.min(TICK_HZ, (dTick / dMs) * 1000));
+      view.senderHz = view.senderHz ? view.senderHz * 0.5 + hz * 0.5 : hz;
+    }
+  }
+  if (was) {
     const now = predict(next, next.tick);
     view.offset = [0, 1, 2].map((k) => was.p[k] - now.p[k]);
     // A jump of more than 3 m is a teleport (respawn, tour): snap.
@@ -254,14 +281,15 @@ export function receive(view, bytes, tick, floor, nowMs) {
 
 export function shown(view, tick, nowMs) {
   if (!view.state) return null;
-  // Wall time since the packet. A stalled sim does not move the body, and must not be asked to.
+  // Wall time since this packet, scaled by the sender's real tick rate. The tick count
+  // alone is not a clock: a later or busier page does not step at the same speed.
   let dtSec;
   if (Number.isFinite(view.arrivalMs) && Number.isFinite(nowMs)) dtSec = Math.max(0, (nowMs - view.arrivalMs) / 1000);
   else {
     const elapsed = view.arrivalTick === undefined ? tick - view.state.tick : tick - view.arrivalTick;
     dtSec = Math.max(0, elapsed) / TICK_HZ;
   }
-  const at = view.state.tick + dtSec * TICK_HZ;
+  const at = view.state.tick + dtSec * (view.senderHz || TICK_HZ);
   const base = predict(view.state, at);
   return { p: base.p.map((x, k) => x + view.offset[k]), yaw: wrapYaw(base.yaw + view.yawOffset), pitch: base.pitch };
 }

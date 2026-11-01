@@ -14,7 +14,7 @@ import { BASE_FOV } from "../../src/sim/sight.js";
 import { encodePoseV2, poseDue, wrapYaw } from "../../src/net/wire.js";
 import {
   TICK_HZ, TIERS, createEstimator, createSendState, createView, estimate, modeOf, observe, receive,
-  sendNow, settle, shouldSend, shown, tierFor,
+  sendNow, settle, shouldSend, shown, tierFor, noteAck,
 } from "../../src/net/motion.js";
 
 const HFOV = 2 * Math.atan(Math.tan((BASE_FOV * Math.PI) / 360) * (16 / 9));
@@ -142,7 +142,10 @@ export function simulate({ n = 25, seconds = 60, mode = "v3", loss = 0.01, seed 
           if (lossRand() >= loss) {
             r.down += bytes.length; r.downMsg += 1;
             if (mode === "v2") link.shownPose = { p: [truth.x, truth.y, truth.z] };
-            else receive(link.view, bytes, tick, 0);
+            else {
+              receive(link.view, bytes, tick, 0);
+              noteAck(link.send, link.send.verified?.tick);
+            }
           }
         }
         if (sMoving) pairTicksMoving += 1;

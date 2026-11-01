@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   TIERS, createEstimator, createSendState, createView, decodeMotion, encodeMotion, estimate, isMotion, modeOf,
-  observe, predict, receive, sendNow, settle, shouldSend, shown, tierFor,
+  observe, predict, receive, sendNow, settle, shouldSend, shown, tierFor, noteAck,
 } from "../src/net/motion.js";
 import { simulate } from "../tools/netsim/sim.mjs";
 
@@ -51,6 +51,7 @@ test("shouldSend fires on first, mode change, drift and keepalive only", () => {
   const now = { ...base, mode: 1 };
   assert.equal(shouldSend(rec, now, 0), "first");
   sendNow(rec, now, 0);
+  noteAck(rec, rec.verified.tick);
   const on = (tick) => { const g = predict(rec.verified, tick); return { ...now, tick, p: g.p, yaw: g.yaw }; };
   assert.equal(shouldSend(rec, on(base.tick + 5), 0), null); // still on the prediction
   const off = on(base.tick + 5); off.p = [off.p[0] + 0.2, off.p[1], off.p[2]];
@@ -100,18 +101,42 @@ test("estimator recovers speed from local history", () => {
   assert.ok(Math.abs(e.a[0]) < 1e-6);
 });
 
-test("a throttled sim reports wall speed, and a peer coasts on that", () => {
-  const est = createEstimator();
-  observe(est, 100, [0, 0, 0], 0, 0);
-  observe(est, 103, [0.66, 0, 0], 0, 1000);
-  const slow = estimate(est);
-  assert.ok(Math.abs(slow.v[0] - 0.66) < 0.05, `wall ${slow.v[0]}`);
+test("a slow sender is coasted at its tick rate, not at 30 Hz", () => {
   const view = createView();
   const rec = createSendState();
-  const moving = { ...base, v: [4, 0, 0], a: [0, 0, 0], yawRate: 0, mode: 1 };
-  receive(view, sendNow(rec, moving), base.tick, 0, 5000);
-  const parked = shown(view, base.tick, 5500);
-  assert.ok(Math.abs(parked.p[0] - view.state.p[0] - 2) < 0.05, `coasted ${parked.p[0]} from ${view.state.p[0]}`);
+  const moving = { tick: 1000, p: [0, 0, 0], v: [6, 0, 0], a: [0, 0, 0], yaw: 0, yawRate: 0, pitch: 0, floor: 0, mode: 1 };
+  receive(view, sendNow(rec, moving), moving.tick, 0, 1000);
+  // Position matches a 30 Hz coast so the blend offset stays put; the tick gap says 15 Hz.
+  const next = { ...moving, tick: moving.tick + 15, p: [6, 0, 0] };
+  receive(view, sendNow(rec, next), next.tick, 0, 2000);
+  assert.ok(Math.abs(view.senderHz - 15) < 0.01, `hz ${view.senderHz}`);
+  const seen = shown(view, next.tick, 2200);
+  const coast = seen.p[0] - view.state.p[0];
+  // 6 m/s of sim, run at 15 Hz, is 3 m/s of wall time. 0.2 s → 0.6 m (30 Hz would be 1.2 m).
+  assert.ok(Math.abs(coast - 0.6) < 0.08, `coast ${coast}`);
+});
+
+test("a dropped correction is resent until the peer confirms it", () => {
+  const rec = createSendState();
+  const still = { tick: 1000, p: [0, 0, 0], v: [0, 0, 0], a: [0, 0, 0], yaw: 0, yawRate: 0, pitch: 0, floor: 0, mode: 1 };
+  sendNow(rec, still, 2);
+  noteAck(rec, rec.verified.tick);
+  const moved = { ...still, tick: 1004, p: [3, 0, 0] };
+  assert.equal(shouldSend(rec, moved, 2), "error");
+  sendNow(rec, moved, 2);
+  // Unseen minGap is 15. The newest state predicts the body, so the error bound stays
+  // quiet — but the peer has not confirmed it, and the acked state is 3 m off.
+  const held = { ...moved, tick: 1008 };
+  assert.equal(shouldSend(rec, held, 2), "loss");
+  sendNow(rec, held, 2);
+  noteAck(rec, rec.verified.tick);
+  assert.equal(shouldSend(rec, { ...moved, tick: 1012 }, 2), null);
+  // Near tier corrects on the next tick anyway, so a missing ack is not a second stream.
+  const near = createSendState();
+  sendNow(near, still, 0);
+  noteAck(near, near.verified.tick);
+  sendNow(near, moved, 0);
+  assert.equal(shouldSend(near, { ...moved, tick: 1008 }, 0), null);
 });
 
 test("simulated 10 clients: v3 is far cheaper than v2 with small near error", () => {

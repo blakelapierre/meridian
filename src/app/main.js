@@ -87,7 +87,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { createEstimator, createSendState, createView, estimate, isMotion, modeOf, observe, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=5";
+import { ackMessage, createEstimator, createSendState, createView, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=6";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=2";
 import { createIdentity, exportKey, importKey, keyPhrase, recoveryPhrase, signBytes } from "../net/identity.js";
 import {
@@ -2443,7 +2443,13 @@ async function openLink(to, offer, role) {
     }
   };
   channels.ctrl.onmessage = (event) => {
-    const hello = readHello(event.data);
+    const text = typeof event.data === "string" ? event.data : new TextDecoder().decode(event.data);
+    const ack = readAck(text);
+    if (ack) {
+      noteAck(link.motion, ack.tick);
+      return;
+    }
+    const hello = readHello(text);
     if (!hello) return;
     if (hello.catalog && !acceptHello(catalogHex, hello.catalog)) report = "catalog";
     link.proto = hello.proto;
@@ -2481,7 +2487,14 @@ async function openLink(to, offer, role) {
     if (isMotion(raw)) {
       // v3: keep the dead-reckoned state; the pose itself is drawn every tick by stepPeers().
       try {
-        if (receive(link.view, raw, tick, undefined, performance.now())) net.motionIn += 1;
+        if (receive(link.view, raw, tick, undefined, performance.now())) {
+          net.motionIn += 1;
+          const got = link.view.state?.tick;
+          if (got !== undefined && link.ctrl?.readyState === "open" && performance.now() - (link.ackAt || 0) > 80) {
+            link.ackAt = performance.now();
+            try { link.ctrl.send(ackMessage(got)); } catch { /* the next pose repeats the tick */ }
+          }
+        }
       } catch {
         // A malformed state is dropped; the next send repairs it.
       }
@@ -2595,7 +2608,7 @@ globalThis.meridianProbe = {
     for (const link of links) {
       const seen = shown(link.view, tick, nowMs);
       if (!seen) continue;
-      fresh.set(link.to, { id: link.to, x: seen.p[0], y: seen.p[1], z: seen.p[2], tick, seenMs: 0 });
+      fresh.set(link.to, { id: link.to, x: seen.p[0], y: seen.p[1], z: seen.p[2], tick, seenMs: nowMs - (poseSeenAt.get(link.to) || 0) });
     }
     for (const [id, pose] of poses) {
       if (fresh.has(id)) continue;
@@ -2687,7 +2700,7 @@ function publishPose() {
   let motion = null;
   if (tick !== motionTick) {
     motionTick = tick;
-    observe(motionEst, tick, player.position, yaw, nowMs);
+    observe(motionEst, tick, player.position, yaw);
     stepPeers();
   }
   const fovNow = viewFov();
@@ -2707,7 +2720,8 @@ function publishPose() {
       const them = poses.get(link.to);
       const view = them ? { x: them.x, y: them.y, yaw: them.yaw || 0, fov: link.fov || 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * 16 / 9), range: 80 + skills.mapping.value / 10 } : null;
       const tierIdx = tierFor(view, player.position);
-      if (!shouldSend(link.motion, motion, tierIdx)) continue;
+      const why = shouldSend(link.motion, motion, tierIdx);
+      if (!why) continue;
       net.snapOut += 1;
       link.snap.send(sendNow(link.motion, motion, tierIdx));
       continue;
