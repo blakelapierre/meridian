@@ -1,7 +1,8 @@
 import { paintFrame } from "../engine/frame.js";
-import { mountFullscreen, mountTouch, wantsTouch } from "./touch.js?v=4";
+import { mountFullscreen, mountTouch, wantsTouch } from "./touch.js?v=5";
 import { BOT_KEYS, createWander, stepWander } from "./bot.js?v=1";
 import { resetEverything } from "./reset.js?v=1";
+import { mountOnboard } from "./onboard.js?v=1";
 import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=4";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js?v=2";
@@ -39,7 +40,7 @@ import { dominionFrame } from "../sim/clocks.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
 import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor, applySlump, bitMode } from "../sim/crust.js";
-import { bitAim } from "../sim/bit.js";
+import { bitAim, crustFeet } from "../sim/bit.js?v=2";
 import { toolAim } from "../sim/aim.js";
 import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, repairFin, rollCart, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnWall } from "../sim/build.js";
 import {
@@ -117,7 +118,7 @@ import { afterShot, boltHit, boltInSmoke, firePull, penFactor, startBolt, stepBo
 import { noteHarm } from "../sim/identityharm.js";
 import { cellId, castVote, inInterest, sameCell, tally } from "../sim/cell.js";
 import { maySit, sitOrder, writeVoucher } from "../sim/command.js";
-import { fauna, graze, groundLook, standHeight } from "../sim/life.js?v=67";
+import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=67";
 import { raiseSpore, sporeMetal, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -204,12 +205,22 @@ const agent = agendaName && AGENDAS[agendaName] ? createAgent(agendaName) : null
 const keys = new Set();
 const peer = Boolean(params.get("id"));
 
-const atoll = await fetch(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.json());
+// Content fetches retry: several same-origin frames booting at once (the scale bench) can
+// see a transient "Failed to fetch" in headless Chrome, which used to kill the whole page.
+async function fetchRetry(url, options, tries = 5) {
+  for (let i = 1; ; i += 1) {
+    try { return await fetch(url, options); } catch (error) {
+      if (i >= tries) throw error;
+      await new Promise((done) => setTimeout(done, 150 * i));
+    }
+  }
+}
+const atoll = await fetchRetry(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.json());
 const catalogHex = await Promise.all([
-  fetch(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.arrayBuffer()),
-  fetch(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
+  fetchRetry(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.arrayBuffer()),
+  fetchRetry(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
 ]).then(([atollBytes, catalogBytes]) => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
-const lighthouseConfig = await fetch(new URL("../../content/lighthouse.json?v=2", import.meta.url))
+const lighthouseConfig = await fetchRetry(new URL("../../content/lighthouse.json?v=2", import.meta.url))
   .then((response) => (response.ok ? response.json() : null))
   .catch(() => null);
 const signalUrl = lighthouseUrl(params, location.hostname, lighthouseConfig);
@@ -1052,12 +1063,19 @@ document.querySelector("#reset")?.addEventListener("click", (event) => {
   const full = mountFullscreen();
   if (full) document.querySelector("#corner")?.append(full);
 }
+mountOnboard();
 if (lighthouseState === "offline") {
   const note = document.querySelector("#mpnote");
   if (note) {
-    note.textContent = "multiplayer server offline · playing solo";
+    note.textContent = "multiplayer server offline · playing solo · ";
+    const why = document.createElement("a");
+    why.href = "https://github.com/blakelapierre/meridian/blob/main/docs/lighthouse.md#the-lighthouse-parameter";
+    why.target = "_blank";
+    why.rel = "noopener";
+    why.textContent = "why? (?lighthouse=)";
+    note.append(why);
     note.hidden = false;
-    setTimeout(() => { note.hidden = true; }, 10000);
+    setTimeout(() => { note.hidden = true; }, 20000);
   }
 }
 mountTouch({
@@ -2360,7 +2378,7 @@ function flush() {
 }
 
 if (params.get("autobit") === "1") {
-  const aim = bitAim(player.position, yaw, pitch);
+  const aim = bitAim(bitFeet(), yaw, pitch);
   for (let step = 0; step < 40; step++) terrain.dig(aim.eye, aim.aim, { peer });
 }
 
@@ -2552,6 +2570,10 @@ function viewFov() {
   const aspect = cam?.aspect || canvas.width / Math.max(1, canvas.height) || 16 / 9;
   return 2 * Math.atan(Math.tan((fov * Math.PI) / 360) * aspect);
 }
+function bitFeet() {
+  const [x, y] = player.position;
+  return crustFeet(player.position, duneHeight(x, y), columnFloor(terrain.log.crust, x, y));
+}
 function terrainKey() {
   const entries = [...terrain.log.crust.overrides].map(([key, value]) => `${key}=${Math.round(value * 1000)}`).sort();
   let h = 2166136261;
@@ -2589,7 +2611,7 @@ globalThis.meridianProbe = {
   // Swing the bit like ?autobit=1 does: `strokes` digs at the ground ahead and below.
   dig(strokes = 20, look = -0.9) {
     const before = terrainKey();
-    const aim = bitAim(player.position, yaw, look);
+    const aim = bitAim(bitFeet(), yaw, look);
     for (let i = 0; i < strokes; i += 1) terrain.dig(aim.eye, aim.aim, { peer });
     return { before, after: terrainKey(), changed: before !== terrainKey() };
   },
@@ -3026,7 +3048,7 @@ if (params.get("still") !== "1") {
       } else {
         raising = null;
         if (slot === "bit" && (trigger || params.get("autobit") === "1")) {
-          const aim = bitAim(player.position, sample.yaw, sample.pitch, sample.crouch);
+          const aim = bitAim(bitFeet(), sample.yaw, sample.pitch, sample.crouch);
           const mode = bitMode(player.position[1] >= -190, brush);
           if (mode === "slump") {
             const wrote = applySlump(terrain.log.crust, aim.aim);

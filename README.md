@@ -17,23 +17,32 @@ Pre-alpha. The Atoll slice is playable solo in the browser; multiplayer, progres
 | Specs (`docs/`) | Written and locked for the Atoll slice |
 | `src/` | About 10,100 lines of browser JS across 86 modules: engine port (raycaster, N-body tick), sim (crust brush and chunk hash, strike, damage, shots and certs, op log, support/collapse, hearth/corpse), net (identity, room, positions, shots, terrain, archive), render (software and WebGL2 ray pass) |
 | `tools/` | Dev static server, signaling "lighthouse", launcher page, and browser harnesses (`view`, `link`, `dig`, `shot`, `archive`, `bench`, `scale`) |
-| Tests | 241 Node tests; 236 pass, 5 two-browser tests need headless Chromium and skip without it (as of 31 Oct 2026) |
+| Tests | 250 Node tests; 246 pass. The 4 two-browser WebRTC tests report **KNOWN-BLOCKED** where the machine's WebRTC policy stops peer data channels (a probe checks first), and run where it does not (as of 31 Oct 2026) |
 | Network phases | P0 Link and parts of P2 (signed, witnessed shots) and P3 (dig op hash) are exercised by browser tests; nothing beyond one island yet |
 
 ## Run it
 
 ```sh
 npm install
-npm test                      # unit tests; browser tests skip without Chromium
-MERIDIAN_CHROME=/path/to/chrome-headless-shell npm test   # include the browser tests
+npm test                      # unit + browser tests; finds /usr/bin/google-chrome or chromium
+CHROME=/path/to/chrome npm test   # use a specific Chrome (MERIDIAN_CHROME also works)
+MERIDIAN_P2P=1 npm test       # force the two-browser WebRTC tests even if the probe says blocked
+npm run scale:smoke           # 4 solo clients, own static server, no lighthouse (~1 min)
 npm start                     # dev server on :8080, signaling on :8787
 ```
 
 `npm start` is the only process. It serves files on port 8080 and the lighthouse on `ws://127.0.0.1:8787`. Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) for what this build should show, and how to tell a pass from a fail. Neither socket decides a hit, a dig, or a death.
 
+## Solo, offline, and multiplayer
+
+- **Solo / offline:** with no lighthouse the page plays solo: island, digging, building and the AI all work. The corner note "multiplayer server offline" links to [what `?lighthouse=` does](docs/lighthouse.md#the-lighthouse-parameter).
+- **Networking (v3):** a lighthouse only introduces peers; play then runs peer to peer over WebRTC. See [docs/net-v3.md](docs/net-v3.md) for the current protocol.
+- **Phone controls:** left stick moves (push fully to sprint), drag the right side to look, tap to fire or dig, plus Jump, Crouch, Use, Tool, Map and Info buttons. All are listed in [docs/keymap.md](docs/keymap.md#touch).
+- **First run:** a short how-to-play card opens once (desktop or touch tips); the **?** button in the corner reopens it. `?onboard=0` hides it.
+
 ## Test pages and hooks
 
-- `tools/scale/index.html`: scaling bench. Grows from 2 to 50 clients (one per passed level) as same-origin iframes, each with its own `?ns=` and a seeded wander bot; stops on the first failure. Thumbnails paint at 1 fps, click one to promote it to the large pane; the header toggles the main pane between bot and manual, and exports JSON. Headless: `node tools/scale/run.mjs --max 50 --out scale.json [--lighthouse wss://...]`. Without a lighthouse (and working WebRTC) it checks movement only; with one it also checks every client sees min(n-1, 8) peers within the pose budget (`--budget`, metres).
+- `tools/scale/index.html`: scaling bench. Grows from 2 to 50 clients (one per passed level) as same-origin iframes, each with its own `?ns=` and a seeded wander bot; stops on the first failure. Thumbnails paint at 1 fps, click one to promote it to the large pane; the header toggles the main pane between bot and manual, and exports JSON. Headless: `node tools/scale/run.mjs --max 50 --out scale.json [--lighthouse wss://...]`, or `npm run scale:smoke` (`--solo --max 4`: starts its own server, forces solo, checks movement). Without a lighthouse (and working WebRTC) it checks movement only; with one it also checks every client sees min(n-1, 8) peers within the pose budget (`--budget`, metres).
 - View URL params: `?ns=<name>` gives the page its own storage namespace and player identity; `?bot=<seed>` runs the wander bot; `?paintfps=1` caps drawing (sim and net stay full speed).
 - `window.meridianProbe` (read-only, for benches): `id() pose() remotes() links() net() fps() errors() terrain() fov() bot()`, plus `setBot(on)`, `setPaintFps(n)`, `dig(strokes, pitch)` and `reset()`.
 
@@ -45,6 +54,8 @@ npm start                     # dev server on :8080, signaling on :8787
 - [Engine basis](docs/engine.md) — the nbody-raycaster commit that is the renderer and the physics.
 - [Engineering locks](docs/engineering.md) — where code goes, and how tests run.
 - [Integer crust](docs/crust.md) — the dig brush and the chunk hash.
+- [Keymap](docs/keymap.md) — every key and touch control.
+- [Networking v3](docs/net-v3.md) and [lighthouse](docs/lighthouse.md).
 - [Keepers](docs/keepers.md) — the headless archive, and what its operator earns.
 - [Atoll](content/atoll.json) — the island, in centimeters.
 

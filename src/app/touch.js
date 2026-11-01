@@ -52,6 +52,12 @@ export function fullscreenSupported(doc = globalThis.document) {
   return Boolean(doc?.fullscreenEnabled && doc.documentElement?.requestFullscreen);
 }
 
+const ARIA = {
+  Space: "Jump", ControlLeft: "Crouch", KeyE: "Use", KeyR: "Optics or rotate", Digit1: "Line rifle",
+  Digit3: "Tool", KeyG: "Throw", KeyB: "Buy", KeyQ: "Auto run", Tab: "Cycle people",
+  KeyM: "Map", KeyV: "Toggle first or third person", Escape: "Close panel and clear target",
+};
+
 // A fullscreen toggle on documentElement. Hidden where the Fullscreen API is missing (iPhone Safari).
 export function mountFullscreen(doc = globalThis.document) {
   if (!doc || !fullscreenSupported(doc)) return null;
@@ -62,6 +68,7 @@ export function mountFullscreen(doc = globalThis.document) {
     const on = Boolean(doc.fullscreenElement);
     button.textContent = on ? "\u2922" : "\u26F6";
     button.title = on ? "Leave fullscreen" : "Fullscreen";
+    button.setAttribute("aria-label", button.title);
     button.setAttribute("aria-pressed", on ? "true" : "false");
     button.classList.toggle("on", on);
   };
@@ -99,7 +106,7 @@ export function mountTouch({ keys, look, fire, orbit = () => {}, zoom = () => {}
   const press = (code, type) => dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
   const root = document.createElement("div");
   root.id = "touch";
-  root.innerHTML = `<div id="stickzone"></div><div id="stick"><div id="nub"></div></div><div id="lookpad"></div><div id="tbuttons"></div><button id="tfire">Fire</button>`;
+  root.innerHTML = `<div id="stickzone"></div><div id="stick" aria-hidden="true"><div id="nub"></div></div><div id="lookpad" aria-label="Look pad: drag to look, tap to fire"></div><div id="tbuttons"></div><button id="tfire" type="button" aria-label="Fire (hold)">Fire</button>`;
   document.body.append(root);
   const stick = root.querySelector("#stick");
   const zone = root.querySelector("#stickzone");
@@ -110,6 +117,8 @@ export function mountTouch({ keys, look, fire, orbit = () => {}, zoom = () => {}
   for (const spec of BUTTONS) {
     const button = document.createElement("button");
     button.textContent = spec.label;
+    button.type = "button";
+    button.setAttribute("aria-label", ARIA[spec.code] || spec.label);
     button.dataset.code = spec.code;
     button.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -124,6 +133,8 @@ export function mountTouch({ keys, look, fire, orbit = () => {}, zoom = () => {}
   }
   const info = document.createElement("button");
   info.textContent = "Info";
+  info.type = "button";
+  info.setAttribute("aria-label", "Show or hide the help, skills and network panels");
   info.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     document.documentElement.classList.toggle("touch-info");

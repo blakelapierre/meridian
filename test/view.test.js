@@ -10,15 +10,13 @@ import { WebSocket } from "ws";
 import { createStaticServer } from "../tools/serve.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const chrome = [
-  process.env.MERIDIAN_CHROME,
-  "/opt/pw-browsers/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell",
-].find((path) => path && existsSync(path));
+import { chrome, noChrome, p2pBlocked } from "./support/chrome.js";
 
-test("the view paints the dummy at the pad", { skip: !chrome, timeout: 20000 }, async () => {
+test("the view paints the dummy at the pad", { skip: noChrome, timeout: 20000 }, async () => {
   const site = await createStaticServer(root);
   const dir = await mkdtemp(join(tmpdir(), "meridian-view-"));
   const browser = spawn(chrome, [
+    "--headless=new",
     "--no-sandbox",
     "--disable-gpu",
     "--remote-debugging-port=0",

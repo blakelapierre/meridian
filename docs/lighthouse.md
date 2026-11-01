@@ -34,3 +34,12 @@ The lighthouse only relays presence and WebRTC offers/answers. Game traffic is p
 - `?debug=1` or F3: the debug panels (hidden by default on github.io; `?demo=1` hides them locally).
 - `?tour=1` replays the first-minute tour, `?tour=0` hides it.
 - `?look=dummy`, `?dig=1` (bit out, spoil empty, aimed at the sand), `?gate=1` (inside the gate, E joins).
+
+## The lighthouse parameter
+
+"Offline" in the corner means the page found no lighthouse to meet other players through, so you are playing solo. Everything still works alone: the island, digging, building, the AI.
+
+- A lighthouse is only a meeting point (a small WebSocket signaling server). Once players find each other, play goes peer to peer.
+- `?lighthouse=wss://host/path` points this visit at a lighthouse of your choice (for example `tools/signal`, which `npm start` runs locally on port 8787).
+- `?lighthouse=off` stays solo on purpose and stops the retries.
+- With no parameter the page uses `content/lighthouse.json`; if that is missing or does not answer in 3 s, it plays solo and tries again 30 s later.
