@@ -40,7 +40,7 @@ test("the walk scene defaults to the eyes, and third person adds the body", () =
   assert.equal(first.objects.some((object) => object.self), false);
   const third = buildScene({ feet, yaw: 0, pitch: 0, atoll, width: 16, height: 9, view: "third" });
   assert.ok(third.camera.origin[1] < feet[1]);
-  assert.equal(third.objects.filter((object) => object.self).length, 3);
+  assert.equal(third.objects.filter((object) => object.self).length, 25);
   const watched = buildScene({
     feet: [0, 0, 0],
     yaw: 0,
@@ -53,7 +53,7 @@ test("the walk scene defaults to the eyes, and third person adds the body", () =
     others: [{ feet: [2, 0, 0], yaw: 0 }],
   });
   assert.equal(watched.objects.some((object) => object.self), false);
-  assert.equal(watched.objects.filter((object) => object.body === "player").length, 3);
+  assert.equal(watched.objects.filter((object) => object.body === "player").length, 25);
 });
 
 test("the camera stretches behind a sudden move and then settles", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { duneHeight, fauna, floraBoxes, groundLook, gullParts, HILL, standHeight } from "../src/sim/life.js";
+import { duneHeight, fauna, floraParts, groundLook, gullParts, HILL, standHeight } from "../src/sim/life.js";
 
 test("hills reach about three body heights and a pit is still the floor", () => {
   let low = 99;
@@ -39,12 +39,20 @@ test("the crab steps away and the plants sit on the roll", () => {
   assert.ok(Math.hypot(near.at[0] - crab.at[0], near.at[1] - crab.at[1]) > 0.8);
   assert.equal(calm.length, 6);
   assert.equal(calm.filter((animal) => animal.kind === "graze").length, 3);
-  const plants = floraBoxes();
-  assert.ok(plants.length >= 6);
+  const crabWidth = calm.find((animal) => animal.kind === "crab").parts;
+  assert.ok(crabWidth.length >= 12);
+  const skink = calm.find((animal) => animal.kind === "skink");
+  assert.ok(skink.parts.length >= 10);
+  const goat = calm.find((animal) => animal.kind === "graze");
+  assert.ok(goat.parts.length >= 12);
+  const plants = floraParts();
+  assert.ok(plants.length >= 40);
+  let treeTop = 0;
   for (const plant of plants) {
-    assert.ok(plant.max[2] > plant.min[2]);
-    assert.ok(plant.min[2] > -0.5);
+    assert.ok(plant.at[2] > -0.5);
+    treeTop = Math.max(treeTop, plant.at[2] + plant.radius);
   }
+  assert.ok(treeTop > 2, treeTop);
 });
 
 test("the gull has a wingspan, a beak, and a wingbeat", () => {

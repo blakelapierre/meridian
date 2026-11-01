@@ -2,7 +2,7 @@ import { cameraBasis } from "../engine/cast.js";
 import { VOXEL_M } from "../sim/crust.js";
 import { ATLAS, GRASS_TILE, ROCK_TILE, SAND_TILE, WOOD_TILE, blitTexture, grassTexture, rectFor, rockTexture, sandTexture, woodTexture } from "./texture.js?v=62";
 
-const MAX_SPHERES = 96;
+const MAX_SPHERES = 384;
 const MAX_BOXES = 32;
 // Dug columns the trace can show; 4x the 50 cm budget since a 25 cm voxel has 4x the columns per area.
 const MAX_DIGS = 512;

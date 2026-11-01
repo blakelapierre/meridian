@@ -5,8 +5,9 @@ export const SHOULDER = 0;
 export const RISE = 0.55;
 
 const CLOTH = [0.2, 0.34, 0.58, 1];
-const OTHER = [0.55, 0.42, 0.22, 1];
 const SKIN = [0.76, 0.58, 0.44, 1];
+const HAIR = [0.16, 0.1, 0.07, 1];
+const EYE = [0.08, 0.07, 0.06, 1];
 
 export const BODY_COLORS = {
   surveyor: [0.35, 0.55, 0.72, 1],
@@ -25,21 +26,118 @@ function sphere(x, y, z, radius, color, self, extra = null) {
     part.detail = extra.detail || "";
     part.speech = extra.speech || "";
   }
+  if (extra.texture) part.texture = true;
   return part;
 }
 
+// A standing or crouched figure. Cloth is the passed color. Head, hands, and feet are skin.
+// The crown stays under the third-person look so the crosshair still clears the body.
+const STAND = [
+  [0.04, 0.09, 0.05, 0.055, "skin"],
+  [0.04, -0.09, 0.05, 0.055, "skin"],
+  [0.01, 0.08, 0.26, 0.05, "cloth"],
+  [0.01, -0.08, 0.26, 0.05, "cloth"],
+  [0, 0.085, 0.48, 0.06, "cloth"],
+  [0, -0.085, 0.48, 0.06, "cloth"],
+  [0.02, 0.09, 0.7, 0.07, "cloth"],
+  [0.02, -0.09, 0.7, 0.07, "cloth"],
+  [0.02, 0, 0.86, 0.11, "cloth"],
+  [0.03, 0, 1.05, 0.12, "cloth"],
+  [0.04, 0, 1.24, 0.115, "cloth"],
+  [0.05, 0.16, 1.3, 0.055, "cloth"],
+  [0.05, -0.16, 1.3, 0.055, "cloth"],
+  [0.06, 0.2, 1.08, 0.045, "cloth"],
+  [0.06, -0.2, 1.08, 0.045, "cloth"],
+  [0.07, 0.22, 0.88, 0.038, "cloth"],
+  [0.07, -0.22, 0.88, 0.038, "cloth"],
+  [0.08, 0.23, 0.7, 0.032, "skin"],
+  [0.08, -0.23, 0.7, 0.032, "skin"],
+  [0.05, 0, 1.4, 0.042, "skin"],
+  [0.06, 0, 1.54, 0.1, "skin"],
+  [0.14, 0.03, 1.55, 0.018, "skin"],
+  [0.13, 0.035, 1.58, 0.014, "eye"],
+  [0.13, -0.035, 1.58, 0.014, "eye"],
+  [0.02, 0, 1.62, 0.085, "hair"],
+];
+
+const CROUCH = [
+  [0.08, 0.1, 0.045, 0.05, "skin"],
+  [0.08, -0.1, 0.045, 0.05, "skin"],
+  [0.2, 0.09, 0.18, 0.048, "cloth"],
+  [0.2, -0.09, 0.18, 0.048, "cloth"],
+  [0.06, 0.1, 0.32, 0.055, "cloth"],
+  [0.06, -0.1, 0.32, 0.055, "cloth"],
+  [0.04, 0, 0.46, 0.1, "cloth"],
+  [0.08, 0, 0.62, 0.105, "cloth"],
+  [0.1, 0, 0.78, 0.1, "cloth"],
+  [0.1, 0.15, 0.8, 0.045, "cloth"],
+  [0.1, -0.15, 0.8, 0.045, "cloth"],
+  [0.14, 0.2, 0.64, 0.038, "cloth"],
+  [0.14, -0.2, 0.64, 0.038, "cloth"],
+  [0.16, 0.22, 0.5, 0.03, "skin"],
+  [0.16, -0.22, 0.5, 0.03, "skin"],
+  [0.12, 0, 0.92, 0.038, "skin"],
+  [0.14, 0, 1.04, 0.085, "skin"],
+  [0.2, 0.03, 1.05, 0.016, "skin"],
+  [0.18, 0.03, 1.07, 0.012, "eye"],
+  [0.18, -0.03, 1.07, 0.012, "eye"],
+  [0.1, 0, 1.1, 0.07, "hair"],
+];
+
 export function playerParts(feet, yaw, crouch = false, { self = true, color = CLOTH, body = "", id = "", name = "", detail = "", speech = "" } = {}) {
-  const height = crouch ? 1.2 : 1.8;
   const forwardX = Math.sin(yaw);
   const forwardY = Math.cos(yaw);
-  const lean = 0.12;
-  const head = height - 0.16;
+  const rightX = Math.cos(yaw);
+  const rightY = -Math.sin(yaw);
   const extra = id ? { body: body || "person", id, name, detail, speech } : null;
-  return [
-    sphere(feet[0], feet[1], feet[2] + height * 0.32, crouch ? 0.2 : 0.22, color, self, extra),
-    sphere(feet[0] + forwardX * lean, feet[1] + forwardY * lean, feet[2] + height * 0.62, crouch ? 0.18 : 0.2, color, self, extra),
-    sphere(feet[0] + forwardX * lean, feet[1] + forwardY * lean, feet[2] + head, 0.16, self ? SKIN : color, self, extra),
+  const tone = { cloth: color, skin: SKIN, hair: HAIR, eye: EYE };
+  return (crouch ? CROUCH : STAND).map(([lf, lr, z, radius, slot]) => sphere(
+    feet[0] + forwardX * lf + rightX * lr,
+    feet[1] + forwardY * lf + rightY * lr,
+    feet[2] + z,
+    radius,
+    tone[slot],
+    self,
+    extra,
+  ));
+}
+
+// The practice target. Arms out, sack head, ringed torso. Head stays above the chest line.
+const DUMMY_RED = [0.86, 0.22, 0.18, 1];
+const DUMMY_SACK = [0.82, 0.74, 0.58, 1];
+const DUMMY_WOOD = [0.4, 0.28, 0.16, 1];
+
+export function dummyParts(at) {
+  const yaw = 0;
+  const layout = [
+    [0, 0, 0.16, 0.06, DUMMY_WOOD, false],
+    [0, 0, 0.42, 0.05, DUMMY_WOOD, false],
+    [0, 0, 0.7, 0.16, DUMMY_RED, false],
+    [0, 0, 0.92, 0.2, DUMMY_RED, true],
+    [0, 0.34, 0.9, 0.045, DUMMY_WOOD, false],
+    [0, -0.34, 0.9, 0.045, DUMMY_WOOD, false],
+    [0, 0.5, 0.9, 0.035, DUMMY_SACK, false],
+    [0, -0.5, 0.9, 0.035, DUMMY_SACK, false],
+    [0, 0, 1.16, 0.05, DUMMY_WOOD, false],
+    [0, 0, 1.32, 0.11, DUMMY_SACK, false],
   ];
+  const forwardX = Math.sin(yaw);
+  const forwardY = Math.cos(yaw);
+  const rightX = Math.cos(yaw);
+  const rightY = -Math.sin(yaw);
+  return layout.map(([lf, lr, z, radius, color, texture]) => {
+    const part = sphere(
+      at[0] + forwardX * lf + rightX * lr,
+      at[1] + forwardY * lf + rightY * lr,
+      at[2] + z,
+      radius,
+      color,
+      false,
+    );
+    part.body = "dummy";
+    if (texture) part.texture = true;
+    return part;
+  });
 }
 
 export function chaseOrigin(feet, yaw, pitch, crouch = false, distance = CHASE) {

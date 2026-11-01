@@ -28,8 +28,16 @@ export function herd(patch, at = [12, -150, 0], count = 3) {
   const one = grazeAnimal(patch, at);
   if (!one) return [];
   const animals = [];
+  const ground = at[2] || 0;
   for (let i = 0; i < count; i += 1) {
-    animals.push({ ...one, at: [one.at[0] + i * 0.7, one.at[1], one.at[2]], herd: count });
+    const foot = [one.at[0] + (i - (count - 1) / 2) * 1.05, one.at[1] + (i - 1) * 0.2, ground];
+    const yaw = 0.15 + i * 0.5;
+    animals.push({
+      ...one,
+      at: foot,
+      herd: count,
+      parts: goatParts(foot, yaw, Boolean(patch?.dead)),
+    });
   }
   return animals;
 }
@@ -81,29 +89,165 @@ function shy(at, from, sense, push) {
   return [at[0] + (dx / dist) * step, at[1] + (dy / dist) * step];
 }
 
-const SCRUB = [
-  { x: -9, y: -147, w: 0.9, h: 0.5, color: [0.26, 0.4, 0.16, 1] },
-  { x: 15, y: -156, w: 0.7, h: 0.4, color: [0.34, 0.4, 0.18, 1] },
-  { x: -14, y: -134, w: 1.1, h: 0.55, color: [0.22, 0.36, 0.14, 1] },
-  { x: 7, y: -118, w: 0.8, h: 0.45, color: [0.42, 0.4, 0.18, 1] },
-  { x: -3, y: -162, w: 1.3, h: 0.28, color: [0.5, 0.44, 0.2, 1] },
-  { x: 20, y: -142, w: 0.35, h: 1.7, color: [0.38, 0.26, 0.14, 1] },
-  { x: 20, y: -142, w: 1.3, h: 0.7, lift: 1.35, color: [0.2, 0.4, 0.15, 1] },
+function orient(parts, at, yaw, lf, lr, up, radius, color) {
+  const fx = Math.sin(yaw);
+  const fy = Math.cos(yaw);
+  const rx = Math.cos(yaw);
+  const ry = -Math.sin(yaw);
+  parts.push({
+    at: [at[0] + fx * lf + rx * lr, at[1] + fy * lf + ry * lr, at[2] + up],
+    radius,
+    color,
+  });
+}
+
+const SHELL = [0.62, 0.28, 0.16, 1];
+const CLAW = [0.78, 0.42, 0.24, 1];
+const LEG = [0.4, 0.18, 0.1, 1];
+const SCALE = [0.42, 0.5, 0.2, 1];
+const SCALE_DARK = [0.24, 0.32, 0.12, 1];
+const GOAT = [0.48, 0.34, 0.2, 1];
+const GOAT_DARK = [0.28, 0.18, 0.1, 1];
+const HORN = [0.55, 0.48, 0.32, 1];
+
+export function crabParts(at, yaw = 0) {
+  const parts = [];
+  const add = (lf, lr, up, radius, color) => orient(parts, at, yaw, lf, lr, up, radius, color);
+  add(0, 0, 0.06, 0.11, SHELL);
+  add(-0.06, 0, 0.05, 0.08, SHELL);
+  add(0.05, 0, 0.07, 0.07, [0.72, 0.36, 0.2, 1]);
+  add(0.1, 0.02, 0.1, 0.02, EYE);
+  add(0.1, -0.02, 0.1, 0.02, EYE);
+  add(0.12, 0.1, 0.07, 0.04, CLAW);
+  add(0.2, 0.14, 0.08, 0.035, CLAW);
+  add(0.12, -0.1, 0.07, 0.04, CLAW);
+  add(0.2, -0.14, 0.08, 0.035, CLAW);
+  for (const side of [1, -1]) {
+    for (let i = 0; i < 4; i += 1) {
+      const back = -0.02 - i * 0.04;
+      add(back, side * 0.12, 0.03, 0.018, LEG);
+      add(back - 0.02, side * 0.2, 0.015, 0.014, LEG);
+    }
+  }
+  return parts;
+}
+
+export function skinkParts(at, yaw = 0) {
+  const parts = [];
+  const add = (lf, lr, up, radius, color) => orient(parts, at, yaw, lf, lr, up, radius, color);
+  add(0.16, 0, 0.07, 0.035, SCALE);
+  add(0.22, 0, 0.08, 0.02, SCALE_DARK);
+  add(0.1, 0.025, 0.09, 0.012, EYE);
+  add(0.1, -0.025, 0.09, 0.012, EYE);
+  add(0.04, 0, 0.06, 0.04, SCALE);
+  add(-0.04, 0, 0.055, 0.038, SCALE);
+  add(-0.1, 0, 0.05, 0.03, SCALE_DARK);
+  for (let i = 0; i < 6; i += 1) {
+    const u = i / 5;
+    add(-0.16 - i * 0.045, Math.sin(i * 0.7) * 0.02, 0.045 - u * 0.02, 0.026 - u * 0.012, i > 3 ? SCALE_DARK : SCALE);
+  }
+  for (const side of [1, -1]) {
+    add(0.06, side * 0.05, 0.03, 0.016, SCALE_DARK);
+    add(-0.04, side * 0.05, 0.03, 0.016, SCALE_DARK);
+  }
+  return parts;
+}
+
+export function goatParts(at, yaw = 0, dead = false) {
+  const parts = [];
+  const hide = dead ? [0.3, 0.24, 0.18, 1] : GOAT;
+  const add = (lf, lr, up, radius, color) => orient(parts, at, yaw, lf, lr, dead ? up * 0.45 : up, radius, color);
+  for (const side of [1, -1]) {
+    add(0.12, side * 0.06, 0.1, 0.035, hide);
+    add(0.12, side * 0.06, 0.24, 0.04, hide);
+    add(-0.12, side * 0.06, 0.1, 0.035, hide);
+    add(-0.12, side * 0.06, 0.24, 0.04, hide);
+  }
+  add(0, 0, 0.36, 0.1, hide);
+  add(-0.1, 0, 0.38, 0.09, hide);
+  add(0.1, 0, 0.4, 0.08, hide);
+  add(0.18, 0, 0.52, 0.045, hide);
+  add(0.26, 0, 0.58, 0.05, hide);
+  add(0.32, 0, 0.56, 0.03, GOAT_DARK);
+  add(0.24, 0.04, 0.64, 0.025, hide);
+  add(0.24, -0.04, 0.64, 0.025, hide);
+  add(0.22, 0.03, 0.68, 0.018, HORN);
+  add(0.22, -0.03, 0.68, 0.018, HORN);
+  add(0.28, 0.03, 0.6, 0.012, EYE);
+  add(0.28, -0.03, 0.6, 0.012, EYE);
+  add(-0.22, 0, 0.4, 0.03, hide);
+  return parts;
+}
+
+const PLANTS = [
+  { kind: "bush", x: -9, y: -147, color: [0.26, 0.4, 0.16, 1] },
+  { kind: "bush", x: 15, y: -156, color: [0.34, 0.4, 0.18, 1] },
+  { kind: "bush", x: -14, y: -134, color: [0.22, 0.36, 0.14, 1] },
+  { kind: "bush", x: 7, y: -118, color: [0.42, 0.4, 0.18, 1] },
+  { kind: "tuft", x: -3, y: -162, color: [0.5, 0.44, 0.2, 1] },
+  { kind: "tree", x: 20, y: -142 },
 ];
 
+function bushParts(parts, x, y, z, color) {
+  const dark = [color[0] * 0.65, color[1] * 0.7, color[2] * 0.6, 1];
+  const puffs = [
+    [0, 0, 0.32, 0.2, color],
+    [0.18, 0.06, 0.28, 0.14, color],
+    [-0.16, 0.08, 0.26, 0.13, dark],
+    [0.04, -0.16, 0.24, 0.12, color],
+    [-0.06, 0.02, 0.42, 0.12, color],
+    [0.14, -0.08, 0.18, 0.09, dark],
+    [0, 0.14, 0.2, 0.1, color],
+    [0, 0, 0.1, 0.045, [0.32, 0.22, 0.12, 1]],
+  ];
+  for (const [dx, dy, dz, radius, leaf] of puffs) parts.push({ at: [x + dx, y + dy, z + dz], radius, color: leaf });
+}
+
+function tuftParts(parts, x, y, z, color) {
+  const dry = [color[0] * 0.85, color[1] * 0.8, color[2] * 0.6, 1];
+  for (let i = 0; i < 9; i += 1) {
+    const ang = (i / 9) * Math.PI * 2;
+    const reach = 0.08 + (i % 3) * 0.12;
+    parts.push({
+      at: [x + Math.cos(ang) * reach, y + Math.sin(ang) * reach * 0.7, z + 0.08 + (i % 4) * 0.05],
+      radius: 0.035,
+      color: i % 2 ? dry : color,
+    });
+  }
+}
+
+function treeParts(parts, x, y, z) {
+  const bark = [0.38, 0.26, 0.14, 1];
+  const leaf = [0.2, 0.42, 0.16, 1];
+  const shade = [0.12, 0.3, 0.1, 1];
+  for (let i = 0; i < 6; i += 1) parts.push({ at: [x, y, z + 0.16 + i * 0.26], radius: 0.09 - i * 0.006, color: bark });
+  const crown = [
+    [0, 0, 1.85, 0.34, leaf],
+    [0.28, 0.1, 1.75, 0.22, leaf],
+    [-0.26, 0.08, 1.7, 0.2, shade],
+    [0.08, -0.28, 1.72, 0.2, leaf],
+    [-0.1, 0.22, 1.95, 0.18, leaf],
+    [0.16, 0.16, 2.05, 0.16, shade],
+    [-0.18, -0.12, 1.95, 0.16, leaf],
+    [0, -0.05, 2.15, 0.14, leaf],
+  ];
+  for (const [dx, dy, dz, radius, color] of crown) parts.push({ at: [x + dx, y + dy, z + dz], radius, color });
+}
+
+// Plants are spheres. The box budget belongs to the town.
 export function floraBoxes() {
-  return SCRUB.map((plant) => {
-    const z = duneHeight(plant.x, plant.y) + (plant.lift || 0);
-    const half = plant.w / 2;
-    return {
-      type: "box",
-      min: [plant.x - half, plant.y - half, z],
-      max: [plant.x + half, plant.y + half, z + plant.h],
-      color: plant.color,
-      reflectivity: 0.02,
-      id: "scrub",
-    };
-  });
+  return [];
+}
+
+export function floraParts() {
+  const parts = [];
+  for (const plant of PLANTS) {
+    const z = duneHeight(plant.x, plant.y);
+    if (plant.kind === "tree") treeParts(parts, plant.x, plant.y, z);
+    else if (plant.kind === "tuft") tuftParts(parts, plant.x, plant.y, z, plant.color);
+    else bushParts(parts, plant.x, plant.y, z, plant.color);
+  }
+  return parts;
 }
 
 const WHITE = [0.94, 0.94, 0.91, 1];
@@ -190,14 +334,18 @@ export function gullParts(nowMs) {
 export function fauna(nowMs, from) {
   const t = nowMs / 1000;
   const crabHome = [9 + Math.sin(t * 0.35) * 3.2, -168 + Math.cos(t * 0.22) * 2.1];
-  const crab = shy(crabHome, from, 4.5, 1.6);
+  const crabAt = shy(crabHome, from, 4.5, 1.6);
+  const crabYaw = Math.atan2(Math.cos(t * 0.35) * 3.2 * 0.35, -Math.sin(t * 0.22) * 2.1 * 0.22);
+  const crab = [crabAt[0], crabAt[1], duneHeight(crabAt[0], crabAt[1]) + 0.02];
   const skinkHome = [-7 + Math.sin(t * 0.5) * 2.1, -136 + Math.sin(t * 0.17) * 1.5];
-  const skink = shy(skinkHome, from, 6, 2.4);
+  const skinkAt = shy(skinkHome, from, 6, 2.4);
+  const skinkYaw = Math.atan2(Math.cos(t * 0.5) * 2.1 * 0.5, Math.cos(t * 0.17) * 1.5 * 0.17);
+  const skink = [skinkAt[0], skinkAt[1], duneHeight(skinkAt[0], skinkAt[1]) + 0.02];
   const gull = gullParts(nowMs);
   const grazed = herd(graze({ stock: 1 }), [12, -150, duneHeight(12, -150)]);
   return [
-    { kind: "crab", at: [crab[0], crab[1], duneHeight(crab[0], crab[1]) + 0.12], radius: 0.22, color: [0.62, 0.28, 0.16, 1] },
-    { kind: "skink", at: [skink[0], skink[1], duneHeight(skink[0], skink[1]) + 0.1], radius: 0.16, color: [0.42, 0.5, 0.2, 1] },
+    { kind: "crab", at: crab, radius: 0.12, color: SHELL, parts: crabParts(crab, crabYaw) },
+    { kind: "skink", at: skink, radius: 0.05, color: SCALE, parts: skinkParts(skink, skinkYaw) },
     { kind: "gull", at: gull.at, radius: 0.1, color: WHITE, parts: gull.parts },
     ...grazed,
   ];

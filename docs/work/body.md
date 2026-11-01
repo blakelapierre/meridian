@@ -2,7 +2,7 @@
 
 ## In the build
 
-Third person sits behind the body and seeks its pose. It does not snap. An active target pulls the seek point out so the body and the target both stay in view. First person is the last part of the wheel, then optics.
+Third person sits behind the body and seeks its pose. It does not snap. The body is a figure: legs, arms, chest, and a head, and the same figure is what other players and the townsfolk wear. An active target pulls the seek point out so the body and the target both stay in view. First person is the last part of the wheel, then optics.
 
 Walk, strafe, sprint, auto-run, jump, and crouch are live. Sprint speed grows with the run skill. Jump height grows while Space is held, up to the jump skill.
 

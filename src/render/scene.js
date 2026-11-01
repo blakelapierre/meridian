@@ -1,14 +1,13 @@
 import { Crust } from "../sim/crust.js";
 import { pieceBoxes } from "../sim/build.js";
-import { chaseOrigin, playerParts } from "../sim/body.js?v=52";
+import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=53";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
-import { duneHeight, fauna, floraBoxes } from "../sim/life.js?v=70";
+import { duneHeight, fauna, floraParts } from "../sim/life.js?v=71";
 import { PEOPLE } from "../sim/people.js?v=1";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
-const DUMMY = [0.86, 0.22, 0.18, 1];
 const OTHER = [0.55, 0.42, 0.22, 1];
 const PROP_COLOR = {
   paper: [0.86, 0.82, 0.7, 1],
@@ -103,7 +102,16 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       body: "swarm",
     });
   }
-  for (const box of floraBoxes()) objects.push(box);
+  for (const part of floraParts()) {
+    objects.push({
+      type: "sphere",
+      origin: part.at,
+      radius: part.radius,
+      color: part.color,
+      reflectivity: 0.02,
+      body: "flora",
+    });
+  }
   for (const animal of fauna(Date.now(), feet)) {
     const parts = animal.parts?.length ? animal.parts : [animal];
     for (const part of parts) {
@@ -130,15 +138,17 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     })) objects.push(part);
   }
   const dummy = atoll.placements.dummy;
-  objects.push({
-    type: "sphere",
-    origin: [dummy.x / 100, dummy.y / 100, 0.9],
-    radius: 0.35,
-    color: DUMMY,
-    reflectivity: 0.45,
-    body: "dummy",
-    texture: dummyTexture(),
-  });
+  for (const part of dummyParts([dummy.x / 100, dummy.y / 100, 0])) {
+    objects.push({
+      type: "sphere",
+      origin: part.origin,
+      radius: part.radius,
+      color: part.color,
+      reflectivity: part.texture ? 0.4 : 0.08,
+      body: "dummy",
+      ...(part.texture ? { texture: dummyTexture() } : {}),
+    });
+  }
   for (const pool of pools) {
     objects.push({
       type: "box",
