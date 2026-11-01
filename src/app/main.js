@@ -136,6 +136,7 @@ import { separate } from "../sim/separate.js";
 import { shellDrop, shellTilt } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom } from "../net/room.js";
+import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
 import { acceptShot, encodeShot } from "../net/shots.js";
 import { acceptPosition, encodePosition } from "../net/position.js";
 import { createEntry, entryLine, SMOKE, stepEntry } from "../sim/enter.js";
@@ -2696,6 +2697,7 @@ async function openLink(to, offer, role) {
   if (!ops) ops = channels.ops;
   channels.ops.onopen = () => {
     opening.delete(to);
+    if (link.dropped) return;
     shareWalls(link);
     if (role === "archive") pushSheet();
   };
@@ -2746,14 +2748,17 @@ async function openLink(to, offer, role) {
       me: meId,
       to,
       offer,
-      isOpen: () => channels.ops.readyState === "open",
+      isOpen: () => link.dropped || channels.ops.readyState === "open",
       status: (line) => {
         linkNote = role === "archive" ? `archive ${line}` : line;
         if (linkLine && !followed) linkLine.textContent = linkNote;
       },
     });
-    if (channels.ops.readyState === "open") shareWalls(link);
+    if (!link.dropped && channels.ops.readyState === "open") shareWalls(link);
   } catch (error) {
+    // A dropped link was already removed. Clearing `opening` here would also
+    // cancel the replacement seek just started for the same peer.
+    if (link.dropped) return;
     opening.delete(to);
     const index = links.indexOf(link);
     if (index >= 0) links.splice(index, 1);
@@ -2786,15 +2791,58 @@ async function link() {
 
 const meetPlayers = !peer && !followId && !agendaName && params.get("solo") !== "1" && Boolean(signalUrl);
 
-async function seekArchives() {
+// A failed or closed peer connection does not recover. "disconnected" can, so it is left alone.
+function linkDead(link) {
+  const state = link.pc?.connectionState;
+  return state === "failed" || state === "closed";
+}
+
+function closePlayerLink(link) {
+  link.dropped = true;
+  opening.delete(link.to);
+  try { link.pc?.close(); } catch { /* already closed */ }
+  const index = links.indexOf(link);
+  if (index >= 0) links.splice(index, 1);
+  lanes.delete(link);
+  poses.delete(link.to);
+  poseSeenAt.delete(link.to);
+  peerSteps.delete(link.to);
+}
+
+let seekJob = null;
+function seekArchives() {
+  if (seekJob) return seekJob;
+  seekJob = seekOnce().finally(() => { seekJob = null; });
+  return seekJob;
+}
+
+async function seekOnce() {
   try {
     const room = await ensureRoom();
     const peers = await room.list();
     for (const found of peers) {
       if (found.role === "archive" && acceptHello(catalogHex, found.catalog)) openLink(found.pubkey, false, "archive");
-      // On a shared lighthouse, meet the other players in the cell. The lower id offers.
-      else if (meetPlayers && found.role === "player" && found.pubkey !== meId && acceptHello(catalogHex, found.catalog)
-        && links.filter((item) => item.role === "player").length < 8) openLink(found.pubkey, meId < found.pubkey, "player");
+    }
+    if (!meetPlayers) return;
+    // Close first. A client already holding eight links will not open a ninth,
+    // so the ring has to drop the peers it no longer wants before it offers.
+    const ids = [];
+    for (const found of peers) {
+      if (found.role === "player" && found.pubkey && acceptHello(catalogHex, found.catalog)) ids.push(found.pubkey);
+    }
+    if (!ids.includes(meId)) ids.push(meId);
+    const want = new Set(ringNeighbors(ids, meId, PLAYER_DEGREE));
+    for (const link of [...links]) {
+      if (link.role !== "player") continue;
+      if (want.has(link.to) && !linkDead(link)) continue;
+      closePlayerLink(link);
+    }
+    let held = links.filter((item) => item.role === "player").length;
+    for (const id of want) {
+      if (held >= PLAYER_DEGREE) break;
+      if (links.some((item) => item.to === id) || opening.has(id)) continue;
+      openLink(id, meId < id, "player");
+      held += 1;
     }
   } catch {
     // No lighthouse means no archive. Digs stay solo.
@@ -2998,7 +3046,7 @@ if (params.get("still") !== "1") {
   });
   if (!followId) {
     seekArchives();
-    setInterval(() => { seekArchives(); }, 3000);
+    setInterval(() => { seekArchives(); }, 1000);
   }
   const pacer = createPacer();
   let issued = false;

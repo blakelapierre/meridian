@@ -7,7 +7,7 @@ The github.io build reads `content/lighthouse.json` for its lighthouse.
 - On `localhost`/`127.0.0.1` the dev lighthouse `ws://127.0.0.1:8787` is used as before, and `?signal=` still works.
 - If the lighthouse does not answer within 3 s the page plays solo and tries again 30 s later.
 
-On a shared lighthouse a page meets the other players in its cell by itself (the lower id offers, at most 8 player links). `?solo=1` turns that off. `?id=`/`?to=` tabs work as before.
+On a shared lighthouse a page meets the other players in its cell by itself (the lower id offers, at most 8 player links). With nine or fewer players that is everyone. Past that, the eight are the nearest pubkeys on a sorted ring, not the first eight who arrived, so a later player still gets a full set. `?solo=1` turns that off. `?id=`/`?to=` tabs work as before.
 
 ## Status and redeploy
 
