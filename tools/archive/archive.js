@@ -4,6 +4,7 @@ import { decodeBlock, encodeBlock } from "../../src/net/blocks.js";
 import { signReceipt } from "../../src/net/receipt.js";
 import { createTerrain } from "../../src/net/terrain.js";
 import { decode } from "../../src/sim/cbor.js";
+import { encodeDeflatedPack, helloMessage, packState, readHello, unwrap } from "../../src/net/wire.js";
 import {
   acceptBlock,
   blocksByMiner,
@@ -89,6 +90,50 @@ function rememberBytes(bytes) {
   }
   if (kind !== 9 && kind !== 10 && kind !== 11 && kind !== 13) return;
   if (keepFrame(world, bytes)) persist();
+}
+
+function replayFrames() {
+  return [...world.frames.map(hexBytes), ...Object.values(world.sheets).map((sheet) => hexBytes(sheet.frame))];
+}
+
+function replayKey() {
+  return `${world.frames.length}:${world.frames.at(-1) || ""}:${Object.values(world.sheets).map((sheet) => sheet.frame.slice(-16)).join("")}`;
+}
+
+// Dual-format storage: the save keeps verbatim v1 frames, plus a cached v2 deflated replay pack.
+async function replayPack() {
+  const key = replayKey();
+  if (world.replay && world.replayOf === key) return Uint8Array.from(atob(world.replay), (c) => c.charCodeAt(0));
+  const pack = await encodeDeflatedPack(replayFrames());
+  let text = "";
+  for (let i = 0; i < pack.length; i += 8192) text += String.fromCharCode(...pack.subarray(i, i + 8192));
+  world.replay = btoa(text);
+  world.replayOf = key;
+  persist();
+  return pack;
+}
+
+// A v2 player says hello on ctrl and gets one deflated pack. A v1 player (no hello within 1 s)
+// gets the frames one by one, as before.
+function replaySoon(link, channel) {
+  const started = Date.now();
+  const tick = () => {
+    if (channel.readyState !== "open") return;
+    if (link.proto >= 2) {
+      replayPack().then((pack) => {
+        if (channel.readyState !== "open") return;
+        channel.send(pack);
+        traffic.out += 1;
+      }).catch(() => replay(channel));
+      return;
+    }
+    if (Date.now() - started >= 1000) {
+      replay(channel);
+      return;
+    }
+    setTimeout(tick, 100);
+  };
+  tick();
 }
 
 function replay(channel) {
@@ -272,14 +317,35 @@ async function openPlayer(to) {
     channel.binaryType = "arraybuffer";
     channels[spec[0]] = channel;
   }
-  links.push({ to, ops: channels.ops, lore: channels.lore, pc, note: "starting" });
+  const link = { to, ops: channels.ops, lore: channels.lore, pc, note: "starting", proto: 1, packIn: packState() };
+  links.push(link);
+  channels.ctrl.onopen = () => {
+    try {
+      channels.ctrl.send(helloMessage(""));
+    } catch {
+      // The player treats this link as v1.
+    }
+  };
+  channels.ctrl.onmessage = (event) => {
+    const hello = readHello(event.data);
+    if (hello) link.proto = hello.proto;
+  };
   channels.ops.onopen = () => {
     opening.delete(to);
-    replay(channels.ops);
+    replaySoon(link, channels.ops);
   };
   channels.ops.onmessage = (event) => {
-    const bytes = new Uint8Array(event.data);
     traffic.inn += 1;
+    let frames;
+    try {
+      frames = unwrap(new Uint8Array(event.data), link.packIn);
+    } catch {
+      return;
+    }
+    if (frames instanceof Promise) frames.then((list) => list.forEach(receiveFrame)).catch(() => {});
+    else frames.forEach(receiveFrame);
+  };
+  function receiveFrame(bytes) {
     if (bytes[0] === 11) {
       const decoded = decodeBlock(bytes);
       if (decoded.ok) {
@@ -307,7 +373,7 @@ async function openPlayer(to) {
       }
     }
     outgoing();
-  };
+  }
   try {
     await connectPeer({
       pc,

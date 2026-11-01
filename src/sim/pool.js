@@ -36,3 +36,15 @@ export function flowOnce(pool, floorHere, floorThere) {
   if (!pool || floorThere >= floorHere) return pool;
   return { ...pool, y: pool.y + 0.5, floor: floorThere, key: `${pool.x},${pool.y + 0.5}` };
 }
+
+// Upward lift from standing in a pool. Lift applies only below the water
+// surface and fades toward it, so a swimmer floats at the surface. Before
+// this fix a flat +14 m/s² (more than gravity) applied at any height,
+// which made a player near a dug pool rise without limit (batch-4 fly-away).
+export const POOL_SURFACE = -0.1;
+export function poolLift(pools, position, reach = 0.7) {
+  if (!pools?.some((pool) => Math.hypot(pool.x - position[0], pool.y - position[1]) < reach)) return 0;
+  const under = POOL_SURFACE - position[2];
+  if (under <= 0) return 0;
+  return 9.81 + Math.min(4.19, under * 20);
+}

@@ -1,8 +1,14 @@
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, role = "player", catalog = "" }) {
+// Wire v2: a client sends `proto` in announce and `subscribe` once. A lighthouse that knows
+// subscribe answers `present` with sub:true and then pushes `roster` diffs. The client then
+// stops polling `list` and announces every subscribedRefreshMs. An old lighthouse ignores both
+// and the client keeps the v1 behavior (announce every refreshMs, poll `list`).
+export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, subscribedRefreshMs = 12000, role = "player", catalog = "", proto = 2 }) {
   const socket = new WebSocket(url);
   const listeners = new Set();
+  let roster = null;
+  let timer = null;
   const ready = new Promise((resolve, reject) => {
     socket.addEventListener("open", () => resolve());
     socket.addEventListener("error", () => reject(new Error("lighthouse failed")));
@@ -14,17 +20,29 @@ export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, role =
     } catch {
       return;
     }
+    if (message.type === "present" && message.sub && message.cell === cell) {
+      const fresh = !roster;
+      roster = new Map((message.peers || []).map((peer) => [peer.pubkey, peer]));
+      if (fresh && timer) {
+        clearInterval(timer);
+        timer = setInterval(announce, subscribedRefreshMs);
+      }
+    } else if (message.type === "roster" && roster && message.cell === cell) {
+      for (const peer of message.add || []) roster.set(peer.pubkey, peer);
+      for (const key of message.drop || []) roster.delete(key);
+    }
     for (const listener of [...listeners]) listener(message);
   });
   function announce() {
     if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "announce", pubkey: me, cell, role, catalog }));
+      socket.send(JSON.stringify({ type: "announce", pubkey: me, cell, role, catalog, proto }));
     }
   }
   async function start() {
     await ready;
     announce();
-    const timer = setInterval(announce, refreshMs);
+    timer = setInterval(announce, refreshMs);
+    if (proto >= 2) socket.send(JSON.stringify({ type: "subscribe", cell }));
     socket.addEventListener("close", () => clearInterval(timer));
   }
   function onMessage(listener) {
@@ -36,6 +54,7 @@ export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, role =
     socket.send(JSON.stringify({ type: "signal", to, from: me, blob }));
   }
   function list() {
+    if (roster) return Promise.resolve([...roster.values()]);
     return new Promise((resolve) => {
       let settled = false;
       const finish = (peers) => {
@@ -57,7 +76,7 @@ export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, role =
       }
     });
   }
-  return { start, send, onMessage, list, close: () => socket.close() };
+  return { start, send, onMessage, list, subscribed: () => Boolean(roster), close: () => socket.close() };
 }
 
 export async function connectPeer({ pc, room, me, to, offer, isOpen, status }) {
