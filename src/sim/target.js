@@ -44,9 +44,14 @@ export function listTargets({ dummy = null, others = [], pieces = [], props = []
     const box = prop.box;
     list.push({
       id: prop.id,
-      ...SUBJECTS.prop,
-      name: prop.id,
-      kind: "prop",
+      name: prop.name || prop.id,
+      material: prop.material || SUBJECTS.prop.material,
+      action: prop.action || SUBJECTS.prop.action,
+      detail: prop.detail || SUBJECTS.prop.detail,
+      difficulty: prop.difficulty ?? (prop.name ? 0 : SUBJECTS.prop.difficulty),
+      kind: prop.kind || "prop",
+      public: prop.kind === "hearth",
+      cell: prop.cell,
       point: [
         (box.min.x + box.max.x) / 200,
         (box.min.y + box.max.y) / 200,

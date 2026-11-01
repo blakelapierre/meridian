@@ -8,9 +8,11 @@ The footing was already in the sand when you woke. Nobody in the build claims to
 
 The dummy is padded linen on a stake. It is not a person and it does not vote. Standing on it is how you learn that the wilderness hits back. The compound is a strike volume. Inside, you are a round. Outside, you are your body again.
 
+West of the crate, on the flat sand, is Southmere. A chart house and a public hearth stone sit a short walk that way. Past the low dune is a square: a meeting hall, a forge shed, a ration house, a splint house, and a well. The hearth there is not the footing and it is not the compound. Binding to it does not spend the hearth recipe.
+
 ## What happened, as far as the beach knows
 
-Someone ran a contract here often enough to leave a footing and a core. They are not in the scene. The sea is the edge of this cell, not the edge of the world. North of the doors is the strike. South of the dummy is open sand.
+Someone ran a contract here often enough to leave a footing and a core. They are not in the scene. The sea is the edge of this cell, not the edge of the world. North of the doors is the strike. Southmere is the roofs west of the crate.
 
 ## What we will not add
 

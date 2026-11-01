@@ -74,6 +74,40 @@ export function subjectFromHit(hit, pieces = []) {
   if (object.body === "dummy") return { ...SUBJECTS.dummy, kind: "dummy", point: hit.point };
   if (object.body === "player") return { ...SUBJECTS.player, kind: "player", point: hit.point };
   if (object.type === "box" || object.type === "crust") {
+    if (object.kind === "hearth") {
+      return {
+        name: object.name || "Hearth stone",
+        material: "public stone",
+        action: object.action || "bind with E",
+        detail: object.detail || "a public stone",
+        difficulty: object.difficulty ?? 0,
+        kind: "hearth",
+        public: true,
+        cell: object.cell || null,
+        point: hit.point,
+      };
+    }
+    if (object.name) {
+      const surface = object.surface;
+      const material = surface === "water"
+        ? "standing water"
+        : surface === "stone"
+          ? "cut stone"
+          : surface === "thatch"
+            ? "reed thatch"
+            : surface === "hearth"
+              ? "public stone"
+              : "raw wood";
+      return {
+        name: object.name,
+        material,
+        action: object.action || "nothing, it is scenery",
+        detail: object.detail || "part of the yard",
+        difficulty: object.difficulty ?? 0,
+        kind: object.kind || "prop",
+        point: hit.point,
+      };
+    }
     const cell = [Math.round(hit.point[0] / 0.5), Math.round(hit.point[1] / 0.5)];
     const piece = pieces.find((item) => item.at[0] === cell[0] && item.at[1] === cell[1]);
     if (piece?.id === "wall") {

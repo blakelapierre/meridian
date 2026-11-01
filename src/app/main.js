@@ -12,7 +12,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=59";
+import { buildScene } from "../render/scene.js?v=60";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=76";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=4";
 import { createFps } from "../render/fps.js";
@@ -50,6 +50,7 @@ import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pie
 import {
   adoptPiece,
   bindHearth,
+  bindPublicHearth,
   bruise,
   clubHit,
   coolPain,
@@ -73,6 +74,7 @@ import {
   bloodDrop,
   trackFin,
 } from "../sim/hearth.js";
+import { haltFeet } from "../sim/town.js?v=1";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=3";
@@ -223,9 +225,9 @@ async function fetchRetry(url, options, tries = 5) {
     }
   }
 }
-const atoll = await fetchRetry(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.json());
+const atoll = await fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.json());
 const catalogHex = await Promise.all([
-  fetchRetry(new URL("../../content/atoll.json", import.meta.url)).then((response) => response.arrayBuffer()),
+  fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.arrayBuffer()),
   fetchRetry(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
 ]).then(([atollBytes, catalogBytes]) => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
 const lighthouseConfig = await fetchRetry(new URL("../../content/lighthouse.json?v=2", import.meta.url))
@@ -1464,12 +1466,23 @@ function skillBag() {
 
 function landmarks() {
   const { dummy, footing, accuracyPad, crate } = atoll.placements;
-  return [
+  const marks = [
     { id: "dummy", kind: "dummy", name: "dummy", point: [dummy.x / 100, dummy.y / 100, 0] },
     { id: "footing", kind: "footing", name: "footing", point: [footing.x / 100, footing.y / 100, 0] },
     { id: "pad", kind: "pad", name: "pad", point: [accuracyPad.x / 100, accuracyPad.y / 100, 0] },
     { id: "crate", kind: "crate", name: "crate", point: [crate.x / 100, crate.y / 100, 0] },
   ];
+  for (const prop of atoll.props) {
+    if (prop.kind !== "hearth" && prop.id !== "mere.well") continue;
+    const box = prop.box;
+    marks.push({
+      id: prop.id,
+      kind: prop.kind,
+      name: prop.name || prop.id,
+      point: [(box.min.x + box.max.x) / 200, (box.min.y + box.max.y) / 200, 0],
+    });
+  }
+  return marks;
 }
 
 function geographyAt(x, y) {
@@ -1479,7 +1492,9 @@ function geographyAt(x, y) {
   for (const prop of atoll.props) {
     const box = prop.box;
     if (cmx < box.min.x || cmx > box.max.x || cmy < box.min.y || cmy > box.max.y) continue;
-    return { kind: prop.material === "stone" ? "stone" : "wood", depth, color: prop.material === "stone" ? GEO_COLOR.stone : GEO_COLOR.wood };
+    const mat = prop.material;
+    const kind = mat === "water" ? "sea" : mat === "stone" || mat === "hearth" ? "stone" : "wood";
+    return { kind, depth, color: GEO_COLOR[kind] || GEO_COLOR.wood };
   }
   for (const piece of yard.pieces) {
     const px = piece.at[0] * 0.5;
@@ -3402,6 +3417,9 @@ if (params.get("still") !== "1") {
           }
         }
       }
+      const halted = haltFeet(player.position, atoll.props);
+      player.position[0] = halted[0];
+      player.position[1] = halted[1];
       coolPain(vitals, 1 / 30);
       if (moved.jump) {
         grantUse(skills, "jump", { tick });
@@ -3548,7 +3566,7 @@ if (params.get("still") !== "1") {
       turnEdge = false;
     }
     if (selectOnce && selection?.kind === "hearth") {
-      const bound = bindHearth(yard, selection.cell);
+      const bound = selection.public ? bindPublicHearth(yard, selection.cell) : bindHearth(yard, selection.cell);
       if (bound.ok) {
         hear("bind");
         writeNote(notes, skills, "bind");

@@ -51,6 +51,13 @@ export function bindHearth(yard, cell) {
   return { ok: true };
 }
 
+// The public stone in the atoll props. It does not spend the hearth recipe and does not place a piece.
+export function bindPublicHearth(yard, cell) {
+  if (!cell) return { ok: false, reason: "none" };
+  yard.bound = [cell[0], cell[1]];
+  return { ok: true };
+}
+
 export function recallPoint(yard, fallback) {
   if (!yard.bound) return fallback.slice();
   return [yard.bound[0] * 0.5, yard.bound[1] * 0.5 + 1.2, 0];

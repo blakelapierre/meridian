@@ -9,9 +9,43 @@ import { fauna, floraBoxes } from "../sim/life.js?v=69";
 const WOOD = [0.42, 0.3, 0.18, 1];
 const DUMMY = [0.86, 0.22, 0.18, 1];
 const OTHER = [0.55, 0.42, 0.22, 1];
+const PROP_COLOR = {
+  paper: [0.86, 0.82, 0.7, 1],
+  stone: [0.52, 0.5, 0.46, 1],
+  thatch: [0.48, 0.34, 0.16, 1],
+  water: [0.2, 0.46, 0.6, 1],
+  hearth: [0.58, 0.3, 0.18, 1],
+};
+const PROP_SHINE = { paper: 0.04, stone: 0.14, thatch: 0.04, water: 0.4, hearth: 0.1 };
 
 export function eyeHeight(crouch) {
   return crouch ? 1.1 : 1.65;
+}
+
+// The picture keeps a fixed box budget and fills it in array order. Nearest boxes go first
+// so a town and the compound do not erase each other when both are in the world.
+export function orderForCamera(objects, feet) {
+  const fx = feet?.[0] || 0;
+  const fy = feet?.[1] || 0;
+  const boxes = [];
+  const rest = [];
+  for (const object of objects) {
+    if (object.type === "box") boxes.push(object);
+    else rest.push(object);
+  }
+  boxes.sort((a, b) => {
+    const ax = (a.min[0] + a.max[0]) * 0.5 - fx;
+    const ay = (a.min[1] + a.max[1]) * 0.5 - fy;
+    const bx = (b.min[0] + b.max[0]) * 0.5 - fx;
+    const by = (b.min[1] + b.max[1]) * 0.5 - fy;
+    const ad = ax * ax + ay * ay;
+    const bd = bx * bx + by * by;
+    if (ad !== bd) return ad - bd;
+    const ai = a.id || "";
+    const bi = b.id || "";
+    return ai < bi ? -1 : ai > bi ? 1 : 0;
+  });
+  return rest.concat(boxes);
 }
 
 export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], lean = 0 }) {
@@ -24,13 +58,21 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
   for (const box of pieceBoxes(pieces)) objects.push(box);
   for (const prop of atoll.props) {
     const box = prop.box;
+    const surface = prop.material || "wood";
     objects.push({
       type: "box",
       min: [box.min.x / 100, box.min.y / 100, box.min.z / 100],
       max: [box.max.x / 100, box.max.y / 100, box.max.z / 100],
-      color: prop.material === "paper" ? [0.86, 0.82, 0.7, 1] : WOOD,
-      reflectivity: 0.08,
+      color: PROP_COLOR[surface] || WOOD,
+      reflectivity: PROP_SHINE[surface] ?? 0.08,
       id: prop.id,
+      name: prop.name || "",
+      kind: prop.kind || "",
+      surface,
+      action: prop.action || "",
+      detail: prop.detail || "",
+      difficulty: prop.difficulty ?? 5,
+      cell: prop.cell || null,
     });
   }
   if (smoke) {
@@ -110,7 +152,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
   return {
     sun,
     miss: [0.42 * day, 0.58 * day, 0.82 * day, 1],
-    objects,
+    objects: orderForCamera(objects, feet),
     camera: {
       origin,
       dir,
