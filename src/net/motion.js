@@ -188,10 +188,12 @@ export function shouldSend(rec, now, tierIndex) {
   // A receiver that just came into a sharper tier gets a fresh state at once.
   if (tierIndex < (rec.tier ?? 3) && gap >= 1) return "tier";
   if (tierIndex < 3 && gap >= VIEW_GAP && turned > VIEW_YAW) return "view";
+  const err = Math.hypot(guess.p[0] - now.p[0], guess.p[1] - now.p[1], guess.p[2] - now.p[2]);
+  // minGap caps chatter that is still inside the tier's error. A sprint covers the unseen
+  // 1 m bound in a handful of ticks, so the bound has to be allowed to send inside the gap.
+  if (err > tier.err && gap >= 1) return "error";
   if (gap < tier.minGap) return null;
   if (gap >= tier.keepalive) return "keepalive";
-  const err = Math.hypot(guess.p[0] - now.p[0], guess.p[1] - now.p[1], guess.p[2] - now.p[2]);
-  if (err > tier.err) return "error";
   // Loss guard: sends are unreliable, so the receiver may still hold the previous state. If that one
   // has drifted badly, resend (cheap: only after big changes, and both copies agree otherwise).
   if (rec.prev) {

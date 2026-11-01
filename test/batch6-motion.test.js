@@ -56,7 +56,10 @@ test("shouldSend fires on first, mode change, drift and keepalive only", () => {
   const off = on(base.tick + 5); off.p = [off.p[0] + 0.2, off.p[1], off.p[2]];
   assert.equal(shouldSend(rec, off, 0), "error");
   rec.tier = 2;
-  assert.equal(shouldSend(rec, off, 2), null); // unseen tier tolerates 20 cm
+  assert.equal(shouldSend(rec, off, 2), null); // unseen tier tolerates 20 cm, and the gap is inside minGap
+  const far = on(base.tick + 5);
+  far.p = [far.p[0] + 2, far.p[1], far.p[2]];
+  assert.equal(shouldSend(rec, far, 2), "error"); // bound wins over minGap
   rec.tier = 0;
   assert.equal(shouldSend(rec, { ...on(base.tick + 5), mode: 2 }, 0), "mode");
   assert.equal(shouldSend(rec, on(base.tick + TIERS[0].keepalive), 0), "keepalive");
