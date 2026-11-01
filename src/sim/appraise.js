@@ -72,6 +72,19 @@ export function subjectFromHit(hit, pieces = []) {
   const object = hit.object;
   if (object.body === "self") return null;
   if (object.body === "dummy") return { ...SUBJECTS.dummy, kind: "dummy", point: hit.point };
+  if (object.body === "person") {
+    return {
+      name: object.name || "Someone",
+      material: "a living body",
+      action: "speak",
+      detail: object.detail || "",
+      speech: object.speech || "",
+      difficulty: 0,
+      kind: "person",
+      id: object.id,
+      point: hit.point,
+    };
+  }
   if (object.body === "player") return { ...SUBJECTS.player, kind: "player", point: hit.point };
   if (object.type === "box" || object.type === "crust") {
     if (object.kind === "hearth") {

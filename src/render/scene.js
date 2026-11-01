@@ -1,10 +1,11 @@
 import { Crust } from "../sim/crust.js";
 import { pieceBoxes } from "../sim/build.js";
-import { chaseOrigin, playerParts } from "../sim/body.js";
+import { chaseOrigin, playerParts } from "../sim/body.js?v=52";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
-import { fauna, floraBoxes } from "../sim/life.js?v=69";
+import { duneHeight, fauna, floraBoxes } from "../sim/life.js?v=69";
+import { PEOPLE } from "../sim/people.js?v=1";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const DUMMY = [0.86, 0.22, 0.18, 1];
@@ -28,24 +29,31 @@ export function orderForCamera(objects, feet) {
   const fx = feet?.[0] || 0;
   const fy = feet?.[1] || 0;
   const boxes = [];
+  const spheres = [];
   const rest = [];
   for (const object of objects) {
     if (object.type === "box") boxes.push(object);
+    else if (object.type === "sphere") spheres.push(object);
     else rest.push(object);
   }
-  boxes.sort((a, b) => {
-    const ax = (a.min[0] + a.max[0]) * 0.5 - fx;
-    const ay = (a.min[1] + a.max[1]) * 0.5 - fy;
-    const bx = (b.min[0] + b.max[0]) * 0.5 - fx;
-    const by = (b.min[1] + b.max[1]) * 0.5 - fy;
-    const ad = ax * ax + ay * ay;
-    const bd = bx * bx + by * by;
-    if (ad !== bd) return ad - bd;
-    const ai = a.id || "";
-    const bi = b.id || "";
+  const dist = (object) => {
+    const c = object.type === "box"
+      ? [(object.min[0] + object.max[0]) * 0.5, (object.min[1] + object.max[1]) * 0.5]
+      : [object.origin[0], object.origin[1]];
+    const dx = c[0] - fx;
+    const dy = c[1] - fy;
+    return dx * dx + dy * dy;
+  };
+  const byNear = (a, b) => {
+    const delta = dist(a) - dist(b);
+    if (delta !== 0) return delta;
+    const ai = a.id || a.body || "";
+    const bi = b.id || b.body || "";
     return ai < bi ? -1 : ai > bi ? 1 : 0;
-  });
-  return rest.concat(boxes);
+  };
+  boxes.sort(byNear);
+  spheres.sort(byNear);
+  return rest.concat(spheres, boxes);
 }
 
 export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], lean = 0 }) {
@@ -105,6 +113,18 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       reflectivity: 0.02,
       body: animal.kind,
     });
+  }
+  for (const person of PEOPLE) {
+    const z = duneHeight(person.at[0], person.at[1]);
+    for (const part of playerParts([person.at[0], person.at[1], z], person.yaw, false, {
+      self: false,
+      color: person.color,
+      body: "person",
+      id: person.id,
+      name: person.name,
+      detail: person.detail,
+      speech: person.speech,
+    })) objects.push(part);
   }
   const dummy = atoll.placements.dummy;
   objects.push({

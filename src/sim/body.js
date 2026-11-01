@@ -15,20 +15,30 @@ export const BODY_COLORS = {
   marksman: [0.62, 0.24, 0.22, 1],
 };
 
-function sphere(x, y, z, radius, color, self) {
-  return { type: "sphere", origin: [x, y, z], radius, color, reflectivity: 0.04, self, body: self ? "self" : "player" };
+function sphere(x, y, z, radius, color, self, extra = null) {
+  const part = { type: "sphere", origin: [x, y, z], radius, color, reflectivity: 0.04, self, body: self ? "self" : "player" };
+  if (!extra) return part;
+  if (extra.body) part.body = extra.body;
+  if (extra.id) {
+    part.id = extra.id;
+    part.name = extra.name || "";
+    part.detail = extra.detail || "";
+    part.speech = extra.speech || "";
+  }
+  return part;
 }
 
-export function playerParts(feet, yaw, crouch = false, { self = true, color = CLOTH } = {}) {
+export function playerParts(feet, yaw, crouch = false, { self = true, color = CLOTH, body = "", id = "", name = "", detail = "", speech = "" } = {}) {
   const height = crouch ? 1.2 : 1.8;
   const forwardX = Math.sin(yaw);
   const forwardY = Math.cos(yaw);
   const lean = 0.12;
   const head = height - 0.16;
+  const extra = id ? { body: body || "person", id, name, detail, speech } : null;
   return [
-    sphere(feet[0], feet[1], feet[2] + height * 0.32, crouch ? 0.2 : 0.22, color, self),
-    sphere(feet[0] + forwardX * lean, feet[1] + forwardY * lean, feet[2] + height * 0.62, crouch ? 0.18 : 0.2, color, self),
-    sphere(feet[0] + forwardX * lean, feet[1] + forwardY * lean, feet[2] + head, 0.16, self ? SKIN : color, self),
+    sphere(feet[0], feet[1], feet[2] + height * 0.32, crouch ? 0.2 : 0.22, color, self, extra),
+    sphere(feet[0] + forwardX * lean, feet[1] + forwardY * lean, feet[2] + height * 0.62, crouch ? 0.18 : 0.2, color, self, extra),
+    sphere(feet[0] + forwardX * lean, feet[1] + forwardY * lean, feet[2] + head, 0.16, self ? SKIN : color, self, extra),
   ];
 }
 

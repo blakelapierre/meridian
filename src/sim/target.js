@@ -4,7 +4,7 @@ function pointDistance(point, feet) {
   return (point[0] - feet[0]) ** 2 + (point[1] - feet[1]) ** 2;
 }
 
-export function listTargets({ dummy = null, others = [], pieces = [], props = [], feet = [0, 0, 0] } = {}) {
+export function listTargets({ dummy = null, others = [], pieces = [], props = [], people = [], feet = [0, 0, 0] } = {}) {
   const list = [];
   if (dummy) {
     list.push({
@@ -59,16 +59,30 @@ export function listTargets({ dummy = null, others = [], pieces = [], props = []
       ],
     });
   }
+  for (const person of people) {
+    const at = person.at || person.point || [0, 0, 0];
+    list.push({
+      id: person.id,
+      name: person.name,
+      material: "a living body",
+      action: "speak",
+      detail: person.detail || "",
+      speech: person.speech || "",
+      difficulty: 0,
+      kind: "person",
+      point: [at[0], at[1], 1.4],
+    });
+  }
   list.sort((a, b) => pointDistance(a.point, feet) - pointDistance(b.point, feet) || (a.id < b.id ? -1 : 1));
   return list;
 }
 
 export function listPlayers(options) {
-  return listTargets(options).filter((item) => item.kind === "player");
+  return listTargets(options).filter((item) => item.kind === "player" || item.kind === "person");
 }
 
 export function listObjects(options) {
-  return listTargets({ ...options, others: [] });
+  return listTargets({ ...options, others: [], people: [] });
 }
 
 export function cycleTarget(list, currentId, step = 1) {

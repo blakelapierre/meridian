@@ -27,6 +27,7 @@ Slice keys. Later screens do not get to steal these. Hands are first person: the
 | Tab | Cycle people. Shift goes backward | same | same | same |
 | M | Sensed map. Coordinates and heading always. Range, people, names, and objects grow with mapping | same | same | same |
 | Esc | Close the open panel and clear the action target | same | same | same |
+| Backspace | Clear the action target. Does not close the map | same | same | same |
 | Q | Toggle auto run. S still backs up | same | same | same |
 | L | Abilities log (also the Log button). Has the sound-cue toggle | same | Place a road (no log) | same |
 | I | Show or hide the network panel. Hidden by default; `?debug=1` starts with it shown | same | same | same |
@@ -82,6 +83,7 @@ On a phone or tablet (a coarse pointer), the walk shows touch controls. `?touch=
 | Tab | Tab |
 | M Map | M |
 | Esc | Esc: close the panel and clear the target |
+| Backspace | Clear the target only |
 | Info | Show or hide the help, skills and network panels, hidden by default on touch |
 
 Not on touch yet: Mouse 2 (salvage and orbit), the wheel (follow distance), C to cycle dig modes, F, V, 2, 4, Backquote and the hammer keys.

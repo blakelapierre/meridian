@@ -12,7 +12,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=60";
+import { buildScene } from "../render/scene.js?v=61";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=76";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=4";
 import { createFps } from "../render/fps.js";
@@ -75,10 +75,11 @@ import {
   trackFin,
 } from "../sim/hearth.js";
 import { haltFeet } from "../sim/town.js?v=1";
+import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=1";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=3";
-import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=51";
+import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=52";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { createWear, decayWear, DECAY_TICKS, mergeWear, packWear, stepWear, takeWearBatches, unpackWear, WEAR_KIND, wearWindow } from "../sim/wear.js?v=1";
 import { acceptWear, encodeWear } from "../net/wear.js?v=1";
@@ -931,11 +932,19 @@ addEventListener("keydown", (event) => {
     showChart();
   }
   if (event.code === "Escape") {
-    if (selection) selection = null;
+    if (selection) {
+      selection = null;
+      report = "cleared";
+    }
     if (mapMode !== "none") {
       mapMode = "none";
       showChart();
     }
+  }
+  if (event.code === "Backspace" && selection) {
+    event.preventDefault();
+    selection = null;
+    report = "cleared";
   }
   if (event.code === "KeyV" && !followId) {
     if (view === "third") {
@@ -1482,6 +1491,14 @@ function landmarks() {
       point: [(box.min.x + box.max.x) / 200, (box.min.y + box.max.y) / 200, 0],
     });
   }
+  for (const person of PEOPLE) {
+    marks.push({
+      id: person.id,
+      kind: "person",
+      name: person.name,
+      point: [person.at[0], person.at[1], 0],
+    });
+  }
   return marks;
 }
 
@@ -1696,6 +1713,7 @@ function cycle(step, kind) {
     others: otherActors(),
     pieces: yard.pieces,
     props: atoll.props,
+    people: PEOPLE,
     feet: player.position,
   };
   const list = kind === "player" ? listPlayers(options) : listObjects(options);
@@ -1723,6 +1741,12 @@ function identify(sample) {
 function actOn(sample) {
   if (!selection) {
     report = "no target";
+    return;
+  }
+  if (selection.kind === "person") {
+    const said = speakTo(selection, player.position);
+    report = said.ok ? said.line : said.reason;
+    if (said.ok) selection.line = said.line;
     return;
   }
   if (selection.kind === "table") {
@@ -2018,6 +2042,28 @@ function markGoal(scene) {
   el.firstChild.style.transform = on ? "" : `rotate(${Math.round(off * 180 / Math.PI) - 90}deg)`;
 }
 
+function paintTarget() {
+  const node = document.querySelector("#picked");
+  if (!node) return;
+  if (!node.dataset.bound) {
+    node.dataset.bound = "1";
+    node.querySelector("#picked-clear")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selection = null;
+      report = "cleared";
+      paintTarget();
+    });
+  }
+  const plate = targetPlate(selection);
+  node.hidden = !plate;
+  if (!plate) return;
+  const title = node.querySelector("b");
+  const line = node.querySelector("span");
+  if (title && title.textContent !== plate.title) title.textContent = plate.title;
+  if (line && line.textContent !== plate.line) line.textContent = plate.line;
+}
+
 function paintHint() {
   const node = document.querySelector("#hint");
   if (!node) return;
@@ -2143,6 +2189,7 @@ function publish() {
   if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${orderNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${finNote}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   paintNet();
   paintHint();
+  paintTarget();
   const range = document.querySelector("#range");
   if (range) range.textContent = rangeText;
   const counter = document.querySelector("#fps");
@@ -3386,7 +3433,9 @@ if (params.get("still") !== "1") {
         player.velocity[1] += push[1] + sail[1];
       }
       if (vitals.down <= 0) {
-        const pushed = separate(player.position, otherActors().map((actor) => actor.feet));
+        const bodies = otherActors().map((actor) => actor.feet);
+        for (const person of PEOPLE) bodies.push(person.at);
+        const pushed = separate(player.position, bodies);
         player.position[0] = pushed[0];
         player.position[1] = pushed[1];
       }
