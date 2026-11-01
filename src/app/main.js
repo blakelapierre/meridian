@@ -106,7 +106,7 @@ import {
   unpackPlate,
 } from "../sim/persist.js";
 import { firstCrate } from "../sim/culture.js";
-import { createPools, drainPool, flowOnce, lowerPool, notePool, spillPool } from "../sim/pool.js";
+import { createPools, drainPool, flowOnce, lowerPool, notePool, poolLift, spillPool } from "../sim/pool.js";
 import { deedVolume, graceMark, grantKey, mayEdit } from "../sim/deed.js";
 import { bondOpen, dragAsk, dragPace, hearBond, offerBond, payTithe, spendPurse, stepDrag } from "../sim/fellowship.js";
 import { afterShot, boltHit, boltInSmoke, firePull, penFactor, startBolt, stepBolt, stepShotWait } from "../sim/bolt.js";
@@ -2855,9 +2855,7 @@ if (params.get("still") !== "1") {
       const ground = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
       world.ground = ground;
       world.drop = shellDrop(player.position[0], player.position[1]) - ground;
-      if (pools.some((pool) => Math.hypot(pool.x - player.position[0], pool.y - player.position[1]) < 0.7)) {
-        world.gravity[2] += 14;
-      }
+      world.gravity[2] += poolLift(pools, player.position);
       const falling = player.velocity[2];
       const drifting = Math.hypot(player.velocity[0], player.velocity[1]) > 0.15;
       if (!drifting || vitals.down > 0) windNote = "";
