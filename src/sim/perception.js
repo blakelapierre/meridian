@@ -156,6 +156,48 @@ export function hearAt(listener, yaw, source, hearing = SENSE_DEFAULTS.hearing) 
   return { gain, pan, dist };
 }
 
+// How far a moving body is worth a pose. Sight usually reaches past hearing.
+export function senseReach(perception) {
+  const sight = Number(perception?.senses?.sight?.range) || 0;
+  const hear = Number(perception?.senses?.hearing?.range) || 0;
+  const reach = Math.max(sight, hear);
+  return reach > 0 ? reach : SENSE_DEFAULTS.hearing.range;
+}
+
+// Metres of place error for a body at `distance`. Infinity means it is outside
+// sense and should not be tracked. An untrained eye is sharp only nearby;
+// eyesight opens that, and localization tightens a hearing-only fix.
+export function placeError(distance, perception) {
+  const d = Math.max(0, Number(distance) || 0);
+  const sight = perception?.senses?.sight;
+  const hear = perception?.senses?.hearing;
+  const sightRange = Number(sight?.range) || 0;
+  const hearRange = Number(hear?.range) || 0;
+  const reach = Math.max(sightRange, hearRange);
+  if (!(reach > 0) || d > reach) return Infinity;
+  const acuity = Math.max(0, Math.min(1, sight?.acuity ?? 0.55));
+  const trained = Math.max(0, (acuity - 0.55) / 0.45);
+  const sharp = Math.min(sightRange || reach, 10 + trained * Math.max(0, (sightRange || reach) - 10));
+  if (sightRange > 0 && d <= sightRange) {
+    const near = (0.15 + (1 - acuity) * 1.5);
+    if (d <= sharp) return near * (sharp > 0 ? d / sharp : 0) ** 2;
+    const t = (d - sharp) / Math.max(1, sightRange - sharp);
+    const far = 4 + (1 - acuity) * 14;
+    return near + (far - near) * t;
+  }
+  const loc = Math.max(0, Math.min(1, hear?.localization ?? 0));
+  const t = (d - sightRange) / Math.max(1, hearRange - sightRange);
+  return (6 + (1 - loc) * 16) * (0.4 + 0.6 * Math.max(0, t));
+}
+
+// A precise fix stays on the body. A coarse one sits on a grid of its error.
+export function quantizePlace(point, error) {
+  if (!point || !Number.isFinite(error)) return null;
+  if (error < 1) return [point[0], point[1]];
+  const step = Math.min(32, Math.max(1, error));
+  return [Math.round(point[0] / step) * step, Math.round(point[1] / step) * step];
+}
+
 // Continuous version of blockLevel: the GPU blends between the two nearest cell sizes with the
 // fraction, so the fade from sharp to soft has no ring where a level steps up.
 export function fadeLevel(sense, angle, refine = 0) {

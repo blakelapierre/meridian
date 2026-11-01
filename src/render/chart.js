@@ -134,13 +134,23 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
       if (!at.inside) continue;
       ctx.fillStyle = "#c9a";
       ctx.fillRect(at.x - 3, at.y - 3, 6, 6);
-    } else if (mark.kind === "player") {
+    } else if (mark.kind === "player" || mark.kind === "mover") {
       if (!at.inside) continue;
-      ctx.fillStyle = cssColor(mark.color, "#c83");
-      ctx.beginPath();
-      ctx.arc(at.x, at.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-      if (mark.name) {
+      const slop = across > 0 ? ((mark.error || 0) / across) * size : 0;
+      const ink = mark.kind === "mover" ? "#9c8" : cssColor(mark.color, "#c83");
+      if (slop >= 3) {
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, Math.max(4, slop), 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = ink;
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, mark.kind === "mover" ? 3 : 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (mark.name && slop < 3) {
         ctx.fillStyle = "#eee";
         ctx.font = "10px sans-serif";
         ctx.fillText(mark.name, at.x, at.y - 7);

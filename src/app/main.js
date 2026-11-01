@@ -14,7 +14,7 @@ import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../si
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=65";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=78";
-import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, tracedFraction, withFocus } from "../sim/perception.js?v=4";
+import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=5";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
 import {
@@ -84,22 +84,22 @@ import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, s
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { createWear, decayWear, DECAY_TICKS, mergeWear, packWear, stepWear, takeWearBatches, unpackWear, WEAR_KIND, wearWindow } from "../sim/wear.js?v=1";
 import { acceptWear, encodeWear } from "../net/wear.js?v=1";
-import { cellSize, contourDetail, contourLines, createSurvey, inSense, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
+import { cellSize, contourDetail, contourLines, createSurvey, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
 import { agilityFactor } from "../sim/agility.js";
 import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
 import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
-import { paintChart } from "../render/chart.js?v=72";
+import { paintChart } from "../render/chart.js?v=73";
 import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, sightPractice, stepFollow, zoomFov } from "../sim/sight.js?v=10";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { ackMessage, createEstimator, createSendState, createView, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=7";
-import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=2";
+import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=8";
+import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=3";
 import { carryPhrase, createIdentity, exportKey, importKey, importPhrase, keyPhrase, packBook, recoveryPhrase, rememberKey, restoreKey, signBytes, unpackBook } from "../net/identity.js";
 import {
   acceptSheet,
@@ -378,7 +378,6 @@ let mapFollow = true;
 let mapCenter = [0, -150];
 let mapDrag = null;
 const friends = new Map();
-const seenPeople = new Map();
 const vitals = createVitals();
 let loreNote = "";
 let brush = "dig";
@@ -1632,23 +1631,6 @@ function showChart() {
   }
 }
 
-function sensedPeople() {
-  const ability = mapAbilities(skills.mapping.value);
-  if (!ability.people) {
-    seenPeople.clear();
-    return [];
-  }
-  for (const other of otherActors()) {
-    if (inSense(player.position, other.feet, ability.radius)) {
-      seenPeople.set(other.id, { ...other, tick });
-    }
-  }
-  for (const [id, contact] of seenPeople) {
-    if (tick - contact.tick > ability.memory) seenPeople.delete(id);
-  }
-  return [...seenPeople.values()];
-}
-
 function drawChart() {
   showChart();
   if (mapMode === "none") return;
@@ -1669,10 +1651,15 @@ function drawChart() {
     target: selection,
     objects,
     trail,
-    known: sensedPeople().map((person) => ({
+    others: otherActors().map((person) => ({
       ...person,
       label: friends.has(person.id) ? `${person.id} ${friendTier(friends.get(person.id))}` : person.id,
     })),
+    movers: fauna(Date.now(), player.position, { parts: false }).map((animal, index) => ({
+      id: `${animal.kind}:${index}`,
+      at: animal.at,
+    })),
+    sense: perception,
     ground: [...survey.ground.values()],
     places: [...survey.places.values()],
   });
@@ -2634,8 +2621,9 @@ async function openLink(to, offer, role) {
   const link = { to, role, ctrl: channels.ctrl, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc, proto: 1, packIn: packState(), packOut: packState(), loreIn: packState(), sent: null, motion: createSendState(), view: createView() };
   channels.ctrl.onopen = () => {
     try {
-      channels.ctrl.send(helloMessage(catalogHex, viewFov()));
+      channels.ctrl.send(helloMessage(catalogHex, viewFov(), Math.round(senseReach(perception))));
       link.sentFov = viewFov();
+      link.sentRange = Math.round(senseReach(perception));
     } catch {
       // No hello means the other side treats this link as v1.
     }
@@ -2688,6 +2676,7 @@ async function openLink(to, offer, role) {
     if (hello.catalog && !acceptHello(catalogHex, hello.catalog)) report = "catalog";
     link.proto = hello.proto;
     if (hello.fov) link.fov = hello.fov;
+    if (hello.range) link.range = hello.range;
   };
   const deliver = (bytes, state) => {
     let frames;
@@ -2722,6 +2711,9 @@ async function openLink(to, offer, role) {
     if (isMotion(raw)) {
       // v3: keep the dead-reckoned state; the pose itself is drawn every tick by stepPeers().
       try {
+        const ahead = decodeMotion(raw);
+        const dist = Math.hypot(ahead.p[0] - player.position[0], ahead.p[1] - player.position[1]);
+        if (dist > senseReach(perception) + 20) return;
         if (receive(link.view, raw, tick, undefined, performance.now())) {
           net.motionIn += 1;
           const got = link.view.state?.tick;
@@ -2940,7 +2932,7 @@ const FOLLOW_M = 3.5;
 
 // Everything a heard peer pose drives: interest, perception-paced refresh, strides, prints, follow.
 function acceptPeerPose(to, link, pose, live = false) {
-  if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]), 80 + skills.mapping.value / 10)) return;
+  if (!inInterest(Math.hypot(pose.x - player.position[0], pose.y - player.position[1]), senseReach(perception))) return;
   // Perception sets net priority: peers near the focus update every tick, peripheral ones at the sight refresh period.
   // A v3 pose is already the dead-reckoned draw for this tick, so it is applied every tick.
   const look = perception.focus.dir;
@@ -2961,9 +2953,14 @@ function acceptPeerPose(to, link, pose, live = false) {
 // v3 peers: draw the shared prediction each tick, with the last correction fading out.
 function stepPeers() {
   const nowMs = performance.now();
+  const reach = senseReach(perception) + 20;
   for (const link of links) {
     const seen = shown(link.view, tick, nowMs);
     if (!seen) continue;
+    if (Math.hypot(seen.p[0] - player.position[0], seen.p[1] - player.position[1]) > reach) {
+      poses.delete(link.to);
+      continue;
+    }
     settle(link.view);
     acceptPeerPose(link.to, link, { tick, x: seen.p[0], y: seen.p[1], z: seen.p[2], yaw: seen.yaw, pitch: seen.pitch }, true);
   }
@@ -2986,9 +2983,14 @@ function publishPose() {
   }
   const fovNow = viewFov();
   for (const link of links) {
-    // A zoom or rotation changes what we can see: tell the peer so its tiers follow.
-    if (link.proto >= 3 && link.sentFov && Math.abs(fovNow - link.sentFov) > 0.05 && link.ctrl?.readyState === "open") {
-      try { link.ctrl.send(helloMessage(catalogHex, fovNow)); link.sentFov = fovNow; } catch {}
+    // A zoom or a change in how far we can sense: tell the peer so it stops sending past that.
+    if (link.proto >= 3 && link.ctrl?.readyState === "open") {
+      const reachNow = Math.round(senseReach(perception));
+      const fovChanged = link.sentFov && Math.abs(fovNow - link.sentFov) > 0.05;
+      const rangeChanged = link.sentRange && Math.abs(reachNow - link.sentRange) >= 4;
+      if (fovChanged || rangeChanged) {
+        try { link.ctrl.send(helloMessage(catalogHex, fovNow, reachNow)); link.sentFov = fovNow; link.sentRange = reachNow; } catch {}
+      }
     }
     // The archive never reads poses.
     if (link.role !== "archive" && link.proto >= 3 && link.snap.readyState === "open") {
@@ -2999,7 +3001,7 @@ function publishPose() {
         motion = { tick, p: [...player.position], v: e.v, a: e.a, yaw, yawRate: e.yawRate, pitch, floor: player.position[2], mode: modeOf(e.v, airborne), wallMs: nowMs };
       }
       const them = poses.get(link.to);
-      const view = them ? { x: them.x, y: them.y, yaw: them.yaw || 0, fov: link.fov || 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * 16 / 9), range: 80 + skills.mapping.value / 10 } : null;
+      const view = them ? { x: them.x, y: them.y, yaw: them.yaw || 0, fov: link.fov || 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * 16 / 9), range: link.range || senseReach(perception) } : null;
       const tierIdx = tierFor(view, player.position);
       const why = shouldSend(link.motion, motion, tierIdx);
       if (!why) continue;

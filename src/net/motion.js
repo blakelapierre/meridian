@@ -9,13 +9,14 @@
 // Frame (snap channel): 0xB3, flags, varint tick, zigzag x/y/z (cm), [zigzag vx/vy/vz (2 cm/s)],
 // [int8 ax/ay/az (0.25 m/s²)], uint16 yaw (2pi/65536), [int8 yaw rate (0.04 rad/s)], int8 pitch
 // (0.0125 rad). Quantization errors are well below the smallest error bound (5 cm).
-import { wrapYaw } from "./wire.js?v=2";
+import { wrapYaw } from "./wire.js?v=3";
 
 export const POSE_V3 = 0xb3;
 export const TICK_HZ = 30;
 export const CORRECT_S = 0.2;
 const MAX_PREDICT_S = 1.5; // past this, hold position rather than extrapolate into walls
 const WALL_COAST_M = 1.25; // a 30 Hz coast this far off the body is resent, even when the tick prediction still matches
+export const COAST_M = 2; // a prediction never walks more than this far from the last packet
 const A_MAX = [8, 8, 12]; // m/s^2
 const ACCEL_S = 0.5; // acceleration only shapes the first half second
 
@@ -122,6 +123,14 @@ export function predict(state, tick) {
   const dt = Math.max(0, Math.min(MAX_PREDICT_S, (tick - state.tick) / TICK_HZ));
   const da = Math.min(dt, ACCEL_S);
   const p = [0, 1, 2].map((k) => state.p[k] + state.v[k] * dt + state.a[k] * (da * dt - da * da / 2));
+  const dx = p[0] - state.p[0];
+  const dy = p[1] - state.p[1];
+  const flat = Math.hypot(dx, dy);
+  if (flat > COAST_M) {
+    const scale = COAST_M / flat;
+    p[0] = state.p[0] + dx * scale;
+    p[1] = state.p[1] + dy * scale;
+  }
   // A body on flat ground does not keep sinking: a falling prediction stops at the sender's last ground.
   if (state.floor !== undefined && p[2] < state.floor) p[2] = state.floor;
   return { p, yaw: wrapYaw(state.yaw + state.yawRate * dt), pitch: state.pitch };

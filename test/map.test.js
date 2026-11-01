@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { perceptionFrom } from "../src/sim/perception.js";
 import { abilityLine, contourDetail, contourLines, contourStep, createSurvey, formatFix, headingDegrees, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathKeep, pathStamp, placeMark } from "../src/sim/map.js";
 import { createSkills, grantUse } from "../src/sim/skills.js";
 
@@ -98,6 +99,37 @@ test("mapping skill opens range, people, names, and objects", () => {
   const person = shown.marks.find((mark) => mark.kind === "player");
   assert.equal(person.name, "miner");
   assert.equal(shown.marks.some((mark) => mark.kind === "object"), true);
+});
+
+test("a sensed body is precise up close, coarse farther out, and absent past sense", () => {
+  const sense = perceptionFrom();
+  const near = mapMarks({
+    self: [0, 0, 0],
+    skill: 0,
+    sense,
+    others: [{ id: "miner", feet: [4, 0, 0] }],
+    movers: [{ id: "crab", at: [6, 1, 0] }],
+  });
+  const person = near.marks.find((mark) => mark.kind === "player");
+  const crab = near.marks.find((mark) => mark.kind === "mover");
+  assert.ok(person);
+  assert.ok(person.error < 1, person.error);
+  assert.ok(crab);
+  const far = mapMarks({
+    self: [0, 0, 0],
+    skill: 0,
+    sense,
+    others: [{ id: "miner", feet: [80, 0, 0] }],
+  });
+  const loose = far.marks.find((mark) => mark.kind === "player");
+  assert.ok(loose.error > 2, loose.error);
+  const gone = mapMarks({
+    self: [0, 0, 0],
+    skill: 80,
+    sense,
+    others: [{ id: "miner", feet: [400, 0, 0] }],
+  });
+  assert.equal(gone.marks.some((mark) => mark.kind === "player"), false);
 });
 
 test("the chart keeps ground, pits, and places as skills rise", () => {

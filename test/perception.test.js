@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { angleBetween, blockLevel, falloff, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, refreshPeriod, SENSE_DEFAULTS, tracedFraction, tracePriority, withFocus } from "../src/sim/perception.js";
+import { angleBetween, blockLevel, falloff, foveaUniforms, perceivedDetail, perceptionFrom, placeError, quantizePlace, refreshDue, refreshPeriod, SENSE_DEFAULTS, senseReach, tracedFraction, tracePriority, withFocus } from "../src/sim/perception.js";
 import { budgetScale, createTraceBudget } from "../src/render/pace.js";
 
 const DEG = Math.PI / 180;
@@ -12,6 +12,15 @@ test("defaults give sight and hearing with sane numbers", () => {
   assert.equal(p.senses.sight.fovea, SENSE_DEFAULTS.sight.fovea);
   assert.equal(p.senses.sight.period, SENSE_DEFAULTS.sight.period);
   assert.deepEqual([p.focus.x, p.focus.y], [0.5, 0.5]);
+  assert.equal(senseReach(p), p.senses.sight.range);
+  assert.ok(placeError(4, p) < 1);
+  assert.ok(placeError(80, p) > placeError(4, p));
+  assert.equal(placeError(p.senses.sight.range + 5, p), Infinity);
+  const sharp = perceptionFrom({ eyesight: 140, focus: 140 });
+  assert.ok(placeError(80, sharp) < placeError(80, p));
+  assert.deepEqual(quantizePlace([3.2, -1.4], 0.2), [3.2, -1.4]);
+  const coarse = quantizePlace([3.2, -1.4], 4);
+  assert.equal(coarse[0] % 4, 0);
 });
 
 test("falloff is 0 in the fovea, 1 in the far periphery, and monotonic", () => {

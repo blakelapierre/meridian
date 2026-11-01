@@ -1,4 +1,5 @@
 import { groundLook } from "./life.js";
+import { placeError, quantizePlace } from "./perception.js";
 
 export function mapRadius(skill = 0) {
   const trained = Math.max(0, Math.min(140, skill));
@@ -284,9 +285,19 @@ export function placeMark(self, point, radius, size) {
   };
 }
 
-export function mapMarks({ self, skill = 0, others = [], target = null, objects = [], trail = [], known = [], ground = [], places = [] }) {
+export function mapMarks({ self, skill = 0, others = [], target = null, objects = [], trail = [], known = [], ground = [], places = [], sense = null, movers = [] }) {
   const ability = mapAbilities(skill);
   const marks = [];
+  const track = (point) => {
+    if (!point) return null;
+    if (!sense) return { point, error: 0 };
+    const dist = Math.hypot(point[0] - self[0], point[1] - self[1]);
+    const error = placeError(dist, sense);
+    if (!Number.isFinite(error)) return null;
+    const placed = quantizePlace(point, error);
+    if (!placed) return null;
+    return { point: placed, error };
+  };
   for (const cell of ground) {
     if (!cell?.point || !inSense(self, cell.point, ability.radius)) continue;
     marks.push({ kind: cell.kind === "pit" ? "pit" : "sand", point: cell.point });
@@ -306,22 +317,35 @@ export function mapMarks({ self, skill = 0, others = [], target = null, objects 
       marks.push({ kind: "object", point: object.point, name: ability.names ? object.kind : "" });
     }
   }
-  if (ability.people) {
-    const people = known.length ? known : others.filter((other) => inSense(self, other.feet, ability.radius));
-    for (const other of people) {
-      const point = other.feet || other.point;
-      if (!point) continue;
+  const pool = known.length ? known : others;
+  if (sense || ability.people) {
+    for (const other of pool) {
+      const raw = other.feet || other.point;
+      if (!raw) continue;
+      const tracked = sense ? track(raw) : (!known.length && !inSense(self, raw, ability.radius) ? null : { point: raw, error: 0 });
+      if (!tracked) continue;
       marks.push({
         kind: "player",
         id: other.id,
-        point,
+        point: tracked.point,
+        error: tracked.error,
         color: other.color,
         name: ability.names ? (other.label || other.id) : "",
       });
     }
   }
+  if (sense) {
+    for (const mover of movers) {
+      const raw = mover.at || mover.point || mover.feet;
+      const tracked = track(raw);
+      if (!tracked) continue;
+      marks.push({ kind: "mover", id: mover.id || mover.kind, point: tracked.point, error: tracked.error });
+    }
+  }
   if (target?.point) {
-    marks.push({ kind: "target", point: target.point, name: target.name || target.kind || "" });
+    const live = sense && (target.kind === "player" || target.kind === "person");
+    const tracked = live ? track(target.point) : { point: target.point, error: 0 };
+    if (tracked) marks.push({ kind: "target", point: tracked.point, error: tracked.error, name: target.name || target.kind || "" });
   }
   return { ability, marks };
 }

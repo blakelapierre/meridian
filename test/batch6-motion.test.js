@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   TIERS, createEstimator, createSendState, createView, decodeMotion, encodeMotion, estimate, isMotion, modeOf,
-  observe, predict, receive, sendNow, settle, shouldSend, shown, tierFor, noteAck,
+  observe, predict, receive, sendNow, settle, shouldSend, shown, tierFor, noteAck, COAST_M,
 } from "../src/net/motion.js";
 import { simulate } from "../tools/netsim/sim.mjs";
 
@@ -144,12 +144,20 @@ test("a page behind 30 Hz sends before that coast leaves the body", () => {
   const now = { tick: 1000, p: [0, 0, 0], v: [6, 0, 0], a: [0, 0, 0], yaw: 0, yawRate: 0, pitch: 0, floor: 0, mode: 1, wallMs: 5000 };
   sendNow(rec, now, 2);
   noteAck(rec, rec.verified.tick);
-  const tick = now.tick + 10;
+  const tick = now.tick + 3;
   const matched = predict(rec.verified, tick);
-  const slow = { ...now, tick, p: matched.p, yaw: matched.yaw, wallMs: now.wallMs + 1000 };
+  const slow = { ...now, tick, p: matched.p, yaw: matched.yaw, wallMs: now.wallMs + 500 };
   assert.equal(shouldSend(rec, slow, 2), "wall");
-  const kept = { ...slow, wallMs: now.wallMs + (10 / 30) * 1000 };
+  const kept = { ...slow, wallMs: now.wallMs + (3 / 30) * 1000 };
   assert.equal(shouldSend(rec, kept, 2), null);
+});
+
+test("a coast stops two metres out instead of running off", () => {
+  const state = { tick: 0, p: [0, 0, 0], v: [6, 0, 0], a: [0, 0, 0], yaw: 0, yawRate: 0, pitch: 0, floor: 0, mode: 1 };
+  const far = predict(state, 30);
+  assert.ok(Math.hypot(far.p[0], far.p[1]) <= COAST_M + 0.01, far.p[0]);
+  const near = predict(state, 5);
+  assert.ok(Math.abs(near.p[0] - 1) < 0.05, near.p[0]);
 });
 
 test("simulated 10 clients: v3 is far cheaper than v2 with small near error", () => {

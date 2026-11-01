@@ -19,6 +19,7 @@ Negotiated with the existing ctrl hello (`proto: 3`). Peers that say 1 or 2 keep
 | unseen | off screen ≥ 15 m | 1 m | 2 Hz | 5 s |
 | beyond | > range + 20 m | 4 m | 0.5 Hz | 10 s |
 
-* **Receiver** keeps the offset between the old and new prediction at each correction and fades it out over ~0.2 s (snaps only on a > 3 m teleport).
+* **Receiver** keeps the offset between the old and new prediction at each correction and fades it out over ~0.2 s (snaps only on a > 3 m teleport). A prediction never walks more than 2 m from the last packet.
+* Hello may carry `range`, how far that peer can sense. Past that, they do not want a pose, and a pose that arrives from outside it is dropped.
 
 Simulator: `node tools/netsim/sim.mjs --n 25 --seconds 60 --scale` (results in `tools/netsim/results.md`).

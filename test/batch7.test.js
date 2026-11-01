@@ -31,6 +31,9 @@ test("hello carries the real fov when known and stays the old shape without it",
   assert.equal(readHello(helloMessage("ab")).fov, undefined);
   const hello = readHello(helloMessage("ab", 1.7321));
   assert.equal(hello.fov, 1.732);
+  assert.equal(hello.range, undefined);
+  const sensed = readHello(helloMessage("ab", 1.2, 160));
+  assert.equal(sensed.range, 160);
   assert.equal(readHello(JSON.stringify({ t: "hello", proto: 3, catalog: "", fov: 99 })).fov, undefined);
 });
 
