@@ -132,6 +132,7 @@ import { pubkeyHex } from "../sim/keeper.js";
 import { acceptBlock, createChain, hex, installTip, tipOf } from "../sim/chain.js";
 import { decode } from "../sim/cbor.js";
 import { decodeBlock } from "../net/blocks.js";
+import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 
 const canvas = document.querySelector("canvas");
 let painter = createGpuPainter(canvas);
@@ -242,9 +243,11 @@ const bot = params.get("bot") ? createWander(Number.parseInt(params.get("bot"), 
 let botOn = Boolean(bot);
 let paintCap = Math.max(0, Number(params.get("paintfps")) || 0);
 let lastCapped = 0;
-const pageErrors = [];
-addEventListener("error", (event) => pageErrors.push(String(event.message || event.error || "error").slice(0, 200)));
-addEventListener("unhandledrejection", (event) => pageErrors.push(String(event.reason?.message || event.reason || "rejection").slice(0, 200)));
+// Only errors from meridian's own files count; extension and source-less errors are tallied as ignored.
+const errorLog = createErrorLog(siteBase(new URL("../../", import.meta.url).href));
+const pageErrors = errorLog.errors;
+addEventListener("error", (event) => errorLog.add(errorInfoFromEvent(event)));
+addEventListener("unhandledrejection", (event) => errorLog.add(errorInfoFromEvent(event)));
 const world = createPlayerWorld(player);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
@@ -2594,6 +2597,7 @@ globalThis.meridianProbe = {
   renderer: () => canvas.dataset.renderer || "",
   gpuError: () => canvas.dataset.gpuError || "",
   errors: () => [...pageErrors, ...(canvas.dataset.err ? [canvas.dataset.err] : [])],
+  ignoredErrors: () => ({ count: errorLog.ignored.count, samples: [...errorLog.ignored.samples] }),
   terrain: () => terrainKey(),
   fov: () => viewFov(),
   memory: () => performance.memory?.usedJSHeapSize || 0,

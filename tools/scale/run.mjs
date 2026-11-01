@@ -11,6 +11,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createErrorLog, siteBase } from "../../src/app/errsource.js";
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(`--${name}`);
@@ -38,6 +39,12 @@ if (solo) {
 const out = arg("out", solo ? "scale-solo.json" : "scale.json");
 const timeout = Number(arg("timeout", solo ? "300" : "1800")) * 1000;
 const url = `${base.replace(/\/$/, "")}/tools/scale/index.html?${q}`;
+// Only page errors from our own files are reported as errors; extension/other-origin ones are tallied.
+const errLog = createErrorLog(siteBase(`${base.replace(/\/$/, "")}/`));
+const onPageError = (info) => {
+  const c = errLog.add(info);
+  console.error(c.count ? "[pageerror]" : `[ignored ${c.reason} error]`, info.message);
+};
 
 let result;
 try {
@@ -47,6 +54,8 @@ try {
 } finally {
   await site?.close();
 }
+result.runnerIgnoredErrors = errLog.ignored;
+result.runnerErrors = errLog.errors;
 writeFileSync(out, JSON.stringify(result, null, 2));
 console.log(`${result.result}: ${result.maxPassed} clients passed${result.firstFailure ? `, failed at ${result.firstFailure.clients}: ${result.firstFailure.failures.slice(0, 3).join("; ")}` : ""} → ${out}`);
 process.exit(result.result === "pass" ? 0 : 1);
@@ -55,8 +64,8 @@ async function viaPlaywright(chromium) {
   const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--autoplay-policy=no-user-gesture-required"] });
   try {
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
-    page.on("pageerror", (e) => console.error("[pageerror]", e.message));
-    page.on("console", (m) => { if (m.type() === "error") console.error("[page]", m.text()); });
+    page.on("pageerror", (e) => onPageError({ message: e.message, stack: e.stack || "" }));
+    page.on("console", (m) => { if (m.type() === "error") console.error("[page]", m.text(), m.location()?.url || ""); });
     await page.goto(url);
     await page.waitForFunction(() => window.benchResult, null, { timeout, polling: 1000 });
     const value = await page.evaluate(() => window.benchResult);
@@ -93,7 +102,11 @@ async function viaCdp() {
     ws.on("message", (raw) => {
       const m = JSON.parse(raw.toString());
       if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-      if (m.method === "Runtime.exceptionThrown") console.error("[pageerror]", m.params.exceptionDetails?.exception?.description || m.params.exceptionDetails?.text);
+      if (m.method === "Runtime.exceptionThrown") {
+        const d = m.params.exceptionDetails || {};
+        const frames = (d.stackTrace?.callFrames || []).map((f) => f.url).join("\n");
+        onPageError({ message: d.exception?.description || d.text || "error", filename: d.url || "", stack: `${d.exception?.description || ""}\n${frames}` });
+      }
     });
     const send = (method, params = {}) => new Promise((r) => { id += 1; pending.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
     await send("Runtime.enable");
