@@ -12,11 +12,8 @@ import { createStaticServer } from "../tools/serve.js";
 import { acceptPosition, decodePosition, encodePosition } from "../src/net/position.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const chrome = [
-  process.env.MERIDIAN_CHROME,
-  "/opt/pw-browsers/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell",
-  "/opt/pw-browsers/chromium-1248/chrome-linux64/chrome",
-].find((path) => path && existsSync(path));
+import { chrome, noChrome, p2pBlocked } from "./support/chrome.js";
+const blocked = await p2pBlocked();
 
 test("the lighthouse forwards an opaque blob and refuses a huge one", async () => {
   const server = await createLighthouse(0);
@@ -64,7 +61,7 @@ test("an older position packet does not overwrite a newer one", () => {
   assert.equal(look.byteLength, 24);
 });
 
-test("a late second tab still receives a position", { skip: !chrome, timeout: 30000 }, async () => {
+test("a late second tab still receives a position", { skip: blocked, timeout: 30000 }, async () => {
   const lighthouse = await createLighthouse(0);
   const site = await createStaticServer(root);
   const dirA = await mkdtemp(join(tmpdir(), "meridian-late-a-"));
@@ -90,7 +87,7 @@ test("a late second tab still receives a position", { skip: !chrome, timeout: 30
   }
 });
 
-test("two browsers trade an unreliable position", { skip: !chrome, timeout: 20000 }, async () => {
+test("two browsers trade an unreliable position", { skip: blocked, timeout: 20000 }, async () => {
   const lighthouse = await createLighthouse(0);
   const site = await createStaticServer(root);
   const dirA = await mkdtemp(join(tmpdir(), "meridian-a-"));
@@ -117,6 +114,7 @@ test("two browsers trade an unreliable position", { skip: !chrome, timeout: 2000
 
 function launch(dir) {
   return spawn(chrome, [
+    "--headless=new",
     "--no-sandbox",
     "--disable-gpu",
     "--disable-features=WebRtcHideLocalIpsWithMdns",

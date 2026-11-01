@@ -11,12 +11,10 @@ import { createLighthouse } from "../tools/signal/server.js";
 import { createStaticServer } from "../tools/serve.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const chrome = [
-  process.env.MERIDIAN_CHROME,
-  "/opt/pw-browsers/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell",
-].find((path) => path && existsSync(path));
+import { chrome, noChrome, p2pBlocked } from "./support/chrome.js";
+const blocked = await p2pBlocked();
 
-test("two browsers sign a shot and agree it hits", { skip: !chrome, timeout: 20000 }, async () => {
+test("two browsers sign a shot and agree it hits", { skip: blocked, timeout: 20000 }, async () => {
   const lighthouse = await createLighthouse(0);
   const site = await createStaticServer(root);
   const dirA = await mkdtemp(join(tmpdir(), "meridian-shot-a-"));
@@ -45,6 +43,7 @@ test("two browsers sign a shot and agree it hits", { skip: !chrome, timeout: 200
 
 function launch(bin, dir) {
   return spawn(bin, [
+    "--headless=new",
     "--no-sandbox",
     "--disable-gpu",
     "--disable-features=WebRtcHideLocalIpsWithMdns",

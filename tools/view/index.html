@@ -130,6 +130,19 @@
       #corner button, #fullscreen { min-width: 36px; height: 36px; padding: 0 8px; border: 1px solid #567; background: rgba(0,0,0,.6); color: #cde; font: 14px system-ui, sans-serif; border-radius: 6px; }
       #fullscreen.on { color: #9f9; }
       html.touch #corner { top: 200px; }
+      #onboard { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30; width: min(26rem, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; padding: 14px 18px; background: rgba(8,12,18,.95); color: #e6eef6; border: 1px solid #4a6a88; border-radius: 10px; font: 14px/1.45 system-ui, sans-serif; box-shadow: 0 8px 32px rgba(0,0,0,.6); }
+      #onboard h2 { margin: 0 0 8px; font-size: 1.05rem; }
+      #onboard ul { list-style: none; margin: 0 0 10px; padding: 0; }
+      #onboard li { padding: 3px 0; }
+      #onboard li b { display: inline-block; min-width: 8.5rem; color: #9cf; }
+      #onboard .ok { min-height: 40px; padding: 0 18px; border-radius: 8px; border: 1px solid #9cf; background: #123; color: #def; font: inherit; cursor: pointer; }
+      #mpnote a { pointer-events: auto; color: #fda; }
+      #mpnote { pointer-events: auto; }
+      button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid #ffd24a; outline-offset: 2px; }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+        #notices .notice { animation: none; opacity: 1; }
+      }
     </style>
     <script type="importmap">
       {
@@ -145,9 +158,10 @@
     </script>
   </head>
   <body>
-    <aside>
+    <aside aria-label="Help and status">
       <div id="help">
       <h1>Walk check</h1>
+      <p>First time here? The <b>?</b> button (top right) opens the how-to-play card. Press <b>L</b> (or the Log button) for the abilities log, where every unlocked ability is kept, and the sound-cue toggle. Press <b>I</b> to show or hide the network/debug panel; <code>?debug=1</code> starts with it shown. The full key list is in <a href="https://github.com/blakelapierre/meridian/blob/main/docs/keymap.md">docs/keymap.md</a>.</p>
       <p>The camera sits directly behind your body and eases toward wherever it needs to be. It does not jump, and it will not go under the ground. The wheel sets how far behind you it follows, and how high it sits, and that move eases instead of jumping. It does not zoom. Press V for the eyes, and V again to come back out. From the eyes, R cycles none, glasses, binoculars, and a telescope. A zoom still counts in the picture score: its speed and its acceleration pull the buffer the same way a camera move does. The range under the crosshair appears only once you are in first person. Hold the right mouse and move to orbit. Let go and the camera swings back behind the body. A quick right-click, without moving, still salvages a wall.</p>
       <p>The second column is four AI clients. Each one is the same view as the primary, including the map. The controller only presses the keys and mouse buttons a player can press. The surveyor names things and does not dig. The miner opens pits. The builder raises a wall and then salvages it. The marksman shoots the dummy. Their line starts with the agenda. Building skill shortens the raise and the finished wall starts stronger than 80.</p>
       <p>Press E to identify what the crosshair is on. That becomes your action target. While a target is active and you are in third person, the camera slides out and to the side so your body and the target both stay in view. Tab cycles people and the other clients. Shift+Tab goes backward. Backtick cycles interesting objects: the dummy, walls, and props, not the sand or the people. A ring marks the current target. Esc clears that target, and also hides the map. At appraisal 0 you can name sand. A dummy is harder until the skill rises. When the line includes an action, press U to do it. Q toggles auto run. Running, with Shift or with Q, trains the run skill and that skill makes the sprint faster. The panel at the lower right is the skill list.</p>
@@ -172,13 +186,13 @@
       <p id="demolinks"><a href="../../tools/view/index.html?look=dummy">Dummy</a> · <a href="../../tools/view/index.html?dig=1">Dig</a> · <a href="../../tools/view/index.html?gate=1">Gate</a></p>
       <p><a href="../../tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="../../tools/view/index.html?id=b&to=a">Tab B</a> · <a id="fresh" href="?fresh=1">Start over</a> · <a href="../../">All checks</a></p>
     </aside>
-    <canvas width="160" height="90"></canvas>
+    <canvas width="160" height="90" role="img" aria-label="Game view"></canvas>
     <div id="target"></div>
     <div id="range"></div>
-    <ul id="skills"></ul>
+    <ul id="skills" aria-label="Skills"></ul>
     <button id="log-open" type="button" aria-controls="ablog" aria-expanded="false" title="Abilities log (L)">Log</button>
     <section id="ablog" hidden aria-label="Abilities log">
-      <header><b>Abilities</b><label><input id="cue-toggle" type="checkbox" checked> sound cues</label><button class="close" type="button" aria-label="Close">×</button></header>
+      <header><b>Abilities</b><label><input id="cue-toggle" type="checkbox" checked aria-label="Sound cues"> sound cues</label><button class="close" type="button" aria-label="Close">×</button></header>
       <ol></ol>
     </section>
     <div id="tip" role="tooltip" hidden></div>
@@ -186,7 +200,7 @@
     <div id="notices" aria-live="polite"></div>
     <div id="sight"></div>
     <div id="chart">
-      <canvas id="map" width="220" height="220"></canvas>
+      <canvas id="map" width="220" height="220" role="img" aria-label="Sensed map"></canvas>
       <button id="follow" type="button" title="Follow the player" aria-label="Follow the player" hidden><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
       <p id="fix"></p>
     </div>
@@ -194,12 +208,12 @@
     <div id="hint" hidden></div>
     <div id="goal" hidden></div>
     <div id="shotfx"></div>
-    <pre id="net">alone</pre>
+    <pre id="net" aria-label="Network panel">alone</pre>
     <div id="glerr" role="alert" hidden></div>
-    <div id="mpnote" hidden></div>
-    <div id="corner"><button id="reset" type="button" title="Reset / new session: forget saved data and start over">Reset</button></div>
+    <div id="mpnote" role="status" hidden></div>
+    <div id="corner"><button id="reset" type="button" aria-label="Reset: forget saved data and start a new session" title="Reset / new session: forget saved data and start over">Reset</button></div>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=125"></script>
+    <script type="module" src="../../src/app/main.js?v=126"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {

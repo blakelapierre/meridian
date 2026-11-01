@@ -12,7 +12,7 @@ Slice keys. Later screens do not get to steal these. Hands are first person: the
 | Space | Jump | Jump | Jump | Jump |
 | Mouse 1 (hold) | Fire or melee | Channel the brush | Place the selected piece | — |
 | Mouse 2 | — | — | Salvage the piece under the cursor | — |
-| R | Reload | — | Rotate yaw 90° | — |
+| R | Cycle optics | — | Rotate yaw 90° | — |
 | C | — | Cycle dig, fill, smooth | — | — |
 | E | Use, enter a strike prompt | Use | Use | Use |
 | F | Swap to previous weapon | — | — | — |
@@ -37,6 +37,28 @@ Use is one line in the world: the crate, the strike prompt, the hearth. There is
 Reserved and **unused** in the slice: the war table. When it exists, the seated keys replace movement with pan. W A S D pan. A pans left. The wheel zooms. That camera is not a vehicle.
 
 If a chase-cam vehicle is ever added, A turns it left and D turns it right while it moves forward. Do not copy the FPS strafe signs into that camera.
+
+## More keys
+
+Handled by the walk today but outside the slice table above.
+
+| Key | Does |
+|---|---|
+| Z | Strafe (movement key the walk reads, like C) |
+| U | Act on the target (same edge as Use) |
+| Enter | Skip the current tour step |
+| F3 | Toggle the demo look (hides the panels) |
+| [ (BracketLeft) | Cycle the brush: dig, fill, smooth |
+| ] (BracketRight) | Turn the selected piece (hammer) |
+| Y | Offer a bond to the selected player |
+| O | Show your key phrase. Shift shows the recovery phrase |
+| T | Drop a mission marker at the aim |
+| J | Place a cart (hammer) |
+| P | Place a post (hammer) |
+| X | Drag or let go of the selected player |
+| N | Pin your last note as a slip |
+| H | Grant a deed key to the selected player |
+| K | Toggle the listener |
 
 ## Touch
 

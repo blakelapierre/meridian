@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "start": "node tools/dev.js"
+    "start": "node tools/dev.js",
+    "scale:smoke": "node tools/scale/run.mjs --solo --max 4"
   },
   "dependencies": {
     "@noble/ed25519": "^3.2.0",
