@@ -5,6 +5,33 @@ export const SAND_TILE = 32;
 export const WOOD_TILE = 33;
 export const GRASS_TILE = 34;
 export const ROCK_TILE = 35;
+export const CLOTH_TILE = 36;
+export const SKIN_TILE = 37;
+export const BARK_TILE = 38;
+export const HIDE_TILE = 39;
+export const HORN_TILE = 40;
+export const FEATHER_TILE = 41;
+export const METAL_TILE = 42;
+export const LEAF_TILE = 43;
+export const SCALE_TILE = 44;
+export const HAIR_TILE = 45;
+
+export const SHAPE_TILE = {
+  sand: SAND_TILE,
+  wood: WOOD_TILE,
+  grass: GRASS_TILE,
+  rock: ROCK_TILE,
+  cloth: CLOTH_TILE,
+  skin: SKIN_TILE,
+  bark: BARK_TILE,
+  hide: HIDE_TILE,
+  horn: HORN_TILE,
+  feather: FEATHER_TILE,
+  metal: METAL_TILE,
+  leaf: LEAF_TILE,
+  scale: SCALE_TILE,
+  hair: HAIR_TILE,
+};
 
 export function makeTexture(width, height, fill) {
   const data = new Uint8Array(width * height * 4);
@@ -149,4 +176,139 @@ export function dummyTexture() {
     });
   }
   return dummy;
+}
+
+function tone(mix, base, gain) {
+  return [
+    Math.max(0, Math.min(255, Math.round(base[0] + mix * gain[0]))),
+    Math.max(0, Math.min(255, Math.round(base[1] + mix * gain[1]))),
+    Math.max(0, Math.min(255, Math.round(base[2] + mix * gain[2]))),
+    255,
+  ];
+}
+
+let cloth;
+let skin;
+let bark;
+let hide;
+let horn;
+let feather;
+let metal;
+let leaf;
+let scales;
+let hair;
+
+export function clothTexture() {
+  if (!cloth) {
+    cloth = makeTexture(128, 128, (x, y) => {
+      const warp = 0.5 + 0.5 * Math.sin(x * 0.9);
+      const weft = 0.5 + 0.5 * Math.sin(y * 0.9);
+      const thread = warp * 0.55 + weft * 0.45;
+      const fleck = periodicNoise(x / 4, y / 4, 32);
+      return tone(thread * 0.7 + fleck * 0.3, [118, 112, 102], [90, 84, 74]);
+    });
+  }
+  return cloth;
+}
+
+export function skinTexture() {
+  if (!skin) {
+    skin = makeTexture(128, 128, (x, y) => {
+      const pore = periodicNoise(x / 2, y / 2, 64);
+      const blush = periodicNoise(x / 14, y / 14, 16);
+      return tone(pore * 0.35 + blush * 0.65, [150, 112, 88], [50, 40, 32]);
+    });
+  }
+  return skin;
+}
+
+export function barkTexture() {
+  if (!bark) {
+    bark = makeTexture(128, 128, (x, y) => {
+      const ridge = 0.5 + 0.5 * Math.sin(x * 0.55 + periodicNoise(x / 10, y / 6, 16) * 2);
+      const crack = periodicNoise(x / 3, y / 18, 32);
+      return tone(ridge * 0.65 + crack * 0.35, [72, 48, 28], [70, 42, 22]);
+    });
+  }
+  return bark;
+}
+
+export function hideTexture() {
+  if (!hide) {
+    hide = makeTexture(128, 128, (x, y) => {
+      const grain = periodicNoise(x / 6, y / 3, 32);
+      const crease = Math.abs(Math.sin(y * 0.18 + periodicNoise(x / 12, y / 12, 16) * 3));
+      return tone(grain * 0.6 + crease * 0.4, [92, 64, 40], [70, 48, 28]);
+    });
+  }
+  return hide;
+}
+
+export function hornTexture() {
+  if (!horn) {
+    horn = makeTexture(128, 128, (x, y) => {
+      const band = 0.5 + 0.5 * Math.sin(y * 0.7);
+      const scuff = periodicNoise(x / 5, y / 5, 32);
+      return tone(band * 0.75 + scuff * 0.25, [120, 96, 58], [80, 60, 30]);
+    });
+  }
+  return horn;
+}
+
+export function featherTexture() {
+  if (!feather) {
+    feather = makeTexture(128, 128, (x, y) => {
+      const barb = 0.55 + 0.45 * Math.abs(Math.sin(x * 0.8 + y * 0.15));
+      const vane = periodicNoise(x / 8, y / 4, 32);
+      return tone(barb * 0.7 + vane * 0.3, [168, 168, 162], [70, 70, 66]);
+    });
+  }
+  return feather;
+}
+
+export function metalTexture() {
+  if (!metal) {
+    metal = makeTexture(128, 128, (x, y) => {
+      const brush = 0.5 + 0.5 * Math.sin(y * 1.4 + periodicNoise(x / 16, y / 8, 16));
+      const seam = Math.abs(wrapCoord(x, 32) - 16) < 1.2 ? 0.15 : 0;
+      return tone(brush * 0.85 + seam, [108, 112, 116], [80, 82, 86]);
+    });
+  }
+  return metal;
+}
+
+export function leafTexture() {
+  if (!leaf) {
+    leaf = makeTexture(128, 128, (x, y) => {
+      const vein = Math.abs(Math.sin(x * 0.35)) < 0.18 ? 0.25 : 0;
+      const blade = periodicNoise(x / 5, y / 9, 32);
+      return tone(blade * 0.8 + vein, [48, 92, 36], [50, 80, 30]);
+    });
+  }
+  return leaf;
+}
+
+export function scaleTexture() {
+  if (!scales) {
+    scales = makeTexture(128, 128, (x, y) => {
+      const row = Math.floor(y / 8);
+      const u = wrapCoord(x + (row % 2) * 6, 12);
+      const v = wrapCoord(y, 8);
+      const edge = u < 1.3 || v < 1.2 ? 0.22 : 0.9;
+      const grain = periodicNoise(x / 3, y / 3, 32);
+      return tone(edge * 0.72 + grain * 0.28, [108, 104, 92], [62, 52, 40]);
+    });
+  }
+  return scales;
+}
+
+export function hairTexture() {
+  if (!hair) {
+    hair = makeTexture(128, 128, (x, y) => {
+      const strand = 0.4 + 0.6 * Math.abs(Math.sin(x * 1.15 + periodicNoise(x / 18, y / 7, 16) * 1.4));
+      const glint = periodicNoise(x / 2, y / 11, 32);
+      return tone(strand * 0.78 + glint * 0.22, [96, 90, 82], [64, 54, 46]);
+    });
+  }
+  return hair;
 }

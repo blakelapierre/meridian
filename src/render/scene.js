@@ -1,11 +1,11 @@
 import { Crust } from "../sim/crust.js";
 import { pieceBoxes } from "../sim/build.js";
-import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=53";
+import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=57";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
-import { duneHeight, fauna, floraParts } from "../sim/life.js?v=72";
-import { PEOPLE } from "../sim/people.js?v=1";
+import { duneHeight, fauna, floraParts } from "../sim/life.js?v=76";
+import { PEOPLE } from "../sim/people.js?v=2";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const OTHER = [0.55, 0.42, 0.22, 1];
@@ -29,16 +29,18 @@ export function orderForCamera(objects, feet) {
   const fy = feet?.[1] || 0;
   const boxes = [];
   const spheres = [];
+  const shapes = [];
   const rest = [];
   for (const object of objects) {
     if (object.type === "box") boxes.push(object);
     else if (object.type === "sphere") spheres.push(object);
+    else if (object.type === "shape") shapes.push(object);
     else rest.push(object);
   }
   const dist = (object) => {
     const c = object.type === "box"
       ? [(object.min[0] + object.max[0]) * 0.5, (object.min[1] + object.max[1]) * 0.5]
-      : [object.origin[0], object.origin[1]];
+      : [object.origin?.[0] ?? object.a?.[0] ?? 0, object.origin?.[1] ?? object.a?.[1] ?? 0];
     const dx = c[0] - fx;
     const dy = c[1] - fy;
     return dx * dx + dy * dy;
@@ -52,14 +54,28 @@ export function orderForCamera(objects, feet) {
   };
   boxes.sort(byNear);
   spheres.sort(byNear);
-  return rest.concat(spheres, boxes);
+  shapes.sort(byNear);
+  return rest.concat(shapes, spheres, boxes);
 }
 
 function coarse(parts, keep = 3) {
-  return [...parts].sort((a, b) => b.radius - a.radius).slice(0, keep);
+  return [...parts].sort((a, b) => (b.bulk ?? b.radius ?? 0) - (a.bulk ?? a.radius ?? 0)).slice(0, keep);
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false }) {
+function drawnPart(part, body) {
+  if (part.type === "shape") return { ...part, body: part.body || body };
+  return {
+    type: "sphere",
+    origin: part.at || part.origin,
+    radius: part.radius,
+    color: part.color,
+    reflectivity: 0.03,
+    body,
+    ...(part.tile ? { tile: part.tile } : {}),
+  };
+}
+
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -107,29 +123,11 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     });
   }
   if (!sparse) {
-    for (const part of floraParts()) {
-      objects.push({
-        type: "sphere",
-        origin: part.at,
-        radius: part.radius,
-        color: part.color,
-        reflectivity: 0.02,
-        body: "flora",
-      });
-    }
+    for (const part of floraParts(tick * 1000 / 30)) objects.push(drawnPart(part, "flora"));
   }
   for (const animal of fauna(Date.now(), feet, { parts: !sparse })) {
     const parts = !sparse && animal.parts?.length ? animal.parts : [animal];
-    for (const part of parts) {
-      objects.push({
-        type: "sphere",
-        origin: part.at,
-        radius: part.radius,
-        color: part.color,
-        reflectivity: 0.03,
-        body: animal.kind,
-      });
-    }
+    for (const part of parts) objects.push(drawnPart(part, animal.kind));
   }
   for (const person of PEOPLE) {
     const z = duneHeight(person.at[0], person.at[1]);
@@ -141,6 +139,9 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       name: person.name,
       detail: person.detail,
       speech: person.speech,
+      gait: tick * 0.06 + person.at[0] * 0.15,
+      stride: 0.05,
+      worn: person.worn,
     });
     for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
   }
@@ -148,8 +149,12 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
   const dummyAt = [dummy.x / 100, dummy.y / 100, 0];
   const dummyFigure = sparse
     ? [{ origin: [dummyAt[0], dummyAt[1], 0.9], radius: 0.35, color: [0.86, 0.22, 0.18, 1], texture: true }]
-    : dummyParts(dummyAt);
+    : dummyParts(dummyAt, tick * 1000 / 30);
   for (const part of dummyFigure) {
+    if (part.type === "shape") {
+      objects.push(part);
+      continue;
+    }
     objects.push({
       type: "sphere",
       origin: part.origin,
@@ -157,6 +162,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       color: part.color,
       reflectivity: part.texture ? 0.4 : 0.08,
       body: "dummy",
+      ...(part.tile ? { tile: part.tile } : {}),
       ...(part.texture ? { texture: dummyTexture() } : {}),
     });
   }
@@ -178,6 +184,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       color: [0.95, 0.9, 0.4, 1],
       reflectivity: 0.2,
       body: "bolt",
+      tile: "metal",
     });
   }
   for (const body of loose) {
@@ -191,14 +198,23 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       body: "stone",
       id: "stone",
       name: "Stone",
+      tile: "rock",
     });
   }
   if (view === "third" && self) {
-    const figure = playerParts(feet, yaw + (lean || 0), crouch, { self: true });
+    const figure = playerParts(feet, yaw + (lean || 0), crouch, { self: true, gait, stride: crouch ? Math.min(stride, 0.2) : stride, worn });
     for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
   }
   for (const other of others) {
-    const figure = playerParts(other.feet, other.yaw, !!other.crouch, { self: false, color: other.color || OTHER });
+    const moving = other.walk ? 0.9 : 0.05;
+    const phase = other.walk ? (other.feet[0] + other.feet[1]) * 1.7 : tick * 0.07;
+    const figure = playerParts(other.feet, other.yaw, !!other.crouch, {
+      self: false,
+      color: other.color || OTHER,
+      gait: phase,
+      stride: other.crouch ? 0.12 : moving,
+      worn: other.worn || ["cloth"],
+    });
     for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
   }
   const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;

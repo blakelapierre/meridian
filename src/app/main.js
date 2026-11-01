@@ -12,8 +12,8 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=65";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=79";
+import { buildScene } from "../render/scene.js?v=69";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=85";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=5";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
@@ -75,12 +75,12 @@ import {
   trackFin,
 } from "../sim/hearth.js";
 import { haltFeet } from "../sim/town.js?v=1";
-import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=1";
+import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
 import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=3";
-import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=53";
+import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=57";
 import { cycleTarget, listObjects, listPlayers } from "../sim/target.js";
 import { createWear, decayWear, DECAY_TICKS, mergeWear, packWear, stepWear, takeWearBatches, unpackWear, WEAR_KIND, wearWindow } from "../sim/wear.js?v=1";
 import { acceptWear, encodeWear } from "../net/wear.js?v=1";
@@ -129,7 +129,7 @@ import { afterShot, boltHit, boltInSmoke, firePull, meleeHit, missDir, penFactor
 import { harmMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=72";
+import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=76";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -1410,6 +1410,8 @@ function frameSlide(sample) {
   return slip;
 }
 
+let bodyGait = 0;
+
 function sceneFor(sample, width, height) {
   const aim = cameraAim(sample);
   return buildScene({
@@ -1436,7 +1438,15 @@ function sceneFor(sample, width, height) {
     bolts,
     loose: looseBodies(world),
     sparse: Boolean(bot),
+    stride: Math.min(1, Math.hypot(player.velocity?.[0] || 0, player.velocity?.[1] || 0) / 2.2),
+    gait: bodyGait,
+    worn: wornFor(slot),
   });
+}
+
+function wornFor(hand) {
+  const tool = hand === "line" ? "long" : hand === "hammer" ? "hammer" : "bit";
+  return ["cloth", tool];
 }
 
 function refreshAim(sample = {}) {
@@ -2288,6 +2298,10 @@ function paint(sample, width = canvas.width, height = canvas.height) {
     canvas.width = 160;
     canvas.height = 90;
     context = canvas.getContext("2d", { alpha: false });
+    if (!context) {
+      canvas.dataset.renderer = "none";
+      return scene;
+    }
     canvas.dataset.renderer = "cpu";
     canvas.style.imageRendering = "pixelated";
   }
@@ -3612,6 +3626,8 @@ if (params.get("still") !== "1") {
       });
       noteNearby(survey, player.position, landmarks(), bag);
       if (tick % 30 === 0) exchangeLore();
+      const pace = Math.hypot(player.velocity[0] || 0, player.velocity[1] || 0);
+      bodyGait += Math.min(pace, 3.2) * 0.18;
       tick += 1;
       } finally {
         bank -= 1 / 30;

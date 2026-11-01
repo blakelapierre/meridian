@@ -8,6 +8,7 @@ export const PEOPLE = [
     at: [-20.2, -156.8, 0],
     yaw: 0,
     color: [0.62, 0.4, 0.28, 1],
+    worn: ["cloth", "mallet"],
   },
   {
     id: "hask",
@@ -17,6 +18,7 @@ export const PEOPLE = [
     at: [-53.4, -166.5, 0],
     yaw: -Math.PI / 2,
     color: [0.34, 0.32, 0.3, 1],
+    worn: ["cloth", "plate", "hammer"],
   },
   {
     id: "nim",
@@ -26,6 +28,7 @@ export const PEOPLE = [
     at: [-48, -171.2, 0],
     yaw: Math.PI,
     color: [0.28, 0.42, 0.3, 1],
+    worn: ["cloth", "pack"],
   },
 ];
 

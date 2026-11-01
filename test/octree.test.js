@@ -4,7 +4,7 @@ import { cast, shapeHit, sphereRayIntersection } from "../src/engine/cast.js";
 import { paintFrame } from "../src/engine/frame.js";
 import { createCrowd, createShapes } from "../src/engine/demo.js";
 import { Mass, createUniverse, tick } from "../src/engine/physics.js";
-import { packGpuNodes } from "../src/engine/octree.js";
+import { packGpuNodes, packShapeTree } from "../src/engine/octree.js";
 
 function sphere(x, y, z, radius = 1, color = [1, 0, 0, 1]) {
   return { type: "sphere", origin: [x, y, z], radius, color };
@@ -71,6 +71,58 @@ test("analytic shapes hit and miss where the formula says", () => {
   const scene = createShapes();
   const ground = cast([0, -120, 0], [0, 1, 0], scene.shapes);
   assert.equal(ground.object.kind, "plane");
+});
+
+test("a field of shapes agrees with the direct ray, and a tight clump still packs", () => {
+  const objects = [];
+  for (let i = 0; i < 40; i++) {
+    const x = (i % 8) * 6;
+    const y = Math.floor(i / 8) * 6;
+    objects.push({
+      type: "shape",
+      kind: "capsule",
+      a: [x, y, 0],
+      b: [x, y, 1.2],
+      r: 0.3,
+      origin: [x, y, 0.6],
+      radius: 0.9,
+      color: [1, 0, 0, 1],
+    });
+  }
+  objects.push({ type: "shape", kind: "plane", a: [0, 0, -1], b: [0, 0, 1], color: [0, 1, 0, 1] });
+  const linear = (origin, direction) => {
+    let best = null;
+    for (const object of objects) {
+      const found = shapeHit(origin, direction, object);
+      if (found && (!best || found.t < best.t)) best = found;
+    }
+    return best;
+  };
+  const behind = cast([1, 1, -4], [0, 0, 1], objects);
+  assert.equal(behind.object, linear([1, 1, -4], [0, 0, 1]).object);
+  assert.equal(behind.object.kind, "plane");
+  const aimed = [objects[0].origin[0], objects[0].origin[1], 4];
+  const body = cast(aimed, [0, 0, -1], objects);
+  const direct = linear(aimed, [0, 0, -1]);
+  assert.equal(body.object.kind, "capsule");
+  assert.equal(body.object, direct.object);
+  assert.ok(Math.abs(body.t - direct.t) < 1e-6);
+  const gap = cast([3, 3, 4], [0, 0, -1], objects);
+  assert.equal(gap.object, linear([3, 3, 4], [0, 0, -1]).object);
+  const clump = [];
+  for (let i = 0; i < 12; i++) {
+    clump.push({
+      type: "shape",
+      kind: "capsule",
+      a: [i * 0.02, 0, 0],
+      b: [i * 0.02, 0.15, 0.4],
+      r: 0.02,
+      origin: [i * 0.02, 0.07, 0.2],
+      radius: 0.25,
+      color: [1, 1, 1, 1],
+    });
+  }
+  assert.ok(packShapeTree(clump) > 0);
 });
 
 test("spread spheres pack, a tight clump does not", () => {

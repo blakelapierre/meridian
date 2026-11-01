@@ -230,13 +230,16 @@ export function raySphereRoot(objects) {
 export function holdRayObjects(objects, fn) {
   const prevObjects = heldObjects;
   const prevRoot = heldRoot;
+  const prevShape = heldShapeRoot;
   heldObjects = objects;
   heldRoot = indexSpheres(objects);
+  heldShapeRoot = indexShapes(objects);
   try {
     return fn();
   } finally {
     heldObjects = prevObjects;
     heldRoot = prevObjects ? indexSpheres(prevObjects) : prevRoot;
+    heldShapeRoot = prevObjects ? indexShapes(prevObjects) : prevShape;
   }
 }
 
@@ -310,3 +313,281 @@ export function packGpuNodes(sphereData, count) {
   }
   return true;
 }
+
+// Finite analytic shapes. A second tree, so a sphere search never shares these buffers.
+// Planes and huge disks stay a linear test. The tree only sorts and searches.
+
+export const SHAPE_TREE_AT = 24;
+export const MAX_SHAPE_BODIES = 512;
+export const MAX_SHAPE_NODES = 2048;
+export const SHAPE_MIN_HALF = 0.2;
+export const SHAPE_LEAF = 16;
+
+const sX = new Float64Array(MAX_SHAPE_BODIES);
+const sY = new Float64Array(MAX_SHAPE_BODIES);
+const sZ = new Float64Array(MAX_SHAPE_BODIES);
+const sR = new Float64Array(MAX_SHAPE_BODIES);
+const sSlot = new Int32Array(MAX_SHAPE_BODIES);
+const sGpu = new Int32Array(MAX_SHAPE_BODIES);
+const sObj = new Array(MAX_SHAPE_BODIES);
+const snX = new Float64Array(MAX_SHAPE_NODES);
+const snY = new Float64Array(MAX_SHAPE_NODES);
+const snZ = new Float64Array(MAX_SHAPE_NODES);
+const snHalf = new Float64Array(MAX_SHAPE_NODES);
+const snRad = new Float64Array(MAX_SHAPE_NODES);
+const snStart = new Int32Array(MAX_SHAPE_NODES);
+const snLen = new Int32Array(MAX_SHAPE_NODES);
+const snChild = new Int32Array(MAX_SHAPE_NODES);
+const snIds = new Int16Array(MAX_SHAPE_NODES * SHAPE_LEAF);
+const shapeStack = new Int32Array(MAX_SHAPE_NODES);
+const shapeOrder = [];
+const shapeSort = new Int32Array(MAX_SHAPE_BODIES);
+let shapeN = 0;
+let shapeNodeN = 0;
+const indexed = new Set();
+
+export const shapeNodeData = new Float32Array(MAX_SHAPE_NODES * 16);
+export const shapeIndexData = new Float32Array(MAX_SHAPE_BODIES * 4);
+
+export function shapeNodeCount() {
+  return shapeNodeN;
+}
+
+function finiteShape(object) {
+  if (!object || object.type !== "shape") return false;
+  if (object.kind === "plane") return false;
+  if (object.kind === "disk" && (object.r || 0) > 30) return false;
+  return true;
+}
+
+function shapeCenter(object) {
+  if (object.origin) return object.origin;
+  const a = object.a || [0, 0, 0];
+  const b = object.b || a;
+  return [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, (a[2] + b[2]) * 0.5];
+}
+
+function buildShapeTree(n) {
+  shapeNodeN = 0;
+  if (n < 1) return -1;
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (sX[i] < minX) minX = sX[i];
+    if (sX[i] > maxX) maxX = sX[i];
+    if (sY[i] < minY) minY = sY[i];
+    if (sY[i] > maxY) maxY = sY[i];
+    if (sZ[i] < minZ) minZ = sZ[i];
+    if (sZ[i] > maxZ) maxZ = sZ[i];
+    sSlot[i] = i;
+  }
+  const root = shapeNodeN++;
+  snHalf[root] = Math.max(maxX - minX, maxY - minY, maxZ - minZ) / 2 + 0.5;
+  snX[root] = (minX + maxX) / 2;
+  snY[root] = (minY + maxY) / 2;
+  snZ[root] = (minZ + maxZ) / 2;
+  snStart[root] = 0;
+  snLen[root] = n;
+  snChild[root] = -1;
+  const stack = [root];
+  while (stack.length) {
+    const id = stack.pop();
+    if (snLen[id] <= SHAPE_LEAF || snHalf[id] < SHAPE_MIN_HALF || shapeNodeN + 8 > MAX_SHAPE_NODES) continue;
+    const h = snHalf[id] / 2;
+    const base = shapeNodeN;
+    snChild[id] = base;
+    for (let k = 0; k < 8; k++) {
+      const c = shapeNodeN++;
+      snHalf[c] = h;
+      snChild[c] = -1;
+      snLen[c] = 0;
+      snX[c] = snX[id] + (k & 1 ? h : -h);
+      snY[c] = snY[id] + (k & 2 ? h : -h);
+      snZ[c] = snZ[id] + (k & 4 ? h : -h);
+    }
+    const st = snStart[id];
+    const len = snLen[id];
+    const counts = [0, 0, 0, 0, 0, 0, 0, 0];
+    for (let i = 0; i < len; i++) {
+      const bi = sSlot[st + i];
+      const oct = (sX[bi] >= snX[id] ? 1 : 0) | (sY[bi] >= snY[id] ? 2 : 0) | (sZ[bi] >= snZ[id] ? 4 : 0);
+      counts[oct] += 1;
+    }
+    let run = st;
+    for (let k = 0; k < 8; k++) {
+      snStart[base + k] = run;
+      snLen[base + k] = counts[k];
+      run += counts[k];
+    }
+    const fill = counts.slice();
+    for (let k = 0; k < 8; k++) fill[k] = snStart[base + k] - st;
+    for (let i = 0; i < len; i++) {
+      const bi = sSlot[st + i];
+      const oct = (sX[bi] >= snX[id] ? 1 : 0) | (sY[bi] >= snY[id] ? 2 : 0) | (sZ[bi] >= snZ[id] ? 4 : 0);
+      shapeSort[st + fill[oct]] = bi;
+      fill[oct] += 1;
+    }
+    for (let i = 0; i < len; i++) sSlot[st + i] = shapeSort[st + i];
+    for (let k = 0; k < 8; k++) {
+      if (snLen[base + k] > 0) stack.push(base + k);
+    }
+  }
+  shapeOrder.length = 0;
+  const walk = [root];
+  while (walk.length) {
+    const id = walk.pop();
+    shapeOrder.push(id);
+    const base = snChild[id];
+    if (base >= 0) {
+      for (let k = 0; k < 8; k++) if (snLen[base + k] > 0) walk.push(base + k);
+    }
+  }
+  for (let i = shapeOrder.length - 1; i >= 0; i--) {
+    const id = shapeOrder[i];
+    const base = snChild[id];
+    let rad = 0;
+    if (base < 0) {
+      for (let j = 0; j < snLen[id]; j++) {
+        const bi = sSlot[snStart[id] + j];
+        if (sR[bi] > rad) rad = sR[bi];
+      }
+    } else {
+      for (let k = 0; k < 8; k++) if (snLen[base + k] > 0 && snRad[base + k] > rad) rad = snRad[base + k];
+    }
+    snRad[id] = rad;
+  }
+  for (let id = 0; id < shapeNodeN; id++) {
+    if (snChild[id] >= 0) continue;
+    const st = snStart[id];
+    const len = snLen[id] < SHAPE_LEAF ? snLen[id] : SHAPE_LEAF;
+    for (let k = 0; k < len; k++) snIds[id * SHAPE_LEAF + k] = sSlot[st + k];
+  }
+  return root;
+}
+
+function leavesFit() {
+  for (let id = 0; id < shapeNodeN; id++) {
+    if (snChild[id] < 0 && snLen[id] > SHAPE_LEAF) return false;
+  }
+  return shapeNodeN > 0 && shapeNodeN <= MAX_SHAPE_NODES;
+}
+
+function loadShape(n, object, gpuIndex) {
+  const p = shapeCenter(object);
+  sX[n] = p[0];
+  sY[n] = p[1];
+  sZ[n] = p[2];
+  sR[n] = object.radius || object.r || 0.05;
+  sObj[n] = object;
+  sGpu[n] = gpuIndex;
+  return n + 1;
+}
+
+let heldShapeRoot = -1;
+
+function indexShapes(objects) {
+  indexed.clear();
+  let n = 0;
+  for (let i = 0; i < objects.length; i++) {
+    const object = objects[i];
+    if (!finiteShape(object)) continue;
+    if (n >= MAX_SHAPE_BODIES) return -1;
+    n = loadShape(n, object, i);
+    indexed.add(object);
+  }
+  shapeN = n;
+  if (n < SHAPE_TREE_AT) return -1;
+  const root = buildShapeTree(n);
+  if (root < 0 || !leavesFit()) {
+    indexed.clear();
+    return -1;
+  }
+  return root;
+}
+
+export function shapeIsIndexed(object) {
+  return indexed.has(object);
+}
+
+export function rayShapeRoot(objects) {
+  if (heldObjects === objects) return heldShapeRoot;
+  if (heldObjects) return -1;
+  return indexShapes(objects);
+}
+
+export function visitShapeTree(origin, direction, root, test) {
+  if (root < 0) return null;
+  let best = null;
+  let bestT = Infinity;
+  const ox = origin[0];
+  const oy = origin[1];
+  const oz = origin[2];
+  const dx = direction[0];
+  const dy = direction[1];
+  const dz = direction[2];
+  let sp = 0;
+  shapeStack[sp++] = root;
+  while (sp > 0) {
+    const id = shapeStack[--sp];
+    const h = snHalf[id] + snRad[id];
+    if (!rayAabb(ox, oy, oz, dx, dy, dz, snX[id], snY[id], snZ[id], h, bestT)) continue;
+    const child = snChild[id];
+    if (child < 0) {
+      const len = snLen[id] < SHAPE_LEAF ? snLen[id] : SHAPE_LEAF;
+      for (let k = 0; k < len; k++) {
+        const hit = test(sObj[snIds[id * SHAPE_LEAF + k]]);
+        if (hit && hit.t >= 0 && hit.t < bestT) {
+          best = hit;
+          bestT = hit.t;
+        }
+      }
+    } else {
+      for (let k = 0; k < 8; k++) {
+        if (snLen[child + k] > 0 && sp < shapeStack.length) shapeStack[sp++] = child + k;
+      }
+    }
+  }
+  return best;
+}
+
+export function packShapeTree(list, count = list.length) {
+  let n = 0;
+  for (let i = 0; i < count; i++) {
+    const object = list[i];
+    if (!object || !finiteShape(object)) continue;
+    if (n >= MAX_SHAPE_BODIES) return 0;
+    n = loadShape(n, object, i);
+  }
+  shapeN = n;
+  if (n < 1) return 0;
+  const root = buildShapeTree(n);
+  if (root < 0 || !leavesFit()) return 0;
+  shapeIndexData.fill(0);
+  let index = 0;
+  for (let id = 0; id < shapeNodeN; id++) {
+    const o = id * 16;
+    shapeNodeData[o] = snX[id];
+    shapeNodeData[o + 1] = snY[id];
+    shapeNodeData[o + 2] = snZ[id];
+    shapeNodeData[o + 3] = snHalf[id] + snRad[id];
+    shapeNodeData[o + 4] = snChild[id];
+    if (snChild[id] < 0) {
+      const len = snLen[id] < SHAPE_LEAF ? snLen[id] : SHAPE_LEAF;
+      shapeNodeData[o + 5] = len;
+      shapeNodeData[o + 6] = index;
+      for (let k = 0; k < len; k++) {
+        shapeIndexData[(index + k) * 4] = sGpu[snIds[id * SHAPE_LEAF + k]];
+      }
+      index += len;
+    } else {
+      shapeNodeData[o + 5] = snLen[id];
+      shapeNodeData[o + 6] = 0;
+    }
+  }
+  return shapeNodeN;
+}
+

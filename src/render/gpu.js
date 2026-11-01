@@ -1,10 +1,11 @@
 import { cameraBasis } from "../engine/cast.js";
-import { GPU_TREE_AT, MAX_GPU_NODES, gpuNodeCount, gpuNodeData, packGpuNodes } from "../engine/octree.js";
+import { GPU_TREE_AT, MAX_GPU_NODES, MAX_SHAPE_BODIES, MAX_SHAPE_NODES, gpuNodeCount, gpuNodeData, packGpuNodes, packShapeTree, shapeIndexData, shapeNodeCount, shapeNodeData } from "../engine/octree.js";
 import { VOXEL_M } from "../sim/crust.js";
-import { ATLAS, GRASS_TILE, ROCK_TILE, SAND_TILE, WOOD_TILE, blitTexture, grassTexture, rectFor, rockTexture, sandTexture, woodTexture } from "./texture.js?v=62";
+import { ATLAS, BARK_TILE, CLOTH_TILE, FEATHER_TILE, GRASS_TILE, HAIR_TILE, HIDE_TILE, HORN_TILE, LEAF_TILE, METAL_TILE, ROCK_TILE, SAND_TILE, SCALE_TILE, SHAPE_TILE, SKIN_TILE, WOOD_TILE, barkTexture, blitTexture, clothTexture, featherTexture, grassTexture, hairTexture, hideTexture, hornTexture, leafTexture, metalTexture, rectFor, rockTexture, sandTexture, scaleTexture, skinTexture, woodTexture } from "./texture.js?v=64";
 
 const MAX_SPHERES = 384;
-const MAX_SHAPES = 8;
+const MAX_SHAPES = MAX_SHAPE_BODIES;
+const SHAPE_LINEAR = 80;
 const MAX_BOXES = 32;
 // Dug columns the trace can show; 4x the 50 cm budget since a 25 cm voxel has 4x the columns per area.
 const MAX_DIGS = 512;
@@ -32,10 +33,11 @@ function packShapeData(n) {
     const a = s.a || [0, 0, 0];
     const b = s.b || [0, 0, 0];
     const c = s.c || [0, 0, 0];
+    const tile = SHAPE_TILE[s.tile] || (typeof s.tile === "number" ? s.tile : 0);
     put(0, color[0], color[1], color[2], s.reflectivity || 0);
     put(1, a[0], a[1], a[2], SHAPE_KIND[s.kind] || 0);
     put(2, b[0], b[1], b[2], s.r || 0);
-    put(3, c[0] || 0, c[1] || 0, c[2] || 0, 0);
+    put(3, c[0] || 0, c[1] || 0, c[2] || 0, tile);
   }
 }
 const boxMin = new Float32Array(MAX_BOXES * 4);
@@ -45,7 +47,7 @@ const digData = new Float32Array(MAX_DIGS * 4);
 const printData = new Float32Array(MAX_PRINTS * 4);
 export const WEAR_GRID = 128;
 const wearData = new Uint8Array(WEAR_GRID * WEAR_GRID);
-const RECT_SLOTS = 40;
+const RECT_SLOTS = 48;
 const rectData = new Float32Array(RECT_SLOTS * 4);
 const atlasData = new Uint8Array(ATLAS * ATLAS * 4);
 
@@ -227,10 +229,14 @@ uniform vec3 uWear; // origin x, origin y (m), cell size (m)
 uniform sampler2D uTexRects;
 uniform sampler2D uAtlas;
 uniform sampler2D uShapes;
+uniform sampler2D uShapeNodes;
+uniform sampler2D uShapeIndex;
 uniform int uShapeCount;
-#if TREE
+uniform int uShapeNodeCount;
+uniform int uLooseShapes;
+/*@tree*/
 uniform sampler2D uNodes;
-#endif
+/*@tree*/
 out vec4 fragColor;
 
 float gFoot = 0.0;
@@ -247,10 +253,16 @@ vec3 tiled(int tile, vec2 uv, float perMeter, vec3 fallback) {
   return mix(near, mean, smoothstep(2.0, 3.0, lod) * 0.5);
 }
 
-vec3 sphereAlbedo(vec3 n, int i, vec3 fallback) {
+vec3 sphereAlbedo(vec3 n, float radius, int i, vec3 fallback, float packed) {
+  int material = int(packed);
+  int tile = material > 0 ? material : i;
   float u = atan(n.z, n.x) * 0.15915494309189535 + 0.5;
   float v = asin(clamp(n.y, -1.0, 1.0)) * 0.3183098861837907 + 0.5;
-  return tiled(i, vec2(u, v), 0.25, fallback);
+  vec2 uv = vec2(u, v);
+  if (material > 0) uv *= max(radius, 0.04) * 8.0;
+  vec3 swatch = tiled(tile, uv, 0.35, fallback);
+  if (material <= 0) return swatch;
+  return clamp(swatch * (fallback + vec3(0.35)), 0.0, 1.0);
 }
 
 float hash21(vec2 p) {
@@ -498,9 +510,52 @@ bool sphereHit(vec3 ro, vec3 rd, vec4 sphere, out float t) {
   return t >= 0.0;
 }
 
-void considerShapes(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout vec3 bestN, inout vec3 bestRgb, inout float bestRef, inout bool found) {
-  for (int i = 0; i < ${MAX_SHAPES}; i++) {
-    if (i >= uShapeCount) return;
+vec3 shapeAlbedo(int kind, vec3 p, vec3 n, vec3 a, vec3 b, vec3 c, vec3 rgb, float tileId, float rad) {
+  int tile = int(tileId + 0.5);
+  if (tile <= 0) return rgb;
+  vec2 uv;
+  if (kind == 6) {
+    vec3 e1 = b - a;
+    vec3 e2 = c - a;
+    float e11 = dot(e1, e1);
+    float e12 = dot(e1, e2);
+    float e22 = dot(e2, e2);
+    vec3 w = p - a;
+    float den = max(e11 * e22 - e12 * e12, 1.0e-6);
+    uv = vec2(dot(w, e1) * e22 - dot(w, e2) * e12, dot(w, e2) * e11 - dot(w, e1) * e12) / den;
+    uv *= max(length(e1), length(e2)) * 4.0;
+  } else if (kind == 3) {
+    vec3 ap = abs(n);
+    uv = (ap.z >= ap.x && ap.z >= ap.y ? p.xy : (ap.x >= ap.y ? p.yz : p.xz)) * 3.0;
+  } else {
+    vec3 ba = b - a;
+    float baba = max(dot(ba, ba), 1.0e-6);
+    float along = dot(p - a, ba) / baba;
+    float len = sqrt(baba);
+    vec3 axis = ba / len;
+    vec3 rel = p - (a + ba * along);
+    vec3 tmp = abs(axis.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 side = normalize(cross(axis, tmp));
+    vec3 upv = cross(side, axis);
+    uv = vec2(atan(dot(rel, upv), dot(rel, side)) * 0.15915494 * max(rad, 0.02) * 14.0, along * len * 5.0);
+  }
+  return clamp(tiled(tile, uv, 2.2, rgb) * (rgb + vec3(0.35)), 0.0, 1.0);
+}
+
+bool shapeBox(vec3 ro, vec3 rd, vec3 c, float h, float limit) {
+  vec3 inv = vec3(rd.x == 0.0 ? 1e30 : 1.0 / rd.x, rd.y == 0.0 ? 1e30 : 1.0 / rd.y, rd.z == 0.0 ? 1e30 : 1.0 / rd.z);
+  vec3 t1 = (c - h - ro) * inv;
+  vec3 t2 = (c + h - ro) * inv;
+  vec3 tmin3 = min(t1, t2);
+  vec3 tmax3 = max(t1, t2);
+  float tEnter = max(max(tmin3.x, tmin3.y), tmin3.z);
+  float tExit = min(min(tmax3.x, tmax3.y), tmax3.z);
+  return tExit >= max(tEnter, 0.0) && tEnter < limit;
+}
+
+void considerOne(int i, vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout vec3 bestN, inout vec3 bestRgb, inout float bestRef, inout bool found) {
+  if (i < 0 || i >= uShapeCount) return;
+  float mark = bestT;
     vec4 row0 = texelFetch(uShapes, ivec2(i, 0), 0);
     vec4 row1 = texelFetch(uShapes, ivec2(i, 1), 0);
     vec4 row2 = texelFetch(uShapes, ivec2(i, 2), 0);
@@ -515,11 +570,11 @@ void considerShapes(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout
     if (kind == 1 || kind == 2) {
       vec3 pn = normalize(b);
       float denom = dot(rd, pn);
-      if (abs(denom) < 1.0e-6) continue;
+      if (abs(denom) < 1.0e-6) return;
       float t = dot(a - ro, pn) / denom;
-      if (t <= 0.02 || t >= bestT) continue;
+      if (t <= 0.02 || t >= bestT) return;
       vec3 at = ro + rd * t;
-      if (kind == 2 && dot(at - a, at - a) > rad * rad) continue;
+      if (kind == 2 && dot(at - a, at - a) > rad * rad) return;
       bestT = t;
       bestP = at;
       bestN = denom > 0.0 ? -pn : pn;
@@ -534,9 +589,9 @@ void considerShapes(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout
       vec3 tsM = max(t1, t2);
       float tmin = max(max(tsm.x, tsm.y), tsm.z);
       float tmaxv = min(min(tsM.x, tsM.y), tsM.z);
-      if (tmaxv < tmin) continue;
+      if (tmaxv < tmin) return;
       float t = tmin > 0.02 ? tmin : tmaxv;
-      if (t <= 0.02 || t >= bestT) continue;
+      if (t <= 0.02 || t >= bestT) return;
       vec3 p = (ro + rd * t) - a;
       vec3 ap = abs(p) / max(b, vec3(1.0e-4));
       vec3 n = vec3(0.0);
@@ -651,16 +706,16 @@ void considerShapes(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout
       vec3 e2 = c - a;
       vec3 pvec = cross(rd, e2);
       float det = dot(e1, pvec);
-      if (abs(det) < 1.0e-6) continue;
+      if (abs(det) < 1.0e-6) return;
       float invDet = 1.0 / det;
       vec3 tvec = ro - a;
       float u = dot(tvec, pvec) * invDet;
-      if (u < 0.0 || u > 1.0) continue;
+      if (u < 0.0 || u > 1.0) return;
       vec3 qvec = cross(tvec, e1);
       float v = dot(rd, qvec) * invDet;
-      if (v < 0.0 || u + v > 1.0) continue;
+      if (v < 0.0 || u + v > 1.0) return;
       float t = dot(e2, qvec) * invDet;
-      if (t <= 0.02 || t >= bestT) continue;
+      if (t <= 0.02 || t >= bestT) return;
       vec3 n = normalize(cross(e1, e2));
       if (dot(n, rd) > 0.0) n = -n;
       bestT = t;
@@ -670,6 +725,50 @@ void considerShapes(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout
       bestRef = ref;
       found = true;
     }
+  if (bestT < mark) bestRgb = shapeAlbedo(kind, bestP, bestN, a, b, c, bestRgb, row3.w, rad);
+}
+
+void walkShapes(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout vec3 bestN, inout vec3 bestRgb, inout float bestRef, inout bool found) {
+  int stack[96];
+  int sp = 1;
+  stack[0] = 0;
+  for (int step = 0; step < 96; step++) {
+    if (sp <= 0) break;
+    sp -= 1;
+    int id = stack[sp];
+    vec4 box = texelFetch(uShapeNodes, ivec2(0, id), 0);
+    vec4 meta = texelFetch(uShapeNodes, ivec2(1, id), 0);
+    if (meta.y < 0.5 || !shapeBox(ro, rd, box.xyz, box.w, bestT)) continue;
+    if (meta.x < 0.0) {
+      int len = int(meta.y + 0.5);
+      int start = int(meta.z + 0.5);
+      for (int k = 0; k < 16; k++) {
+        if (k >= len) break;
+        considerOne(int(texelFetch(uShapeIndex, ivec2(start + k, 0), 0).x + 0.5), ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found);
+      }
+    } else {
+      int child = int(meta.x + 0.5);
+      for (int k = 0; k < 8; k++) {
+        vec4 cbox = texelFetch(uShapeNodes, ivec2(0, child + k), 0);
+        vec4 cm = texelFetch(uShapeNodes, ivec2(1, child + k), 0);
+        if (cm.y > 0.5 && shapeBox(ro, rd, cbox.xyz, cbox.w, bestT) && sp < 96) stack[sp++] = child + k;
+      }
+    }
+  }
+}
+
+void considerShapes(vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, inout vec3 bestN, inout vec3 bestRgb, inout float bestRef, inout bool found) {
+  if (uShapeNodeCount > 0) {
+    for (int i = 0; i < 4; i++) {
+      if (i >= uLooseShapes) break;
+      considerOne(i, ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found);
+    }
+    walkShapes(ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found);
+    return;
+  }
+  for (int i = 0; i < ${SHAPE_LINEAR}; i++) {
+    if (i >= uShapeCount) return;
+    considerOne(i, ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found);
   }
 }
 
@@ -684,7 +783,7 @@ bool shapeBlocks(vec3 ro, vec3 rd, float limit) {
   return found;
 }
 
-#if TREE
+/*@tree*/
 bool nodeBox(vec3 ro, vec3 rd, vec3 c, float h, float limit) {
   vec3 inv = vec3(rd.x == 0.0 ? 1e30 : 1.0 / rd.x, rd.y == 0.0 ? 1e30 : 1.0 / rd.y, rd.z == 0.0 ? 1e30 : 1.0 / rd.z);
   vec3 t1 = (c - h - ro) * inv;
@@ -706,8 +805,8 @@ void takeSphere(int i, vec3 ro, vec3 rd, inout float bestT, inout vec3 bestP, in
   bestN = normalize(bestP - sphere.xyz);
   gFoot = t * uFoot * float(bounce + 1);
   vec4 col = texelFetch(uSphereColor, ivec2(i, 0), 0);
-  bestRgb = sphereAlbedo(bestN, i, col.rgb);
-  bestRef = col.a;
+  bestRgb = sphereAlbedo(bestN, sphere.w, i, col.rgb, col.a);
+  bestRef = fract(col.a);
   found = true;
 }
 
@@ -788,7 +887,7 @@ bool treeBlocks(vec3 sro, vec3 ld, float lightT) {
   }
   return false;
 }
-#endif
+/*@tree*/
 
 bool blocked(vec3 from, vec3 rd) {
   float t;
@@ -799,15 +898,16 @@ bool blocked(vec3 from, vec3 rd) {
     if (boxHit(from, rd, bmin, bmax, t) && t < 80.0) return true;
   }
   if (uShapeCount > 0 && shapeBlocks(from, rd, 80.0)) return true;
-#if TREE
+/*@tree*/
   if (treeBlocks(from, rd, 80.0)) return true;
-#else
+/*@tree*/
+/*@line*/
   for (int i = 0; i < ${MAX_SPHERES}; i++) {
     if (i >= uSpheres) break;
     vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
     if (sphereHit(from, rd, sphere, t) && t < 80.0) return true;
   }
-#endif
+/*@line*/
   return false;
 }
 
@@ -936,9 +1036,10 @@ void main() {
       found = true;
     }
     if (uShapeCount > 0) considerShapes(ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found);
-#if TREE
+/*@tree*/
     walkSpheres(ro, rd, bestT, bestP, bestN, bestRgb, bestRef, found, bounce);
-#else
+/*@tree*/
+/*@line*/
     for (int i = 0; i < ${MAX_SPHERES}; i++) {
       if (i >= uSpheres) break;
       vec4 sphere = texelFetch(uSphereTex, ivec2(i, 0), 0);
@@ -948,11 +1049,11 @@ void main() {
       bestN = normalize(bestP - sphere.xyz);
       gFoot = t * uFoot * float(bounce + 1);
       vec4 col = texelFetch(uSphereColor, ivec2(i, 0), 0);
-      bestRgb = sphereAlbedo(bestN, i, col.rgb);
-      bestRef = col.a;
+      bestRgb = sphereAlbedo(bestN, sphere.w, i, col.rgb, col.a);
+      bestRef = fract(col.a);
       found = true;
     }
-#endif
+/*@line*/
     if (rd.z < -0.001) {
       float waterT = (0.0 - ro.z) / rd.z;
       vec3 waterP = ro + rd * waterT;
@@ -1043,8 +1144,10 @@ void main() {
   float depthCode = clamp(log2(1.0 + firstT) / 12.0, 0.0, 1.0);
   fragColor = vec4(present(accum), depthCode);
 }`;
+  const specialize = (source, tree) => source.replace(/\/\*@(tree|line)\*\/([\s\S]*?)\/\*@\1\*\//g, (_, tag, inner) => ((tag === "tree") === tree ? inner : ""));
+  const linearBody = specialize(fragBody, false);
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
-  const fs = compile(gl, gl.FRAGMENT_SHADER, fragBody);
+  const fs = compile(gl, gl.FRAGMENT_SHADER, linearBody);
   if (!vs || !fs) return fail(canvas, compile.lastLog || "shader");
   const program = gl.createProgram();
   gl.attachShader(program, vs);
@@ -1052,7 +1155,7 @@ void main() {
   gl.bindAttribLocation(program, 0, "aPos");
   gl.linkProgram(program);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return fail(canvas, gl.getProgramInfoLog(program) || "link");
-  const treeFs = compile(gl, gl.FRAGMENT_SHADER, fragBody.replace("#version 300 es\n", "#version 300 es\n#define TREE 1\n"));
+  const treeFs = compile(gl, gl.FRAGMENT_SHADER, specialize(fragBody, true));
   let treeProgram = null;
   if (treeFs) {
     treeProgram = gl.createProgram();
@@ -1068,6 +1171,8 @@ void main() {
   let sphereTex;
   let sphereColorTex;
   let shapeTex;
+  let shapeNodeTex = null;
+  let shapeIndexTex = null;
   let nodeTex = null;
   let boxMinTex;
   let boxMaxTex;
@@ -1089,6 +1194,22 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SHAPES, 4, 0, gl.RGBA, gl.FLOAT, null);
+    shapeNodeTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE12);
+    gl.bindTexture(gl.TEXTURE_2D, shapeNodeTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, MAX_SHAPE_NODES, 0, gl.RGBA, gl.FLOAT, null);
+    shapeIndexTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE9);
+    gl.bindTexture(gl.TEXTURE_2D, shapeIndexTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SHAPES, 1, 0, gl.RGBA, gl.FLOAT, null);
     if (treeProgram) {
       nodeTex = gl.createTexture();
       gl.activeTexture(gl.TEXTURE15);
@@ -1126,10 +1247,30 @@ void main() {
     blitTexture(atlasData, WOOD_TILE, woodTexture());
     blitTexture(atlasData, GRASS_TILE, grassTexture());
     blitTexture(atlasData, ROCK_TILE, rockTexture());
+    blitTexture(atlasData, CLOTH_TILE, clothTexture());
+    blitTexture(atlasData, SKIN_TILE, skinTexture());
+    blitTexture(atlasData, BARK_TILE, barkTexture());
+    blitTexture(atlasData, HIDE_TILE, hideTexture());
+    blitTexture(atlasData, HORN_TILE, hornTexture());
+    blitTexture(atlasData, FEATHER_TILE, featherTexture());
+    blitTexture(atlasData, METAL_TILE, metalTexture());
+    blitTexture(atlasData, LEAF_TILE, leafTexture());
+    blitTexture(atlasData, SCALE_TILE, scaleTexture());
+    blitTexture(atlasData, HAIR_TILE, hairTexture());
     rectData.set(rectFor(SAND_TILE), SAND_TILE * 4);
     rectData.set(rectFor(WOOD_TILE), WOOD_TILE * 4);
     rectData.set(rectFor(GRASS_TILE), GRASS_TILE * 4);
     rectData.set(rectFor(ROCK_TILE), ROCK_TILE * 4);
+    rectData.set(rectFor(CLOTH_TILE), CLOTH_TILE * 4);
+    rectData.set(rectFor(SKIN_TILE), SKIN_TILE * 4);
+    rectData.set(rectFor(BARK_TILE), BARK_TILE * 4);
+    rectData.set(rectFor(HIDE_TILE), HIDE_TILE * 4);
+    rectData.set(rectFor(HORN_TILE), HORN_TILE * 4);
+    rectData.set(rectFor(FEATHER_TILE), FEATHER_TILE * 4);
+    rectData.set(rectFor(METAL_TILE), METAL_TILE * 4);
+    rectData.set(rectFor(LEAF_TILE), LEAF_TILE * 4);
+    rectData.set(rectFor(SCALE_TILE), SCALE_TILE * 4);
+    rectData.set(rectFor(HAIR_TILE), HAIR_TILE * 4);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, ATLAS, ATLAS, 0, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
     gl.generateMipmap(gl.TEXTURE_2D);
   } catch {
@@ -1353,7 +1494,7 @@ void main() {
           sphereColor[at] = object.color[0];
           sphereColor[at + 1] = object.color[1];
           sphereColor[at + 2] = object.color[2];
-          sphereColor[at + 3] = object.reflectivity || 0;
+          sphereColor[at + 3] = (object.texture ? 0 : (SHAPE_TILE[object.tile] || 0)) + (object.reflectivity || 0);
           if (object.texture) {
             if (spheres < SAND_TILE) {
               rectData.set(rectFor(spheres), spheres * 4);
@@ -1400,7 +1541,18 @@ void main() {
       }
       const listed = scene.shapes || [];
       for (let i = 0; i < listed.length; i++) takeShape(listed[i]);
+      let loose = 0;
+      for (let i = 0; i < shapes; i++) {
+        const item = shapeList[i];
+        if (!item || (item.kind !== "plane" && !(item.kind === "disk" && (item.r || 0) > 30))) continue;
+        if (i !== loose) {
+          shapeList[i] = shapeList[loose];
+          shapeList[loose] = item;
+        }
+        loose += 1;
+      }
       packShapeData(shapes);
+      const shapeNodes = packShapeTree(shapeList, shapes);
       const basis = cameraBasis(scene.camera);
       const steps = scene.prints || [];
       const shown = Math.min(steps.length, MAX_PRINTS);
@@ -1455,6 +1607,16 @@ void main() {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_SHAPES, 4, gl.RGBA, gl.FLOAT, shapeData);
       gl.uniform1i(u("uShapes"), 14);
       gl.uniform1i(u("uShapeCount"), shapes);
+      gl.uniform1i(u("uLooseShapes"), loose);
+      gl.activeTexture(gl.TEXTURE12);
+      gl.bindTexture(gl.TEXTURE_2D, shapeNodeTex);
+      if (shapeNodes > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, shapeNodes, gl.RGBA, gl.FLOAT, shapeNodeData);
+      gl.uniform1i(u("uShapeNodes"), 12);
+      gl.uniform1i(u("uShapeNodeCount"), shapeNodes);
+      gl.activeTexture(gl.TEXTURE9);
+      gl.bindTexture(gl.TEXTURE_2D, shapeIndexTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_SHAPES, 1, gl.RGBA, gl.FLOAT, shapeIndexData);
+      gl.uniform1i(u("uShapeIndex"), 9);
       if (useTree) {
         gl.activeTexture(gl.TEXTURE15);
         gl.bindTexture(gl.TEXTURE_2D, nodeTex);

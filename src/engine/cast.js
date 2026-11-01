@@ -1,5 +1,5 @@
 import { cross, dot, length } from "./math.js";
-import { holdRayObjects, raySphereRoot, visitRayTree } from "./octree.js";
+import { holdRayObjects, rayShapeRoot, raySphereRoot, shapeIsIndexed, visitRayTree, visitShapeTree } from "./octree.js";
 
 export { holdRayObjects };
 
@@ -343,9 +343,15 @@ export function cast(origin, direction, objects, miss = [0, 0, 0, 1]) {
       return { ...hit, object, color: object.color };
     });
   }
+  const shapeRoot = rayShapeRoot(objects);
+  if (shapeRoot >= 0) {
+    const shaped = visitShapeTree(origin, direction, shapeRoot, (object) => shapeHit(origin, direction, object));
+    if (shaped && (!best || shaped.t < best.t)) best = shaped;
+  }
   for (let i = 0; i < objects.length; i++) {
     const object = objects[i];
     if (root >= 0 && object.type === "sphere") continue;
+    if (shapeRoot >= 0 && shapeIsIndexed(object)) continue;
     const hit = intersect(origin, direction, object);
     if (!hit) continue;
     if (!best || hit.t < best.t) best = hit;

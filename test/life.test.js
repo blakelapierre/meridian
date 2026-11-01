@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { duneHeight, fauna, floraParts, groundLook, gullParts, HILL, standHeight } from "../src/sim/life.js";
+import { crabParts, duneHeight, fauna, floraParts, groundLook, gullParts, HILL, standHeight } from "../src/sim/life.js";
 
 test("hills reach about three body heights and a pit is still the floor", () => {
   let low = 99;
@@ -45,8 +45,17 @@ test("the crab steps away and the plants sit on the roll", () => {
   assert.ok(skink.parts.length >= 10);
   const goat = calm.find((animal) => animal.kind === "graze");
   assert.ok(goat.parts.length >= 12);
+  assert.ok(skink.parts.some((part) => part.tile === "scale"));
+  assert.ok(goat.parts.some((part) => part.tile === "horn"));
+  const legs = crabParts([0, 0, 0], 0, 0);
+  const stepped = crabParts([0, 0, 0], 0, 280);
+  const leg = (parts) => parts.find((part) => part.kind === "capsule" && part.r < 0.015);
+  assert.ok(leg(legs) && leg(stepped));
+  assert.ok(Math.hypot(leg(legs).b[0] - leg(stepped).b[0], leg(legs).b[2] - leg(stepped).b[2]) > 0.01);
   const plants = floraParts();
   assert.ok(plants.length >= 40);
+  assert.ok(plants.some((plant) => plant.tile === "leaf"));
+  assert.ok(plants.some((plant) => plant.tile === "bark"));
   let treeTop = 0;
   for (const plant of plants) {
     assert.ok(plant.at[2] > -0.5);
@@ -68,7 +77,9 @@ test("skipping meshes still places the same animals", () => {
 test("the gull has a wingspan, a beak, and a wingbeat", () => {
   const gull = fauna(0, [80, 80]).find((animal) => animal.kind === "gull");
   const later = gullParts(420);
-  assert.ok(gull.parts.length >= 24, gull.parts.length);
+  assert.ok(gull.parts.length >= 8, gull.parts.length);
+  assert.ok(gull.parts.some((part) => part.kind === "triangle"));
+  assert.ok(gull.parts.some((part) => part.kind === "capsule"));
   let reach = 0;
   for (const part of gull.parts) {
     reach = Math.max(reach, Math.hypot(part.at[0] - gull.at[0], part.at[1] - gull.at[1], part.at[2] - gull.at[2]));

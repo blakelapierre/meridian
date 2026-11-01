@@ -1,4 +1,7 @@
 import { lookDirection } from "./hands.js";
+import { shapeHit } from "../engine/cast.js";
+import { spanShape } from "./form.js?v=1";
+import { wornParts } from "./kit.js?v=1";
 
 export const CHASE = 3.4;
 export const SHOULDER = 0;
@@ -17,7 +20,7 @@ export const BODY_COLORS = {
 };
 
 function sphere(x, y, z, radius, color, self, extra = null) {
-  const part = { type: "sphere", origin: [x, y, z], radius, color, reflectivity: 0.04, self, body: self ? "self" : "player" };
+  const part = { type: "sphere", origin: [x, y, z], at: [x, y, z], radius, color, reflectivity: 0.04, self, body: self ? "self" : "player" };
   if (!extra) return part;
   if (extra.body) part.body = extra.body;
   if (extra.id) {
@@ -27,117 +30,153 @@ function sphere(x, y, z, radius, color, self, extra = null) {
     part.speech = extra.speech || "";
   }
   if (extra.texture) part.texture = true;
+  if (extra.tile) part.tile = extra.tile;
   return part;
 }
 
-// A standing or crouched figure. Cloth is the passed color. Head, hands, and feet are skin.
-// The crown stays under the third-person look so the crosshair still clears the body.
-const STAND = [
-  [0.04, 0.09, 0.05, 0.055, "skin"],
-  [0.04, -0.09, 0.05, 0.055, "skin"],
-  [0.01, 0.08, 0.26, 0.05, "cloth"],
-  [0.01, -0.08, 0.26, 0.05, "cloth"],
-  [0, 0.085, 0.48, 0.06, "cloth"],
-  [0, -0.085, 0.48, 0.06, "cloth"],
-  [0.02, 0.09, 0.7, 0.07, "cloth"],
-  [0.02, -0.09, 0.7, 0.07, "cloth"],
-  [0.02, 0, 0.86, 0.11, "cloth"],
-  [0.03, 0, 1.05, 0.12, "cloth"],
-  [0.04, 0, 1.24, 0.115, "cloth"],
-  [0.05, 0.16, 1.3, 0.055, "cloth"],
-  [0.05, -0.16, 1.3, 0.055, "cloth"],
-  [0.06, 0.2, 1.08, 0.045, "cloth"],
-  [0.06, -0.2, 1.08, 0.045, "cloth"],
-  [0.07, 0.22, 0.88, 0.038, "cloth"],
-  [0.07, -0.22, 0.88, 0.038, "cloth"],
-  [0.08, 0.23, 0.7, 0.032, "skin"],
-  [0.08, -0.23, 0.7, 0.032, "skin"],
-  [0.05, 0, 1.4, 0.042, "skin"],
-  [0.06, 0, 1.54, 0.1, "skin"],
-  [0.14, 0.03, 1.55, 0.018, "skin"],
-  [0.13, 0.035, 1.58, 0.014, "eye"],
-  [0.13, -0.035, 1.58, 0.014, "eye"],
-  [0.02, 0, 1.62, 0.085, "hair"],
-];
-
-const CROUCH = [
-  [0.08, 0.1, 0.045, 0.05, "skin"],
-  [0.08, -0.1, 0.045, 0.05, "skin"],
-  [0.2, 0.09, 0.18, 0.048, "cloth"],
-  [0.2, -0.09, 0.18, 0.048, "cloth"],
-  [0.06, 0.1, 0.32, 0.055, "cloth"],
-  [0.06, -0.1, 0.32, 0.055, "cloth"],
-  [0.04, 0, 0.46, 0.1, "cloth"],
-  [0.08, 0, 0.62, 0.105, "cloth"],
-  [0.1, 0, 0.78, 0.1, "cloth"],
-  [0.1, 0.15, 0.8, 0.045, "cloth"],
-  [0.1, -0.15, 0.8, 0.045, "cloth"],
-  [0.14, 0.2, 0.64, 0.038, "cloth"],
-  [0.14, -0.2, 0.64, 0.038, "cloth"],
-  [0.16, 0.22, 0.5, 0.03, "skin"],
-  [0.16, -0.22, 0.5, 0.03, "skin"],
-  [0.12, 0, 0.92, 0.038, "skin"],
-  [0.14, 0, 1.04, 0.085, "skin"],
-  [0.2, 0.03, 1.05, 0.016, "skin"],
-  [0.18, 0.03, 1.07, 0.012, "eye"],
-  [0.18, -0.03, 1.07, 0.012, "eye"],
-  [0.1, 0, 1.1, 0.07, "hair"],
-];
-
-export function playerParts(feet, yaw, crouch = false, { self = true, color = CLOTH, body = "", id = "", name = "", detail = "", speech = "" } = {}) {
-  const forwardX = Math.sin(yaw);
-  const forwardY = Math.cos(yaw);
-  const rightX = Math.cos(yaw);
-  const rightY = -Math.sin(yaw);
-  const extra = id ? { body: body || "person", id, name, detail, speech } : null;
-  const tone = { cloth: color, skin: SKIN, hair: HAIR, eye: EYE };
-  return (crouch ? CROUCH : STAND).map(([lf, lr, z, radius, slot]) => sphere(
-    feet[0] + forwardX * lf + rightX * lr,
-    feet[1] + forwardY * lf + rightY * lr,
-    feet[2] + z,
-    radius,
-    tone[slot],
-    self,
-    extra,
-  ));
+function world(feet, yaw, lf, lr, z) {
+  const fx = Math.sin(yaw);
+  const fy = Math.cos(yaw);
+  const rx = Math.cos(yaw);
+  const ry = -Math.sin(yaw);
+  return [feet[0] + fx * lf + rx * lr, feet[1] + fy * lf + ry * lr, feet[2] + z];
 }
 
-// The practice target. Arms out, sack head, ringed torso. Head stays above the chest line.
+const BOOT = [0.16, 0.11, 0.08, 1];
+
+// The knee sits forward of the hip-foot line so a step bends instead of stretching.
+function bendLeg(hip, foot, yaw, sign, thigh, shin) {
+  const max = thigh + shin - 0.015;
+  let fx = foot[0];
+  let fy = foot[1];
+  let fz = foot[2];
+  let dx = fx - hip[0];
+  let dy = fy - hip[1];
+  let dz = fz - hip[2];
+  let len = Math.hypot(dx, dy, dz) || 1e-4;
+  if (len > max) {
+    const horiz = Math.hypot(dx, dy) || 1;
+    const room = Math.sqrt(Math.max(0, max * max - dz * dz));
+    const scale = Math.min(1, room / horiz);
+    fx = hip[0] + dx * scale;
+    fy = hip[1] + dy * scale;
+    dx = fx - hip[0];
+    dy = fy - hip[1];
+    dz = fz - hip[2];
+    len = Math.hypot(dx, dy, dz) || 1e-4;
+  }
+  const ux = dx / len;
+  const uy = dy / len;
+  const uz = dz / len;
+  const along = (len * len + thigh * thigh - shin * shin) / (2 * len);
+  const height = Math.sqrt(Math.max(0, thigh * thigh - along * along));
+  let px = Math.sin(yaw) * 0.8 + Math.cos(yaw) * sign * 0.35;
+  let py = Math.cos(yaw) * 0.8 - Math.sin(yaw) * sign * 0.35;
+  let pz = 0.2;
+  const dot = px * ux + py * uy + pz * uz;
+  px -= ux * dot;
+  py -= uy * dot;
+  pz -= uz * dot;
+  const plen = Math.hypot(px, py, pz) || 1;
+  return {
+    knee: [
+      hip[0] + ux * along + (px / plen) * height,
+      hip[1] + uy * along + (py / plen) * height,
+      hip[2] + uz * along + (pz / plen) * height,
+    ],
+    foot: [fx, fy, fz],
+  };
+}
+
+// Capsules for the limbs and trunk, spheres for the head. A stride lifts one foot
+// and swings the opposite hand. The crown stays under the third-person look.
+export function playerParts(feet, yaw, crouch = false, { self = true, color = CLOTH, body = "", id = "", name = "", detail = "", speech = "", gait = 0, stride = 0, worn = null } = {}) {
+  const extra = { self, body: id ? (body || "person") : (body || (self ? "self" : "player")), id, name, detail, speech };
+  const travel = Math.min(1, Math.max(0, stride));
+  const stepping = travel > 0.12;
+  const reach = stepping ? 0.3 * travel : 0.03;
+  const hop = stepping ? 0.1 * travel : 0;
+  const bob = stepping ? -Math.abs(Math.sin(gait)) * 0.03 * travel : 0;
+  const parts = [];
+  const addLimb = (kind, a, b, r, tone) => parts.push(spanShape(kind, a, b, r, tone, extra));
+  const addSphere = (lf, lr, z, radius, tone, tile = "") => {
+    const p = world(feet, yaw, lf, lr, z);
+    parts.push(sphere(p[0], p[1], p[2], radius, tone, self, tile ? { ...extra, tile } : extra));
+  };
+  const side = (sign) => {
+    const phase = gait + (sign > 0 ? 0 : Math.PI);
+    const s = Math.sin(phase);
+    const lift = Math.max(0, Math.cos(phase));
+    if (crouch) {
+      const hip = world(feet, yaw, 0.04, sign * 0.1, 0.46);
+      const knee = world(feet, yaw, 0.2 + sign * s * reach, sign * 0.1, 0.22);
+      const foot = world(feet, yaw, 0.3 + sign * s * reach * 1.6, sign * 0.1, 0.045 + lift * hop * 0.45);
+      addLimb("capsule", hip, knee, 0.055, color);
+      addLimb("capsule", knee, foot, 0.042, BOOT);
+      const shoulder = world(feet, yaw, 0.12, sign * 0.16, 0.78);
+      const hand = world(feet, yaw, 0.22 - sign * s * reach, sign * 0.22, 0.46);
+      addLimb("capsule", shoulder, hand, 0.036, color);
+      parts.push(sphere(hand[0], hand[1], hand[2], 0.028, SKIN, self, { ...extra, tile: "skin" }));
+    } else {
+      const hip = world(feet, yaw, 0.02, sign * 0.09, 0.8 + bob);
+      const wanted = world(feet, yaw, s * reach, sign * 0.09, 0.04 + lift * hop);
+      const posed = bendLeg(hip, wanted, yaw, sign, 0.42, 0.4);
+      addLimb("capsule", hip, posed.knee, 0.058, color);
+      addLimb("capsule", posed.knee, posed.foot, 0.042, BOOT);
+      const shoulder = world(feet, yaw, 0.03, sign * 0.18, 1.3 + bob);
+      const hand = world(feet, yaw, 0.06 - s * reach * 0.75, sign * 0.2, 0.58 + bob);
+      addLimb("capsule", shoulder, hand, 0.036, color);
+      parts.push(sphere(hand[0], hand[1], hand[2], 0.03, SKIN, self, { ...extra, tile: "skin" }));
+    }
+  };
+  side(1);
+  side(-1);
+  if (crouch) {
+    addLimb("capsule", world(feet, yaw, 0.05, 0, 0.5), world(feet, yaw, 0.14, 0, 0.86), 0.1, color);
+    addSphere(0.16, 0, 1.02, 0.084, SKIN, "skin");
+    addSphere(0.2, 0.03, 1.04, 0.016, SKIN, "skin");
+    addSphere(0.19, 0.032, 1.06, 0.012, EYE);
+    addSphere(0.19, -0.032, 1.06, 0.012, EYE);
+    addSphere(0.12, 0, 1.1, 0.062, HAIR, "hair");
+  } else {
+    addLimb("capsule", world(feet, yaw, 0.0, 0, 0.78 + bob), world(feet, yaw, 0.04, 0, 1.32 + bob), 0.11, color);
+    addSphere(0.06, 0, 1.52 + bob, 0.098, SKIN, "skin");
+    addSphere(0.13, 0.03, 1.54 + bob, 0.016, SKIN, "skin");
+    addSphere(0.125, 0.034, 1.57 + bob, 0.013, EYE);
+    addSphere(0.125, -0.034, 1.57 + bob, 0.013, EYE);
+    addSphere(0.02, 0, 1.6 + bob, 0.078, HAIR, "hair");
+  }
+  let thigh = false;
+  for (const part of parts) {
+    if (part.kind === "capsule" && part.r >= 0.09) part.bulk = 4;
+    else if (part.type === "sphere" && part.radius >= 0.08) part.bulk = 3;
+    else if (!thigh && part.kind === "capsule" && part.r >= 0.05 && part.r < 0.08) {
+      part.bulk = 2;
+      thigh = true;
+    }
+    if (part.kind === "capsule" && !part.tile) part.tile = part.r > 0.039 && part.r < 0.05 ? "hide" : "cloth";
+  }
+  if (worn) for (const piece of wornParts(feet, yaw, crouch, worn, extra)) parts.push(piece);
+  return parts;
+}
+
 const DUMMY_RED = [0.86, 0.22, 0.18, 1];
 const DUMMY_SACK = [0.82, 0.74, 0.58, 1];
 const DUMMY_WOOD = [0.4, 0.28, 0.16, 1];
 
-export function dummyParts(at) {
-  const yaw = 0;
-  const layout = [
-    [0, 0, 0.16, 0.06, DUMMY_WOOD, false],
-    [0, 0, 0.42, 0.05, DUMMY_WOOD, false],
-    [0, 0, 0.7, 0.16, DUMMY_RED, false],
-    [0, 0, 0.92, 0.2, DUMMY_RED, true],
-    [0, 0.34, 0.9, 0.045, DUMMY_WOOD, false],
-    [0, -0.34, 0.9, 0.045, DUMMY_WOOD, false],
-    [0, 0.5, 0.9, 0.035, DUMMY_SACK, false],
-    [0, -0.5, 0.9, 0.035, DUMMY_SACK, false],
-    [0, 0, 1.16, 0.05, DUMMY_WOOD, false],
-    [0, 0, 1.32, 0.11, DUMMY_SACK, false],
+export function dummyParts(at, nowMs = 0) {
+  const wood = { body: "dummy", tile: "wood" };
+  const wave = Math.sin(nowMs / 650) * 0.16;
+  const post = spanShape("cylinder", [at[0], at[1], at[2] + 0.02], [at[0], at[1], at[2] + 0.62], 0.045, DUMMY_WOOD, wood);
+  const left = spanShape("cylinder", [at[0], at[1] + 0.12, at[2] + 0.9], [at[0], at[1] + 0.46, at[2] + 0.9 + wave], 0.032, DUMMY_WOOD, wood);
+  const right = spanShape("cylinder", [at[0], at[1] - 0.12, at[2] + 0.9], [at[0], at[1] - 0.46, at[2] + 0.9 - wave], 0.032, DUMMY_WOOD, wood);
+  const torso = sphere(at[0], at[1], at[2] + 0.92, 0.2, DUMMY_RED, false, { body: "dummy", texture: true });
+  const head = sphere(at[0], at[1], at[2] + 1.28, 0.11, DUMMY_SACK, false, { body: "dummy", tile: "hide" });
+  const hands = [
+    sphere(at[0], at[1] + 0.5, at[2] + 0.9 + wave, 0.04, DUMMY_SACK, false, { body: "dummy", tile: "hide" }),
+    sphere(at[0], at[1] - 0.5, at[2] + 0.9 - wave, 0.04, DUMMY_SACK, false, { body: "dummy", tile: "hide" }),
   ];
-  const forwardX = Math.sin(yaw);
-  const forwardY = Math.cos(yaw);
-  const rightX = Math.cos(yaw);
-  const rightY = -Math.sin(yaw);
-  return layout.map(([lf, lr, z, radius, color, texture]) => {
-    const part = sphere(
-      at[0] + forwardX * lf + rightX * lr,
-      at[1] + forwardY * lf + rightY * lr,
-      at[2] + z,
-      radius,
-      color,
-      false,
-    );
-    part.body = "dummy";
-    if (texture) part.texture = true;
-    return part;
-  });
+  return [post, left, right, torso, head, ...hands];
 }
 
 export function chaseOrigin(feet, yaw, pitch, crouch = false, distance = CHASE) {
@@ -243,6 +282,11 @@ export function frameCamera(feet, target, distanceHint = CHASE) {
 
 export function rayMisses(origin, dir, parts) {
   for (const part of parts) {
+    if (part.type === "shape") {
+      const hit = shapeHit(origin, dir, part);
+      if (hit && hit.t < 12) return false;
+      continue;
+    }
     const dx = part.origin[0] - origin[0];
     const dy = part.origin[1] - origin[1];
     const dz = part.origin[2] - origin[2];

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SPHERE_BUDGET } from "../src/render/gpu.js";
+import { MAX_SHAPE_BODIES, packShapeTree } from "../src/engine/octree.js";
 import { chaseOrigin, createCameraSpring, playerParts, rayMisses, stepCamera, stepLook } from "../src/sim/body.js";
 import { lookDirection } from "../src/sim/hands.js";
 import { buildScene } from "../src/render/scene.js";
@@ -40,7 +41,7 @@ test("the walk scene defaults to the eyes, and third person adds the body", () =
   assert.equal(first.objects.some((object) => object.self), false);
   const third = buildScene({ feet, yaw: 0, pitch: 0, atoll, width: 16, height: 9, view: "third" });
   assert.ok(third.camera.origin[1] < feet[1]);
-  assert.equal(third.objects.filter((object) => object.self).length, 25);
+  assert.equal(third.objects.filter((object) => object.self).length, 14);
   const watched = buildScene({
     feet: [0, 0, 0],
     yaw: 0,
@@ -53,7 +54,7 @@ test("the walk scene defaults to the eyes, and third person adds the body", () =
     others: [{ feet: [2, 0, 0], yaw: 0 }],
   });
   assert.equal(watched.objects.some((object) => object.self), false);
-  assert.equal(watched.objects.filter((object) => object.body === "player").length, 25);
+  assert.equal(watched.objects.filter((object) => object.body === "player").length, 14);
 });
 
 test("a sparse scene is a stand-in, not the full figures", () => {
@@ -64,7 +65,32 @@ test("a sparse scene is a stand-in, not the full figures", () => {
   assert.equal(thin.objects.filter((object) => object.self).length, 3);
   assert.equal(thin.objects.some((object) => object.body === "flora"), false);
   assert.ok(full.objects.some((object) => object.body === "flora"));
+  assert.ok(full.objects.some((object) => object.tile === "leaf"));
+  assert.ok(full.objects.some((object) => object.tile === "skin"));
   assert.ok(count(thin) * 4 < count(full), `${count(thin)} vs ${count(full)}`);
+});
+
+test("a stride lifts one foot and the trunk is a capsule", () => {
+  const feet = [0, 0, 0];
+  const mid = playerParts(feet, 0, false, { gait: 0, stride: 1 });
+  const planted = playerParts(feet, 0, false, { gait: Math.PI / 2, stride: 1 });
+  const rightFoot = (parts) => {
+    let best = null;
+    let z = 99;
+    for (const part of parts) {
+      if (part.kind !== "capsule") continue;
+      const end = part.a[2] < part.b[2] ? part.a : part.b;
+      if (end[0] <= 0 || end[2] >= z) continue;
+      z = end[2];
+      best = end;
+    }
+    return best;
+  };
+  assert.ok(mid.some((part) => part.kind === "capsule"));
+  const swing = rightFoot(mid);
+  const step = rightFoot(planted);
+  assert.ok(Math.abs(step[1] - swing[1]) > 0.05, `${swing[1]} vs ${step[1]}`);
+  assert.ok(swing[2] > step[2] + 0.03, `${swing[2]} vs ${step[2]}`);
 });
 
 test("the camera stretches behind a sudden move and then settles", () => {
@@ -95,4 +121,23 @@ test("the painter is one foveated pass with no near/far split", () => {
   assert.match(src, /float fovPeriod/);
   assert.match(src, /float fovRadius/);
   assert.match(src, /resolveFs/);
+});
+
+test("a town of figures fits the analytic shape budget", () => {
+  const third = buildScene({
+    feet: [-20, -157, 0],
+    yaw: 0,
+    pitch: 0,
+    atoll,
+    width: 16,
+    height: 9,
+    view: "third",
+    stride: 1,
+    gait: 1,
+    worn: ["cloth", "bit"],
+  });
+  const shapes = third.objects.filter((object) => object.type === "shape");
+  assert.ok(shapes.length <= MAX_SHAPE_BODIES, `${shapes.length} shapes, budget ${MAX_SHAPE_BODIES}`);
+  assert.ok(shapes.length > 40, shapes.length);
+  assert.ok(packShapeTree(shapes) > 0, "the shape tree did not pack");
 });
