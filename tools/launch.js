@@ -115,6 +115,8 @@ if (typeof document !== "undefined") {
     if (target.origin !== location.origin || !target.pathname.startsWith(ROOT + "tools/")) return;
     const hrefAttr = target.pathname + target.search;
     if (hrefAttr.startsWith(ROOT + "tools/archive")) return;
+    // The scale bench is its own page (local files plus the lighthouse). Do not wrap it in the three-frame check.
+    if (hrefAttr.startsWith(ROOT + "tools/scale")) return;
     event.preventDefault();
     const href = benchHref(hrefAttr, location.origin);
     const width = screen.availWidth;

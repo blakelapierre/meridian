@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { aiHrefs, benchHref, bootOrder, tiles, trio } from "../tools/launch.js";
 
 test("a check opens a primary, the other client, and a follow view", () => {
@@ -61,4 +62,29 @@ test("the primary pane is widescreen and the three panes do not overlap", () => 
   assert.ok(boxes[2].left + boxes[2].width <= 1920);
   assert.ok(boxes[2].top + boxes[2].height <= 1080);
   assert.ok(boxes[0].top + boxes[0].height <= 1080);
+});
+
+test("checks page: scale test is the local server and lighthouse, only the solo demo is GitHub Pages, every link is a new window", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const anchors = [...html.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]);
+  assert.ok(anchors.length >= 20);
+  for (const tag of anchors) {
+    assert.match(tag, /target="_blank"/, tag);
+    assert.match(tag, /rel="noopener"/, tag);
+  }
+  const hrefs = anchors.map((tag) => tag.match(/href="([^"]+)"/)[1]);
+  assert.deepEqual(
+    hrefs.filter((href) => href.includes("github.io")),
+    ["https://blakelapierre.github.io/meridian/tools/view/index.html?lighthouse=off"],
+  );
+  const scale = new URL(hrefs.find((href) => href.includes("/tools/scale/")));
+  assert.equal(scale.origin, "http://127.0.0.1:8080");
+  assert.equal(scale.pathname, "/tools/scale/index.html");
+  assert.equal(scale.searchParams.get("max"), "50");
+  assert.equal(scale.searchParams.get("lighthouse"), "ws://127.0.0.1:8787");
+  const launch = readFileSync(new URL("../tools/launch.js", import.meta.url), "utf8");
+  const skip = launch.indexOf('tools/archive');
+  const scaleSkip = launch.indexOf('tools/scale');
+  assert.ok(scaleSkip > skip);
+  assert.ok(scaleSkip < launch.indexOf("event.preventDefault()"));
 });
