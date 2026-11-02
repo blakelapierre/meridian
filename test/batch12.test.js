@@ -262,3 +262,8 @@ test("old refusals fade a day at a time and survive a save", () => {
   fadeDeeds(back, 2000 + 5 * REFUSE_FADE_MS);
   assert.deepEqual(back.get("x"), { told: 0, refused: 0 });
 });
+
+test("ground under a roof stays dry", () => {
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /if \(wet > 0\.0 && blocked\(p \+ vec3\(0\.0, 0\.0, 0\.08\), vec3\(0\.0, 0\.0, 1\.0\)\)\) return 0\.0;/);
+});

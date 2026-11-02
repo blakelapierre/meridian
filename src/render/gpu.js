@@ -958,10 +958,10 @@ float rainNow(vec3 p) {
 // toward +x at DECK_DRIFT m/s, so the rain that fell here Δ seconds ago is the rain over p - Δ·drift now.
 float wetAt(vec3 p) {
   float now = rainNow(p);
-  if (now >= 1.0) return now;
-  float recent = rainNow(p - vec3(30.0 * DECK_DRIFT, 0.0, 0.0)) * 0.65;
-  float older = rainNow(p - vec3(90.0 * DECK_DRIFT, 0.0, 0.0)) * 0.3;
-  return max(now, max(recent, older));
+  float wet = now >= 1.0 ? now : max(now, max(rainNow(p - vec3(30.0 * DECK_DRIFT, 0.0, 0.0)) * 0.65, rainNow(p - vec3(90.0 * DECK_DRIFT, 0.0, 0.0)) * 0.3));
+  // Dry under a roof: only paid for where it would otherwise be wet.
+  if (wet > 0.0 && blocked(p + vec3(0.0, 0.0, 0.08), vec3(0.0, 0.0, 1.0))) return 0.0;
+  return wet;
 }
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);

@@ -34,9 +34,13 @@ Under a raining deck you hear it: a soft high hiss around you every 1–2.5 s, l
 
 Under anything solid straight overhead, the near rain streaks and grey stop; the shader asks the same occluder query the sun shadow uses.
 
+## This pass (dry floor)
+
+Ground with anything solid straight above it stays dry: no darkening, no sheen. The roof check runs only where the ground would otherwise be wet.
+
 ## Next
 
-A roof you hear and a dry floor: the rain sound and wet ground still ignore a roof. Not in this build.
+A roof you hear: rain sound still ignores a roof; it should drum and muffle under one. Not in this build.
 
 ## Later
 
