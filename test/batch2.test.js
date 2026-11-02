@@ -46,7 +46,7 @@ test("landing counter shows on the body line once counted", () => {
   const skills = { jump: { value: 0 }, landing: { value: 0 } };
   assert.equal(landingNote(skills), "");
   countLanding(skills);
-  assert.equal(landingNote(skills), " land 1");
+  assert.equal(landingNote(skills), " land 1 soak 1");
 });
 
 test("debug toggle and phone Info can show #net in demo mode", () => {

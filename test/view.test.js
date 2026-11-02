@@ -33,7 +33,7 @@ test("the view paints the dummy at the pad", { skip: noChrome, timeout: 20000 },
   } finally {
     browser.kill("SIGKILL");
     await site.close();
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

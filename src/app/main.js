@@ -2,7 +2,8 @@ import { paintFrame } from "../engine/frame.js";
 import { mountFullscreen, mountTouch, wantsTouch } from "./touch.js?v=5";
 import { BOT_KEYS, createWander, stepWander } from "./bot.js?v=1";
 import { resetEverything } from "./reset.js?v=1";
-import { mountOnboard } from "./onboard.js?v=1";
+import { mountOnboard } from "./onboard.js?v=2";
+import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
 import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=4";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js?v=2";
@@ -14,7 +15,7 @@ import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../si
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=69";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=85";
-import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=5";
+import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
 import {
@@ -319,6 +320,8 @@ const fps = createFps();
 let slotChosen = false;
 const tourKey = TOUR_KEY;
 const tour = tourWanted ? createTour(tourSeen) : null;
+// The first goal follows the tour, once the tour is done.
+const goal = tour ? createGoal((() => { try { return JSON.parse(localStorage.getItem(GOAL_KEY) || "[]"); } catch { return []; } })()) : null;
 const tourFacts = { walked: 0, hits: 0, nearShots: 0, digs: 0, joined: false, mapOpen: false, position: null, yaw: 0 };
 let tourArmed = -2;
 let tourTurn = null;
@@ -1159,7 +1162,7 @@ document.querySelector("#reset")?.addEventListener("click", (event) => {
   const full = mountFullscreen();
   if (full) document.querySelector("#corner")?.append(full);
 }
-mountOnboard();
+const onboard = mountOnboard();
 if (lighthouseState === "offline") {
   const note = document.querySelector("#mpnote");
   if (note) {
@@ -2089,6 +2092,12 @@ function paintHint() {
     easeTourTurn(now);
   }
   let line = tour ? tourLine(tour, touchy, now) : "";
+  if (!line && goal && tour.index < 0) {
+    if (stepGoal(goal, { digs, eyesight: skills.eyesight.value }, now)) {
+      try { localStorage.setItem(GOAL_KEY, JSON.stringify(goalDone(goal))); } catch {}
+    }
+    line = goalLine(goal, touchy, now);
+  }
   if (!line && demo) {
     if (entryState.prompt && !entryState.joined) line = touchy ? `Tap E Use to join ${entryState.prompt}.` : `Press E to join ${entryState.prompt}.`;
     else if (!touchy && document.pointerLockElement !== canvas) line = "Click the picture to look. Esc gives the cursor back.";
@@ -2106,8 +2115,11 @@ function paintHint() {
       node.append(" ", button);
     }
   }
-  node.hidden = !line;
+  // One onboarding layer at a time: the how-to-play card wins over the tour line.
+  const cardUp = Boolean(onboard && !onboard.card.hidden);
+  node.hidden = !line || cardUp;
   canvas.dataset.hint = line;
+  canvas.dataset.onboard = cardUp ? "card" : line ? "hint" : "";
   canvas.dataset.tour = tour ? String(tour.index) : "";
   const fx = document.querySelector("#shotfx");
   if (fx && shotFlash.until && now > shotFlash.until) {

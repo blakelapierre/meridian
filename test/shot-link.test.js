@@ -36,8 +36,8 @@ test("two browsers sign a shot and agree it hits", { skip: blocked, timeout: 200
     browserB.kill("SIGKILL");
     await lighthouse.close();
     await site.close();
-    await rm(dirA, { recursive: true, force: true });
-    await rm(dirB, { recursive: true, force: true });
+    await rm(dirA, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(dirB, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

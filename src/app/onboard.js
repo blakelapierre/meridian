@@ -1,5 +1,6 @@
 // First-run "how to play" card. Shown once per device (localStorage), dismissible, and reopened
 // with the "?" button in the top-right corner. Skipped for harness pages (bots, iframes, stills).
+import { wantsTouch } from "./touch.js?v=5";
 export const ONBOARD_KEY = "meridian.onboard.v1";
 
 export const DESKTOP_TIPS = [
@@ -38,7 +39,7 @@ export function tipsFor(touch) {
 /** Builds the card and the "?" button. Returns { open, close, card, button } or null without a DOM. */
 export function mountOnboard({ doc = globalThis.document, win = globalThis.window, storage = globalThis.localStorage } = {}) {
   if (!doc?.createElement) return null;
-  const touch = () => doc.documentElement.classList.contains("touch");
+  const touch = () => doc.documentElement.classList.contains("touch") || wantsTouch(win || globalThis);
   const card = doc.createElement("section");
   card.id = "onboard";
   card.setAttribute("role", "dialog");
