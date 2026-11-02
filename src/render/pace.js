@@ -405,52 +405,57 @@ export function createTraceBudget(start = 40000) {
   };
 }
 
-// Motion resolution governor. While the view moves, resolution is steered by the real frame
-// time only: it holds while frames keep up, drops in gentle steps when they are actually over
-// budget (with hysteresis), climbs slowly when there is headroom, and keeps a floor of 0.5
-// unless frame rate is genuinely poor for a sustained stretch.
-export const MOTION_FLOOR = 0.5;
-export function createMotionGovernor({ floor = MOTION_FLOOR } = {}) {
+// Motion resolution governor. While the view moves, resolution stays as high as possible (up to
+// the still resolution) and only drops when measured frame rate would fall below minFps (default
+// 12, frame time ~83 ms) - not vsync. Drops are gentle and need 3 slow frames in a row; climbing
+// needs sustained headroom (frames under 0.75x the budget), so it doesn't oscillate near the line.
+export const MIN_FPS = 12;
+export const MOTION_FLOOR = 0.15;
+export const MINFPS_KEY = "meridian-minfps";
+export function minFpsFrom(param, stored) {
+  for (const v of [param, stored]) {
+    const n = Number(v);
+    if (v !== null && v !== undefined && v !== "" && Number.isFinite(n) && n >= 1 && n <= 120) return n;
+  }
+  return MIN_FPS;
+}
+export function createMotionGovernor({ minFps = MIN_FPS, floor = MOTION_FLOOR } = {}) {
   let scale = 1;
+  let top = 1;
   let ema = 0;
   let moving = false;
   let calm = 0;
-  let slow = 0;
   let cool = 0;
   let over = 0;
+  const budget = 1000 / Math.max(1, minFps);
   return {
     get scale() { return scale; },
-    get floor() { return slow >= 30 ? (ema > 100 ? 0.25 : 0.35) : floor; },
-    // Leaving motion forgets the history so the next move starts fresh.
+    get budget() { return budget; },
     rest() { moving = false; },
-    step({ gap = 0, refresh = 1000 / 60, start = 1 } = {}) {
-      const budget = Math.max(1000 / 120, Math.min(refresh || 1000 / 60, 1000 / 30));
+    // start: the resolution shown before moving (the max we aim to keep).
+    step({ gap = 0, start = 1 } = {}) {
       if (!moving) {
         moving = true;
-        scale = Math.max(this.floor, Math.min(1, start || 1));
-        ema = 0;
-        calm = 0;
-        slow = 0;
-        cool = 0;
-        over = 0;
+        top = Math.max(floor, Math.min(1, start || 1));
+        scale = top;
+        ema = 0; calm = 0; cool = 0; over = 0;
         return scale;
       }
-      if (!(gap > 0) || gap > 1000) return scale;
-      ema = ema ? ema * 0.8 + gap * 0.2 : gap;
-      slow = ema > 50 ? slow + 1 : ema < 33 ? 0 : slow;
+      if (!(gap > 0) || gap > 2000) return scale;
+      ema = ema ? ema * 0.7 + gap * 0.3 : gap;
       if (cool > 0) cool -= 1;
-      over = gap > budget * 1.2 ? over + 1 : 0;
-      if (ema > budget * 1.2 && over >= 3) {
+      over = gap > budget ? over + 1 : 0;
+      if (ema > budget && over >= 3) {
         calm = 0;
         if (!cool) {
-          scale *= Math.max(0.85, Math.sqrt(budget / ema));
-          cool = 3;
+          scale *= Math.max(0.8, Math.sqrt(budget * 0.9 / ema));
+          cool = 2;
         }
-      } else if (ema < budget * 1.05) {
+      } else if (ema < budget * 0.75) {
         calm += 1;
-        if (calm >= 10) scale *= 1.04;
+        if (calm >= 10) { scale *= 1.04; calm = 5; }
       } else calm = 0;
-      scale = Math.max(this.floor, Math.min(1, scale));
+      scale = Math.max(floor, Math.min(top, scale));
       return scale;
     },
   };
