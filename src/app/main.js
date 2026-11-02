@@ -18,7 +18,7 @@ import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=86";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
+import { cameraAccel, cameraSpeed, createPacer, createMotionGovernor, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=89";
 import {
   authority,
   bandage,
@@ -153,6 +153,8 @@ let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
 const picture = createPicturePace();
+const motionRes = createMotionGovernor();
+let lastShownScale = 1;
 let detailRays = 0;
 let rayBudget = 4000;
 let paintKind = "full";
@@ -3773,8 +3775,17 @@ if (params.get("still") !== "1") {
     const fraction = painter ? tracedFraction(sight, { aspect: camAspect, gaze: perception.focus, grid: 24 }) : 1;
     const frameBudget = settled ? STILL_FRAME_MS : Math.max(paced.refresh || decision.refresh || 16, 1000 / 30);
     const fit = traceBudget.scale({ displayW, displayH, fraction });
-    const pacedScale = painter && !extra ? (settled ? fit : Math.min(paced.scale, fit)) : paced.scale;
+    // Moving: resolution follows real frame time (motionRes), not the trace-cost heuristics, so a
+    // device that holds 60 fps keeps its resolution instead of collapsing on the first move.
+    let pacedScale;
+    if (painter && !extra && !settled) {
+      pacedScale = motionRes.step({ gap: decision.gap, refresh: paced.refresh || decision.refresh, start: lastShownScale });
+    } else {
+      if (settled) motionRes.rest();
+      pacedScale = painter && !extra ? fit : paced.scale;
+    }
     const finalScale = resCap > 0 ? Math.min(pacedScale, resCap) : pacedScale;
+    if (!extra) lastShownScale = finalScale;
     const trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
     // Trace cost is the extra frame time a trace adds over a present-only frame; it lands in the next gap.
     if (!extra && decision.gap > 0) {

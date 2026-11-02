@@ -404,3 +404,54 @@ export function createTraceBudget(start = 40000) {
     },
   };
 }
+
+// Motion resolution governor. While the view moves, resolution is steered by the real frame
+// time only: it holds while frames keep up, drops in gentle steps when they are actually over
+// budget (with hysteresis), climbs slowly when there is headroom, and keeps a floor of 0.5
+// unless frame rate is genuinely poor for a sustained stretch.
+export const MOTION_FLOOR = 0.5;
+export function createMotionGovernor({ floor = MOTION_FLOOR } = {}) {
+  let scale = 1;
+  let ema = 0;
+  let moving = false;
+  let calm = 0;
+  let slow = 0;
+  let cool = 0;
+  let over = 0;
+  return {
+    get scale() { return scale; },
+    get floor() { return slow >= 30 ? (ema > 100 ? 0.25 : 0.35) : floor; },
+    // Leaving motion forgets the history so the next move starts fresh.
+    rest() { moving = false; },
+    step({ gap = 0, refresh = 1000 / 60, start = 1 } = {}) {
+      const budget = Math.max(1000 / 120, Math.min(refresh || 1000 / 60, 1000 / 30));
+      if (!moving) {
+        moving = true;
+        scale = Math.max(this.floor, Math.min(1, start || 1));
+        ema = 0;
+        calm = 0;
+        slow = 0;
+        cool = 0;
+        over = 0;
+        return scale;
+      }
+      if (!(gap > 0) || gap > 1000) return scale;
+      ema = ema ? ema * 0.8 + gap * 0.2 : gap;
+      slow = ema > 50 ? slow + 1 : ema < 33 ? 0 : slow;
+      if (cool > 0) cool -= 1;
+      over = gap > budget * 1.2 ? over + 1 : 0;
+      if (ema > budget * 1.2 && over >= 3) {
+        calm = 0;
+        if (!cool) {
+          scale *= Math.max(0.85, Math.sqrt(budget / ema));
+          cool = 3;
+        }
+      } else if (ema < budget * 1.05) {
+        calm += 1;
+        if (calm >= 10) scale *= 1.04;
+      } else calm = 0;
+      scale = Math.max(this.floor, Math.min(1, scale));
+      return scale;
+    },
+  };
+}
