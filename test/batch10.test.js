@@ -34,3 +34,9 @@ test("gpu blit has the smooth edge-aware upscale wired to a uniform", () => {
   assert.match(main, /painter\?\.setSmoothing\?\.\(smoothUpscale\)/);
   assert.doesNotMatch(main, /trace\.width >= displayW - 4 \? "auto" : "pixelated"/);
 });
+
+test("atlas is rebound every draw so no render target sits on unit 7 (feedback loop)", () => {
+  const src = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(src, /gl\.activeTexture\(gl\.TEXTURE7\);\n\s*gl\.bindTexture\(gl\.TEXTURE_2D, atlasTex\);\n\s*if \(atlasDirty\)/);
+  assert.match(src, /const makeTarget = \(filter\) => \{\n\s*gl\.activeTexture\(gl\.TEXTURE0\);/);
+});

@@ -191,6 +191,8 @@ const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
 let smoothUpscale = true;
+// ?res=0.25: cap the render scale (testing the low-resolution look on fast machines).
+const resCap = Math.max(0, Math.min(1, Number(params.get("res")) || 0));
 try { smoothUpscale = smoothingFrom(location.search, window.localStorage); } catch { smoothUpscale = smoothingFrom(location.search, null); }
 painter?.setSmoothing?.(smoothUpscale);
 canvas.dataset.aa = smoothUpscale ? "1" : "0";
@@ -3771,7 +3773,8 @@ if (params.get("still") !== "1") {
     const fraction = painter ? tracedFraction(sight, { aspect: camAspect, gaze: perception.focus, grid: 24 }) : 1;
     const frameBudget = settled ? STILL_FRAME_MS : Math.max(paced.refresh || decision.refresh || 16, 1000 / 30);
     const fit = traceBudget.scale({ displayW, displayH, fraction });
-    const finalScale = painter && !extra ? (settled ? fit : Math.min(paced.scale, fit)) : paced.scale;
+    const pacedScale = painter && !extra ? (settled ? fit : Math.min(paced.scale, fit)) : paced.scale;
+    const finalScale = resCap > 0 ? Math.min(pacedScale, resCap) : pacedScale;
     const trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
     // Trace cost is the extra frame time a trace adds over a present-only frame; it lands in the next gap.
     if (!extra && decision.gap > 0) {

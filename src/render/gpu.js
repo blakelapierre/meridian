@@ -1310,6 +1310,7 @@ void main() {
   }
   let viewSize = null;
   const hold = [0, 1, 2].map(() => {
+    gl.activeTexture(gl.TEXTURE0);
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -1487,6 +1488,7 @@ void main() {
     if (full !== undefined) gl.uniform1f(u("uFull"), full ? 1 : 0);
   };
   const makeTarget = (filter) => {
+    gl.activeTexture(gl.TEXTURE0);
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
@@ -1618,9 +1620,11 @@ void main() {
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, WEAR_GRID, WEAR_GRID, gl.RED, gl.UNSIGNED_BYTE, wearData);
       }
       upload(6, rectTex, RECT_SLOTS, rectData);
+      // Rebind the atlas every draw: render targets created later may have taken unit 7, and
+      // sampling a target while drawing into it is a feedback loop (draw fails, black picture).
+      gl.activeTexture(gl.TEXTURE7);
+      gl.bindTexture(gl.TEXTURE_2D, atlasTex);
       if (atlasDirty) {
-        gl.activeTexture(gl.TEXTURE7);
-        gl.bindTexture(gl.TEXTURE_2D, atlasTex);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ATLAS, ATLAS, gl.RGBA, gl.UNSIGNED_BYTE, atlasData);
         gl.generateMipmap(gl.TEXTURE_2D);
         atlasDirty = false;
