@@ -85,3 +85,23 @@ test("friendliness is not only a number: a record of what passed between you", (
   assert.match(main, /noteDeed\(deeds, refusedDrag\.id, "refused"\)/);
   assert.match(main, /Math\.max\(0, \(friends\.get\(refusedDrag\.id\) \|\| 0\) \+ deedCost\("refused"\)\)/);
 });
+
+import { ROLL_TICKS, rollSpeed, startRoll } from "../src/sim/hands.js";
+
+test("a tucked landing rolls and keeps the run", () => {
+  assert.equal(startRoll(false, [8, 0, 0], 0), null);
+  assert.equal(startRoll(true, [1, 0, 0], 0), null, "a slow landing has nothing to keep");
+  const roll = startRoll(true, [7, 0, 0], 100);
+  assert.equal(rollSpeed(roll, 100 + ROLL_TICKS - 1), 7);
+  assert.equal(rollSpeed(roll, 100 + ROLL_TICKS), 0);
+  const hands = readFileSync(new URL("../src/sim/hands.js", import.meta.url), "utf8");
+  assert.match(hands, /const rolled = !airborne && input\.roll > 0 \? Math\.max\(speed, input\.roll\) : speed;/);
+  assert.match(hands, /wishPlanar\(input\.yaw, input\.forward \|\| 0, input\.strafe \|\| 0, rolled\)/);
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /roll: rollSpeed\(roll, tick\)/);
+});
+
+test("phone controls send crouch, so a tuck works on touch", () => {
+  const touch = readFileSync(new URL("../src/app/touch.js", import.meta.url), "utf8");
+  assert.match(touch, /\{ code: "ControlLeft", label: "Crouch", hold: true \}/);
+});

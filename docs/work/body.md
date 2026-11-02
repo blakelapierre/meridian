@@ -12,7 +12,7 @@ B uses a stick on a hurt leg and does not spend fiber. The stick lowers pain by 
 
 ## This pass
 
-A fall reads a soak you can change. Holding crouch as you land tucks: the soak is the fall count plus 2, capped at 8, which is a whole fall. The body line shows `soak M tuck` while crouch is held.
+A fall reads a soak you can change. Holding crouch as you land tucks: the soak is the fall count plus 2, capped at 8, which is a whole fall. The body line shows `soak M tuck` while crouch is held. A tucked landing faster than a crouch walk rolls: for 0.6 s you keep the speed you landed with (up to 9 m/s) instead of dropping to crouch pace. The phone's Crouch button holds the same key, so the tuck and the roll work on touch.
 
 ## Proves
 
@@ -20,7 +20,7 @@ A fall reads a soak you can change. Holding crouch as you land tucks: the soak i
 
 ## Next
 
-A roll that keeps the run. A tucked landing still stops you. Not in this build.
+A roll the third-person figure shows. The body still crouches through it. Not in this build.
 
 ## Later
 

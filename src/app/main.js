@@ -80,7 +80,7 @@ import { finCloud } from "../sim/cloud.js?v=1";
 import { haltFeet } from "../sim/town.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
-import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
+import { lookDirection, moveIntent, rollSpeed, startRoll, stepHands } from "../sim/hands.js?v=59";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=3";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=57";
@@ -400,6 +400,7 @@ let mapCenter = [0, -150];
 let mapDrag = null;
 const friends = new Map();
 const deeds = new Map();
+let roll = null;
 const vitals = createVitals();
 let loreNote = "";
 let brush = "dig";
@@ -3528,7 +3529,7 @@ if (params.get("still") !== "1") {
       }
       const moved = vitals.down > 0
         ? { jump: false, running: false }
-        : stepHands(world, player, stamina, sample, jump, skills.jump.value);
+        : stepHands(world, player, stamina, { ...sample, roll: rollSpeed(roll, tick) }, jump, skills.jump.value);
       settleLoose(world, (x, y) => standHeight(x, y, columnFloor(terrain.log.crust, x, y)));
       if (drifting && vitals.down <= 0) {
         const felt = cellWind.get(cellId(player.position[1]));
@@ -3647,7 +3648,9 @@ if (params.get("still") !== "1") {
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
       if (falling < -9 && player.position[2] <= (world.ground || 0) + 0.2) {
-        vitals.integrity = fallFromCount(vitals.integrity, falling, seedLanding(skills), keys.has("ControlLeft") || keys.has("ControlRight"));
+        const tuck = keys.has("ControlLeft") || keys.has("ControlRight");
+        vitals.integrity = fallFromCount(vitals.integrity, falling, seedLanding(skills), tuck);
+        roll = startRoll(tuck, player.velocity, tick) || roll;
         countLanding(skills);
       }
       claimSpecialty(skills);

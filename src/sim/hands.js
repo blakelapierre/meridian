@@ -45,7 +45,9 @@ export function stepHands(world, player, stamina, input, jump = null, jumpSkill 
     agility: input.agility || 0,
     limp: typeof input.limp === "number" ? input.limp : 1,
   });
-  const wish = wishPlanar(input.yaw, input.forward || 0, input.strafe || 0, speed);
+  // A roll out of a tucked landing keeps the speed you landed with while it lasts.
+  const rolled = !airborne && input.roll > 0 ? Math.max(speed, input.roll) : speed;
+  const wish = wishPlanar(input.yaw, input.forward || 0, input.strafe || 0, rolled);
   const accel = controlAcceleration(player.velocity, wish, airborne ? AIR_ACCEL : STOP_ACCEL);
   const running = !airborne && !!input.sprint && !input.crouch && speed > 5;
   if (!jump) {
@@ -55,4 +57,15 @@ export function stepHands(world, player, stamina, input, jump = null, jumpSkill 
     return { jump: leaving, speed, running };
   }
   return { ...stepLift(world, player, stamina, input, jump, jumpSkill, accel, airborne), speed, running };
+}
+
+// Roll out of a tucked landing: ROLL_TICKS of the landing speed (capped at sprint pace).
+export const ROLL_TICKS = 18;
+export function startRoll(tuck, velocity, tick) {
+  if (!tuck) return null;
+  const speed = Math.min(9, Math.hypot(velocity?.[0] || 0, velocity?.[1] || 0));
+  return speed > 2.2 ? { until: tick + ROLL_TICKS, speed } : null;
+}
+export function rollSpeed(roll, tick) {
+  return roll && tick < roll.until ? roll.speed : 0;
 }
