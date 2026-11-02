@@ -8,15 +8,31 @@ While you drag someone, they are drawn just ahead of you. Their client is sent o
 
 ## This pass
 
-The other person can refuse a drag. 4 sends it, and the drag stops.
+Friendliness is not only a number. Each person keeps a record of what passed between you: lore they told you, and drags they refused. A refused drag also costs 5, never below 0. The line reads `acquaintance 14 · told 2 · refused 1`.
 
 ## Proves
 
-`test/slice.test.js` covers the refusal.
+`test/slice.test.js` covers the refusal. `test/batch12.test.js` covers the record.
+
+## This pass (record)
+
+The record now stays on the device (`meridian-deeds`) and each new deed is sent to the person it is about. Selecting someone shows what they hold about you: "they hold told 2 refused 1".
+
+## This pass (guard)
+
+The record now changes how you answer: anyone who has refused you at least two more times than they have told you something gets no lore from you, until telling you things evens it out.
+
+## This pass (told why)
+
+The person you guard against sees it in the record line: "they hold refused 2 · no lore from them".
+
+## This pass (fade)
+
+Old refusals fade: one is forgiven for each day since the last refusal, applied when the saved record loads. A guard lifts on its own.
 
 ## Next
 
-Friendliness that is not only a number. Not in this build.
+A record the AI people keep: `ai-` actors neither note deeds nor guard. Not in this build.
 
 ## Later
 

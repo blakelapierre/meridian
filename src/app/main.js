@@ -6,7 +6,7 @@ import { mountOnboard } from "./onboard.js?v=2";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
 import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=4";
 import { hearStep, seaGain } from "../audio/cues.js";
-import { createListener } from "../audio/play.js?v=2";
+import { createListener } from "../audio/play.js?v=4";
 import { createAmbient, planAmbient } from "../audio/ambient.js";
 import { cueStyle, darkLift, exposureSkills, hearSource, sensePresence } from "../sim/hearing.js";
 import { skillLabel, tooltipFor } from "./skill-text.js";
@@ -14,7 +14,7 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=69";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=86";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=94";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -76,10 +76,11 @@ import {
   bloodDrop,
   trackFin,
 } from "../sim/hearth.js";
+import { finCloud, rainAt, rainWord, splashes, wetAt } from "../sim/cloud.js?v=5";
 import { haltFeet } from "../sim/town.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
-import { lookDirection, moveIntent, stepHands } from "../sim/hands.js?v=58";
+import { lookDirection, moveIntent, readStance, rollSpeed, stanceDue, stanceMessage, startRoll, stepHands } from "../sim/hands.js?v=60";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=3";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=57";
@@ -89,7 +90,7 @@ import { acceptWear, encodeWear } from "../net/wear.js?v=1";
 import { cellSize, contourDetail, contourLines, createSurvey, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
 import { agilityFactor } from "../sim/agility.js";
 import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
-import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
+import { deedCost, deedMessage, DEEDS_KEY, fadeDeeds, friendLine, guarded, packDeeds, readDeedMessage, theirLine, unpackDeeds, learnLore, friendTier, nextFriend, noteDeed, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
@@ -398,6 +399,22 @@ let mapFollow = true;
 let mapCenter = [0, -150];
 let mapDrag = null;
 const friends = new Map();
+const deeds = (() => { try { return fadeDeeds(unpackDeeds(JSON.parse(localStorage.getItem(DEEDS_KEY) || "{}"))); } catch { return new Map(); } })();
+const theirDeeds = new Map();
+// Record a deed about someone, keep it on this device, and tell them what you now hold.
+function recordDeed(id, kind) {
+  const rec = noteDeed(deeds, id, kind);
+  if (!rec) return null;
+  try { localStorage.setItem(DEEDS_KEY, JSON.stringify(packDeeds(deeds))); } catch { /* still kept this session */ }
+  for (const link of links) {
+    if (link.to !== id || link.ctrl?.readyState !== "open") continue;
+    try { link.ctrl.send(deedMessage(id, rec)); } catch { /* they learn it next time */ }
+  }
+  return rec;
+}
+let roll = null;
+// ?rain=0..1 forces the rain you see (for checking the picture); otherwise it is the deck overhead.
+const rainForced = (() => { const v = Number(new URLSearchParams(location.search).get("rain")); return new URLSearchParams(location.search).has("rain") && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : -1; })();
 const vitals = createVitals();
 let loreNote = "";
 let brush = "dig";
@@ -461,6 +478,7 @@ function stepAmbient() {
     listener: player.position,
     light: dayWord(tick),
     actors: otherActors().map((other) => other.feet),
+    rain: rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick),
   });
   for (const event of events) {
     const heard = hearSource(player.position, yaw, event.at, perception.senses.hearing, skills, event.category);
@@ -1319,8 +1337,17 @@ function otherActors() {
   return list;
 }
 
+const stances = new Map();
+let sentStance = null;
+function sendStance() {
+  const crouch = keys.has("ControlLeft") || keys.has("ControlRight") || rollSpeed(roll, tick) > 0;
+  if (!stanceDue(crouch, sentStance, tick)) return;
+  sentStance = { crouch, tick };
+  const text = stanceMessage(crouch);
+  for (const link of links) if (link.ctrl?.readyState === "open") try { link.ctrl.send(text); } catch { /* next refresh */ }
+}
 function drawnOthers() {
-  const list = otherActors();
+  const list = otherActors().map((actor) => (stances.get(actor.id)?.crouch ? { ...actor, crouch: true } : actor));
   if (!dragging || selection?.kind !== "player") return list;
   const dir = lookDirection(yaw, 0);
   return list.map((actor) => {
@@ -1438,7 +1465,8 @@ function sceneFor(sample, width, height) {
     feet: player.position,
     yaw: sample.yaw ?? yaw,
     pitch: sample.pitch ?? pitch,
-    crouch: !!sample.crouch,
+    // A roll shows: the figure stays balled up until the roll runs out.
+    crouch: !!sample.crouch || rollSpeed(roll, tick) > 0,
     tick,
     atoll,
     crust: terrain.log.crust,
@@ -2157,20 +2185,22 @@ function publish() {
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const fluxPiece = yard.pieces.find((piece) => piece.id === "fin");
-  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0))}` : "";
+  const shade = fluxPiece && !fluxPiece.broken ? finCloud(fluxPiece.at, tick) : 0;
+  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0) * (1 - shade))}${shade >= 0.1 ? " cloud" : ""}` : "";
   const finNote = (yard.finMetal || 0) > 0 ? ` · fin ${yard.finMetal}` : "";
   const bound = yard.bound ? peerDeed({ cell: yard.bound, holder: pubkeyHex(identity.pubkey), radius: 6 }, yard.grace) : null;
   const boundNote = bound ? ` · bound${bound.grace ? " grace" : ""}` : "";
   const legNote = (vitals.left < 100 || vitals.right < 100) ? ` · L${Math.ceil(vitals.left)} R${Math.ceil(vitals.right)}` : "";
-  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${landingNote(skills)}${legNote}${windNote}`;
+  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${landingNote(skills, keys.has("ControlLeft") || keys.has("ControlRight"))}${legNote}${windNote}`;
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}/${spoilCap(skills.mining.value)}` : "";
   const brushNote = slot === "bit" && brush !== "dig" ? ` · ${brush}` : "";
   const light = dayWord(tick);
-  const lightNote = ` · ${light}`;
+  const rainNow = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
+  const lightNote = ` · ${light}${rainWord(rainNow)}`;
   listener.setLevel(light === "night" ? 0.45 : light === "dawn" || light === "dusk" ? 0.7 : 1);
   const muteNote = listener.muted ? " · muted" : "";
   const friendNote = selection?.kind === "player" && friends.has(selection.id)
-    ? ` · ${friendTier(friends.get(selection.id))} ${friends.get(selection.id)}`
+    ? ` · ${friendLine(friends.get(selection.id), deeds.get(selection.id))}${theirLine(theirDeeds.get(selection.id)) ? ` · ${theirLine(theirDeeds.get(selection.id))}` : ""}`
     : "";
   const withYou = [...bonds.entries()].filter(([, state]) => state === "both").map(([id]) => id);
   const bondNote = withYou.length ? ` · with ${withYou.join(" ")}` : "";
@@ -2278,6 +2308,7 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   scene.prints = prints;
   scene.work = work;
   scene.time = tick / 30;
+  scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
   scene.gaze = gazeFor(
     scene.camera,
     eyeOf(sample),
@@ -2455,6 +2486,7 @@ function exchangeLore() {
     friends.set(other.id, score);
     if (bonds.get(other.id) === "ours" && (score >= 12 || other.id.startsWith("ai-"))) hearBond(bonds, other.id);
     if (dist > range) continue;
+    if (guarded(deeds.get(other.id))) continue;
     const offer = offerLore({
       skills: bag,
       friend: bondOpen(bonds, other.id, true) ? Math.max(score, 40) : score,
@@ -2537,6 +2569,7 @@ function onOps(bytes, from) {
     const heard = unpackLore(accepted);
     const learned = learnLore(survey, plate, heard, skillBag(), stamp, GEO_COLOR);
     if (from) friends.set(from, nextFriend(Math.max(friends.get(from) || 0, accepted.friend || 0), true));
+    if (from && (heard.ground?.length || heard.places?.length)) recordDeed(from, "told");
     let told = 0;
     for (const line of accepted.notes || []) {
       if (takeTold(notes, skillBag(), line, from || "", accepted.sig || 0)) told += 1;
@@ -2687,9 +2720,21 @@ async function openLink(to, offer, role) {
       report = "dragged";
       return;
     }
+    const stance = readStance(text);
+    if (stance) {
+      stances.set(to, stance);
+      return;
+    }
+    const deed = readDeedMessage(text);
+    if (deed && deed.about === meId) {
+      theirDeeds.set(to, deed);
+      return;
+    }
     const refusedDrag = readDragRefuse(text);
     if (refusedDrag && dragging && selection?.id === refusedDrag.id) {
       dragging = false;
+      recordDeed(refusedDrag.id, "refused");
+      friends.set(refusedDrag.id, Math.max(0, (friends.get(refusedDrag.id) || 0) + deedCost("refused")));
       report = "refused";
       return;
     }
@@ -3014,6 +3059,7 @@ let motionTick = -1;
 
 function publishPose() {
   if (followId) return;
+  sendStance();
   const pose = { tick, x: player.position[0], y: player.position[1], z: player.position[2], yaw, pitch };
   const packet = encodePosition(pose);
   let packetV2 = null;
@@ -3265,7 +3311,7 @@ if (params.get("still") !== "1") {
         for (const piece of yard.pieces) {
           if (piece.id !== "fin") continue;
           trackFin(piece, tick);
-          const gained = fluxMetal(tick, piece.yaw || 0, piece.broken);
+          const gained = fluxMetal(tick, piece.yaw || 0, piece.broken, finCloud(piece.at, tick));
           if (gained && finCredit(gained)) {
             yard.metal += gained;
             yard.finMetal = (yard.finMetal || 0) + gained;
@@ -3275,7 +3321,7 @@ if (params.get("still") !== "1") {
       if (tick % 30 === 0) {
         let rained = false;
         for (const pool of pools) {
-          const wet = rainPool(pool, tick);
+          const wet = rainPool(pool, tick, { deck: true });
           if (wet && wet.rain !== pool.rain) {
             pool.rain = wet.rain;
             rained = true;
@@ -3522,7 +3568,7 @@ if (params.get("still") !== "1") {
       }
       const moved = vitals.down > 0
         ? { jump: false, running: false }
-        : stepHands(world, player, stamina, sample, jump, skills.jump.value);
+        : stepHands(world, player, stamina, { ...sample, roll: rollSpeed(roll, tick) }, jump, skills.jump.value);
       settleLoose(world, (x, y) => standHeight(x, y, columnFloor(terrain.log.crust, x, y)));
       if (drifting && vitals.down <= 0) {
         const felt = cellWind.get(cellId(player.position[1]));
@@ -3592,6 +3638,8 @@ if (params.get("still") !== "1") {
       const stride = hearStep(stepAt, player.position, !!sample.sprint);
       stepAt = stride.at;
       hear(stride.cue);
+      // Wet ground splashes underfoot (same wetness the picture shows; src/sim/cloud.js wetAt).
+      if (stride.cue && splashes(wetAt(player.position[0], player.position[1], tick))) listener.ambient("splash", tick % 4, 0.5, { angle: 0, precise: false });
       stepWearAll();
       if (stride.cue) {
         stepWear(wear, player.position[0], player.position[1]);
@@ -3641,7 +3689,9 @@ if (params.get("still") !== "1") {
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
       if (falling < -9 && player.position[2] <= (world.ground || 0) + 0.2) {
-        vitals.integrity = fallFromCount(vitals.integrity, falling, seedLanding(skills));
+        const tuck = keys.has("ControlLeft") || keys.has("ControlRight");
+        vitals.integrity = fallFromCount(vitals.integrity, falling, seedLanding(skills), tuck);
+        roll = startRoll(tuck, player.velocity, tick) || roll;
         countLanding(skills);
       }
       claimSpecialty(skills);

@@ -18,6 +18,64 @@ export function nextFriend(score = 0, nearby = false) {
   return Math.min(100, score + 1);
 }
 
+// Friendliness is not only a number: each person keeps a short record of what passed between you.
+// "told" is lore they shared with you; "refused" is a drag they refused, which also costs 5.
+export const DEED_KINDS = ["told", "refused"];
+export function noteDeed(deeds, id, kind, nowMs = Date.now()) {
+  if (!deeds || !id || !DEED_KINDS.includes(kind)) return null;
+  const rec = deeds.get(id) || { told: 0, refused: 0 };
+  rec[kind] += 1;
+  if (kind === "refused") rec.since = nowMs;
+  deeds.set(id, rec);
+  return rec;
+}
+export function deedCost(kind) {
+  return kind === "refused" ? -5 : 0;
+}
+export function friendLine(score = 0, rec = null) {
+  const parts = [`${friendTier(score)} ${score}`];
+  if (rec?.told) parts.push(`told ${rec.told}`);
+  if (rec?.refused) parts.push(`refused ${rec.refused}`);
+  return parts.join(" · ");
+}
+
+export const DEEDS_KEY = "meridian-deeds";
+export function packDeeds(deeds) {
+  const out = {};
+  for (const [id, rec] of deeds || []) out[id] = { told: rec.told | 0, refused: rec.refused | 0, ...(rec.since ? { since: rec.since } : {}) };
+  return out;
+}
+export function unpackDeeds(raw) {
+  const deeds = new Map();
+  if (!raw || typeof raw !== "object") return deeds;
+  for (const [id, rec] of Object.entries(raw)) {
+    if (!rec || typeof rec !== "object") continue;
+    deeds.set(id, { told: Math.max(0, rec.told | 0), refused: Math.max(0, rec.refused | 0), ...(Number(rec.since) > 0 ? { since: Number(rec.since) } : {}) });
+  }
+  return deeds;
+}
+// The record you keep of someone is sent to them, so they see what you hold against them.
+export function deedMessage(about, rec) {
+  if (!about || !rec) return "";
+  return JSON.stringify({ t: "deed", about, told: rec.told | 0, refused: rec.refused | 0 });
+}
+export function readDeedMessage(text) {
+  try {
+    const m = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
+    if (m?.t !== "deed" || !m.about) return null;
+    return { about: String(m.about), told: Math.max(0, m.told | 0), refused: Math.max(0, m.refused | 0) };
+  } catch {
+    return null;
+  }
+}
+export function theirLine(rec) {
+  if (!rec || !(rec.told || rec.refused)) return "";
+  const parts = [];
+  if (rec.told) parts.push(`told ${rec.told}`);
+  if (rec.refused) parts.push(`refused ${rec.refused}`);
+  return `they hold ${parts.join(" ")}${guarded(rec) ? " · no lore from them" : ""}`;
+}
+
 export function friendTier(score = 0) {
   if (score < 0) return "hostile";
   if (score >= 40) return "friend";
@@ -98,4 +156,25 @@ export function learnLore(survey, plate, offer, skills, stamp, colors) {
     if (survey.places.size > size) learned.places += 1;
   }
   return learned;
+}
+
+// A record that changes how you answer: someone who has refused you at least twice more than they
+// have told you anything gets no lore from you until they make it up.
+export const GUARD_MARGIN = 2;
+export function guarded(rec) {
+  return !!rec && (rec.refused | 0) - (rec.told | 0) >= GUARD_MARGIN;
+}
+
+// Old refusals fade: one is forgiven per REFUSE_FADE_MS since the last, so a guard does not last forever.
+export const REFUSE_FADE_MS = 24 * 60 * 60 * 1000;
+export function fadeDeeds(deeds, nowMs = Date.now()) {
+  for (const rec of deeds.values()) {
+    if (!rec.refused || !rec.since) continue;
+    const gone = Math.floor((nowMs - rec.since) / REFUSE_FADE_MS);
+    if (gone <= 0) continue;
+    rec.refused = Math.max(0, rec.refused - gone);
+    rec.since += gone * REFUSE_FADE_MS;
+    if (!rec.refused) delete rec.since;
+  }
+  return deeds;
 }

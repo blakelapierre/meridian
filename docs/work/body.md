@@ -12,15 +12,23 @@ B uses a stick on a hurt leg and does not spend fiber. The stick lowers pain by 
 
 ## This pass
 
-Blood loss drops the body. Empty blood sets the same eight-second down a killing blow does.
+A fall reads a soak you can change. Holding crouch as you land tucks: the soak is the fall count plus 2, capped at 8, which is a whole fall. The body line shows `soak M tuck` while crouch is held. A tucked landing faster than a crouch walk rolls: for 0.6 s you keep the speed you landed with (up to 9 m/s) instead of dropping to crouch pace. The phone's Crouch button holds the same key, so the tuck and the roll work on touch.
 
 ## Proves
 
-`test/slice.test.js` covers the drop.
+`test/batch12.test.js` covers the tuck.
+
+## This pass (roll shows)
+
+The third-person figure stays crouched for the length of the roll, so you see it ball up and carry through.
+
+## This pass (stance on the wire)
+
+Crouch, tuck and roll go to peers as a small `stance` message, sent when it changes and every 3 s, so others see you ball up.
 
 ## Next
 
-A fall that reads a soak you can change. Not in this build.
+A roll that tumbles: the figure crouches but does not turn over. Not in this build.
 
 ## Later
 

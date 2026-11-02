@@ -90,6 +90,20 @@ export function exposureFor(sun) {
 }
 // Shared GLSL for perception-driven foveation; mirrors falloff/refreshPeriod/blockLevel in src/sim/perception.js.
 // Angles are measured in camera space, so only the field of view and aspect are needed.
+// Past this fovea fade the trace stops after EDGE_LAST_BOUNCE reflections (the edge drops the second bounce).
+export const EDGE_FADE = "0.5";
+export const EDGE_LAST_BOUNCE = 1;
+export function edgeBounces(fade, full = false) {
+  return !full && fade > Number(EDGE_FADE) ? EDGE_LAST_BOUNCE : 4;
+}
+// JS mirror of fovT's screen distance (radians-equivalent), for tests and tools.
+export function screenFoveaAngle(uv, gaze, view, tanHalf) {
+  const dx = (uv[0] - gaze[0]) * 2 * view * tanHalf;
+  const dy = (uv[1] - gaze[1]) * 2 * tanHalf;
+  return Math.atan(Math.hypot(dx, dy));
+}
+export const WET_DARKEN = 0.3;
+export const WET_SHEEN = 0.45;
 export const FOVEA_GLSL = `
 uniform vec2 uGaze;
 uniform vec4 uFovea;
@@ -100,7 +114,10 @@ vec3 camDir(vec2 uv) {
   return normalize(vec3((uv.x * 2.0 - 1.0) * uView * uTanHalf, (1.0 - uv.y * 2.0) * uTanHalf, 1.0));
 }
 float fovT(vec2 uv) {
-  float a = acos(clamp(dot(camDir(uv), camDir(uGaze)), -1.0, 1.0));
+  // A circle on the screen: the gaze-to-pixel offset on the image plane, read as an angle.
+  // Matches the true angle at the gaze; away from it the sharp area stays round, not stretched.
+  vec2 d = (uv - uGaze) * 2.0 * vec2(uView, 1.0) * uTanHalf;
+  float a = atan(length(d));
   return smoothstep(uFovea.x, uFovea.x + uFovea.y, a);
 }
 float fovPeriod(float t) {
@@ -211,6 +228,7 @@ uniform int uDigs;
 uniform int uPrints;
 uniform vec4 uWork;
 uniform float uTime;
+uniform float uRain;
 uniform float uFrame;
 uniform float uFull;
 ${FOVEA_GLSL}
@@ -280,21 +298,25 @@ float valueNoise(vec2 p) {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-float cloudShade(vec3 rd) {
+float cloudShadeAt(vec3 ro, vec3 rd) {
   if (rd.z <= 0.02) return 0.0;
-  float t0 = clamp((34.0 - uOrigin.z) / rd.z, 0.0, 2400.0);
-  float t1 = clamp((62.0 - uOrigin.z) / rd.z, 0.0, 2400.0);
+  float t0 = clamp((34.0 - ro.z) / rd.z, 0.0, 2400.0);
+  float t1 = clamp((62.0 - ro.z) / rd.z, 0.0, 2400.0);
   float span = max(t1 - t0, 0.0);
   float sum = 0.0;
   for (int i = 0; i < 5; i++) {
     float t = t0 + span * ((float(i) + 0.5) / 5.0);
-    vec3 q = uOrigin + rd * t;
+    vec3 q = ro + rd * t;
     float n = valueNoise(q.xy * 0.018 + vec2(uTime * 0.004, 0.2));
     float puff = smoothstep(0.5, 0.78, n);
     float band = smoothstep(34.0, 42.0, q.z) * smoothstep(62.0, 50.0, q.z);
     sum += puff * band * step(1.0, span);
   }
   return clamp(sum * 0.22, 0.0, 0.8);
+}
+
+float cloudShade(vec3 rd) {
+  return cloudShadeAt(uOrigin, rd);
 }
 
 float duneHeight(vec2 p) {
@@ -926,12 +948,35 @@ vec3 skyColor(vec3 rd) {
   return mix(color, cloud, puff);
 }
 
+const float WET_DARKEN = 0.3;
+const float WET_SHEEN = 0.45;
+const float DECK_DRIFT = 0.004 / 0.018;
+float rainNow(vec3 p) {
+  return clamp((cloudShadeAt(p, vec3(0.0, 0.0, 1.0)) - 0.3) / 0.2, 0.0, 1.0);
+}
+// Ground stays wet after the rain moves on and dries over about 90 s of game time. The deck drifts
+// toward +x at DECK_DRIFT m/s, so the rain that fell here Δ seconds ago is the rain over p - Δ·drift now.
+float wetAt(vec3 p) {
+  float now = rainNow(p);
+  float wet = now >= 1.0 ? now : max(now, max(rainNow(p - vec3(30.0 * DECK_DRIFT, 0.0, 0.0)) * 0.65, rainNow(p - vec3(90.0 * DECK_DRIFT, 0.0, 0.0)) * 0.3));
+  // Dry under a roof: only paid for where it would otherwise be wet.
+  if (wet > 0.0 && blocked(p + vec3(0.0, 0.0, 0.08), vec3(0.0, 0.0, 1.0))) return 0.0;
+  return wet;
+}
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);
   float day = smoothstep(0.0, 0.2, sun.z);
   float ndotl = max(dot(n, sun), 0.0);
   float direct = ndotl * day;
   if (direct > 0.0 && blocked(p + n * 0.06 + sun * 0.05, sun)) direct *= 0.28;
+  // A cloud's shadow on the ground: the same deck the fin reads (src/sim/cloud.js).
+  if (direct > 0.0) direct *= 1.0 - 0.75 * cloudShadeAt(p, sun);
+  // Wet ground: where the deck overhead rains (the same rule as rainAt in src/sim/cloud.js),
+  // upward faces darken, the way rain-soaked sand and grass do.
+  if (n.z > 0.3) {
+    float wet = wetAt(p);
+    albedo *= 1.0 - WET_DARKEN * wet * smoothstep(0.3, 0.8, n.z);
+  }
   return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * direct);
 }
 
@@ -965,6 +1010,10 @@ void main() {
   float thru = 1.0;
   float firstT = 4000.0;
   float limit = 0.0;
+  // The foveated edge drops the second bounce: past the fovea fade a mirror hit takes the sky tint
+  // instead of tracing on, so the periphery pays for at most one reflection.
+  float edgeT = uFull < 0.5 ? fovT(vRay) : 0.0;
+  int lastBounce = edgeT > ${EDGE_FADE} ? ${EDGE_LAST_BOUNCE} : 4;
   for (int bounce = 0; bounce < 5; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
@@ -1083,7 +1132,17 @@ void main() {
     if (bounce == 0) firstT = min(bestT, workT);
     if (found) {
       if (dot(bestN, rd) > 0.0) bestN = -bestN;
-      if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
+      if (bounce == 0) {
+        bestRgb = sunLit(bestP, bestN, bestRgb);
+        // Wet ground shines: a grazing-angle sky sheen where it rains, so puddled flats catch the light.
+        if (bestN.z > 0.6) {
+          float wetness = wetAt(bestP);
+          if (wetness > 0.0) {
+            float graze = pow(1.0 - abs(dot(bestN, rd)), 4.0);
+            bestRgb = mix(bestRgb, skyColor(reflect(rd, bestN)), wetness * WET_SHEEN * (0.15 + 0.85 * graze));
+          }
+        }
+      }
       else {
         float nd = max(dot(bestN, normalize(uSun)), 0.0);
         bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;
@@ -1125,8 +1184,8 @@ void main() {
       }
     }
     float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
-    // One material rule everywhere: faint mirrors take a cheap sky tint instead of a traced bounce.
-    if (found && mirror < 0.2) {
+    // One material rule everywhere: faint mirrors (and any mirror on the edge's last hop) take a cheap sky tint.
+    if (found && (mirror < 0.2 || bounce >= lastBounce)) {
       vec3 rr = reflect(rd, bestN);
       float up = clamp(rr.z * 0.85 + 0.2, 0.0, 1.0);
       float day = smoothstep(-0.02, 0.25, normalize(uSun).z);
@@ -1139,6 +1198,17 @@ void main() {
     if (thru <= 0.001) break;
     rd = normalize(reflect(rd, bestN));
     ro = bestP + bestN * 0.05;
+  }
+  // Rain you can see: under a thick deck (uRain from src/sim/cloud.js) thin falling streaks dim and
+  // grey the view. Streak columns are hashed, and each falls at its own pace on tick time.
+  // Under a roof (anything solid straight above the camera) the near streaks and grey stop.
+  if (uRain > 0.0 && !blocked(uOrigin + vec3(0.0, 0.0, 0.3), vec3(0.0, 0.0, 1.0))) {
+    vec2 rp = vec2(vRay.x * 140.0, vRay.y * 9.0);
+    float col = floor(rp.x);
+    float h = hash21(vec2(col, 7.0));
+    float fall = fract(rp.y + uTime * (2.2 + h * 1.6) + h * 13.0);
+    float streak = step(0.86, fract(rp.x)) * smoothstep(0.0, 0.25, fall) * step(fall, 0.25) * step(0.55, h);
+    accum = mix(accum, vec3(0.55, 0.6, 0.66), uRain * (0.18 + 0.5 * streak));
   }
   // Alpha carries log depth (0 near, 1 at 4 km) for future reprojection.
   float depthCode = clamp(log2(1.0 + firstT) / 12.0, 0.0, 1.0);
@@ -1680,6 +1750,7 @@ void main() {
       gl.uniform1i(u("uBoxes"), boxes);
       gl.uniform1i(u("uDigs"), digs);
       gl.uniform1i(u("uPrints"), shown);
+      gl.uniform1f(u("uRain"), scene.rain || 0);
       const work = scene.work;
       gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
       gl.uniform1f(u("uTime"), scene.time || 0);
