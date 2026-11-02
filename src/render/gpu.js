@@ -1354,6 +1354,7 @@ precision highp float;
 uniform sampler2D uOlder;
 uniform sampler2D uNewer;
 uniform float uMix;
+uniform float uSmooth;
 in vec2 vUV;
 out vec4 fragColor;
 // Edge-aware upscale: bilinear, then a sharpen that is clamped to the 2x2 source texels,
@@ -1374,9 +1375,38 @@ vec4 upscale(sampler2D tex, vec2 uv) {
   vec4 blur = (a + b + c + d) * 0.25;
   return clamp(lin + (lin - blur) * 0.9, lo, hi);
 }
+float luma(vec4 c) { return dot(c.rgb, vec3(0.299, 0.587, 0.114)); }
+// Smooth upscale (anti-aliasing for low render scales): bilinear, then an FXAA-style pass in
+// source-texel space that blends along detected edges, so stair-steps blur out instead of
+// showing as blocks. 9 taps per picture; only runs when the trace is smaller than the canvas.
+vec4 smoothUp(sampler2D tex, vec2 uv) {
+  vec2 px = 1.0 / vec2(textureSize(tex, 0));
+  vec4 m = texture(tex, uv);
+  float lm = luma(m);
+  float ln = luma(texture(tex, uv + vec2(0.0, px.y)));
+  float ls = luma(texture(tex, uv - vec2(0.0, px.y)));
+  float le = luma(texture(tex, uv + vec2(px.x, 0.0)));
+  float lw = luma(texture(tex, uv - vec2(px.x, 0.0)));
+  float lo = min(lm, min(min(ln, ls), min(le, lw)));
+  float hi = max(lm, max(max(ln, ls), max(le, lw)));
+  float range = hi - lo;
+  if (range < max(0.03, hi * 0.08)) return m;
+  vec2 dir = vec2(-(ln - ls), le - lw);
+  float len = length(dir);
+  if (len < 1e-4) return m;
+  // Edge normal is dir; blur along the tangent across about 1.5 source texels.
+  vec2 tan = vec2(dir.y, -dir.x) / len * px * 1.5;
+  vec4 a = texture(tex, uv + tan * 0.5) + texture(tex, uv - tan * 0.5);
+  vec4 b = texture(tex, uv + tan) + texture(tex, uv - tan);
+  vec4 blend = (m * 2.0 + a * 1.5 + b) / 7.0;
+  return mix(m, blend, clamp(range * 4.0, 0.0, 1.0));
+}
+vec4 up(sampler2D tex, vec2 uv) {
+  return uSmooth > 0.5 ? smoothUp(tex, uv) : upscale(tex, uv);
+}
 void main() {
-  vec4 past = upscale(uOlder, vUV);
-  vec4 next = upscale(uNewer, vUV);
+  vec4 past = up(uOlder, vUV);
+  vec4 next = up(uNewer, vUV);
   fragColor = mix(past, next, uMix);
 }`);
   let blitProgram = null;
@@ -1391,6 +1421,8 @@ void main() {
   const blitOlder = blitProgram ? gl.getUniformLocation(blitProgram, "uOlder") : null;
   const blitNewer = blitProgram ? gl.getUniformLocation(blitProgram, "uNewer") : null;
   const blitMix = blitProgram ? gl.getUniformLocation(blitProgram, "uMix") : null;
+  const blitSmooth = blitProgram ? gl.getUniformLocation(blitProgram, "uSmooth") : null;
+  let smoothing = true;
   // Resolve: fill each peripheral cell from its traced corner pixel into a full picture.
   // Resolve: rebuild the picture from the traced samples. Each pixel interpolates the traced corners
   // of its cell (no blocks), and the cell size is blended across levels so the fade from the sharp
@@ -1743,6 +1775,10 @@ void main() {
     invalidate() {
       forceFull = true;
     },
+    // Anti-aliased (smooth) upscale of low-resolution pictures; on by default.
+    setSmoothing(on) {
+      smoothing = !!on;
+    },
     present(amount = 1) {
       if (!blitProgram || newest < 0) return false;
       const older = hold[prior >= 0 ? prior : newest];
@@ -1758,6 +1794,7 @@ void main() {
       gl.bindTexture(gl.TEXTURE_2D, next.tex);
       gl.uniform1i(blitNewer, 10);
       gl.uniform1f(blitMix, mix);
+      gl.uniform1f(blitSmooth, smoothing ? 1 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
