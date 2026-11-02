@@ -21,10 +21,11 @@ export function nextFriend(score = 0, nearby = false) {
 // Friendliness is not only a number: each person keeps a short record of what passed between you.
 // "told" is lore they shared with you; "refused" is a drag they refused, which also costs 5.
 export const DEED_KINDS = ["told", "refused"];
-export function noteDeed(deeds, id, kind) {
+export function noteDeed(deeds, id, kind, nowMs = Date.now()) {
   if (!deeds || !id || !DEED_KINDS.includes(kind)) return null;
   const rec = deeds.get(id) || { told: 0, refused: 0 };
   rec[kind] += 1;
+  if (kind === "refused") rec.since = nowMs;
   deeds.set(id, rec);
   return rec;
 }
@@ -41,7 +42,7 @@ export function friendLine(score = 0, rec = null) {
 export const DEEDS_KEY = "meridian-deeds";
 export function packDeeds(deeds) {
   const out = {};
-  for (const [id, rec] of deeds || []) out[id] = { told: rec.told | 0, refused: rec.refused | 0 };
+  for (const [id, rec] of deeds || []) out[id] = { told: rec.told | 0, refused: rec.refused | 0, ...(rec.since ? { since: rec.since } : {}) };
   return out;
 }
 export function unpackDeeds(raw) {
@@ -49,7 +50,7 @@ export function unpackDeeds(raw) {
   if (!raw || typeof raw !== "object") return deeds;
   for (const [id, rec] of Object.entries(raw)) {
     if (!rec || typeof rec !== "object") continue;
-    deeds.set(id, { told: Math.max(0, rec.told | 0), refused: Math.max(0, rec.refused | 0) });
+    deeds.set(id, { told: Math.max(0, rec.told | 0), refused: Math.max(0, rec.refused | 0), ...(Number(rec.since) > 0 ? { since: Number(rec.since) } : {}) });
   }
   return deeds;
 }
@@ -162,4 +163,18 @@ export function learnLore(survey, plate, offer, skills, stamp, colors) {
 export const GUARD_MARGIN = 2;
 export function guarded(rec) {
   return !!rec && (rec.refused | 0) - (rec.told | 0) >= GUARD_MARGIN;
+}
+
+// Old refusals fade: one is forgiven per REFUSE_FADE_MS since the last, so a guard does not last forever.
+export const REFUSE_FADE_MS = 24 * 60 * 60 * 1000;
+export function fadeDeeds(deeds, nowMs = Date.now()) {
+  for (const rec of deeds.values()) {
+    if (!rec.refused || !rec.since) continue;
+    const gone = Math.floor((nowMs - rec.since) / REFUSE_FADE_MS);
+    if (gone <= 0) continue;
+    rec.refused = Math.max(0, rec.refused - gone);
+    rec.since += gone * REFUSE_FADE_MS;
+    if (!rec.refused) delete rec.since;
+  }
+  return deeds;
 }

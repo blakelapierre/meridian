@@ -26,9 +26,13 @@ The record now changes how you answer: anyone who has refused you at least two m
 
 The person you guard against sees it in the record line: "they hold refused 2 · no lore from them".
 
+## This pass (fade)
+
+Old refusals fade: one is forgiven for each day since the last refusal, applied when the saved record loads. A guard lifts on its own.
+
 ## Next
 
-A record that fades: old refusals never expire. Not in this build.
+A record the AI people keep: `ai-` actors neither note deeds nor guard. Not in this build.
 
 ## Later
 

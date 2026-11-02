@@ -244,3 +244,21 @@ test("the guarded person is told why the lore stopped", () => {
   assert.equal(theirLine({ told: 0, refused: 2 }), "they hold refused 2 · no lore from them");
   assert.equal(theirLine({ told: 1, refused: 1 }), "they hold told 1 refused 1");
 });
+
+import { fadeDeeds, noteDeed as note2, REFUSE_FADE_MS } from "../src/sim/lore.js";
+
+test("old refusals fade a day at a time and survive a save", () => {
+  const deeds = new Map();
+  note2(deeds, "x", "refused", 1000);
+  note2(deeds, "x", "refused", 2000);
+  assert.ok(guarded(deeds.get("x")));
+  const back = unpackDeeds(JSON.parse(JSON.stringify(packDeeds(deeds))));
+  assert.equal(back.get("x").since, 2000);
+  fadeDeeds(back, 2000 + REFUSE_FADE_MS - 1);
+  assert.equal(back.get("x").refused, 2);
+  fadeDeeds(back, 2000 + REFUSE_FADE_MS);
+  assert.equal(back.get("x").refused, 1);
+  assert.equal(guarded(back.get("x")), false);
+  fadeDeeds(back, 2000 + 5 * REFUSE_FADE_MS);
+  assert.deepEqual(back.get("x"), { told: 0, refused: 0 });
+});

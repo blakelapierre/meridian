@@ -90,7 +90,7 @@ import { acceptWear, encodeWear } from "../net/wear.js?v=1";
 import { cellSize, contourDetail, contourLines, createSurvey, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
 import { agilityFactor } from "../sim/agility.js";
 import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
-import { deedCost, deedMessage, DEEDS_KEY, friendLine, guarded, packDeeds, readDeedMessage, theirLine, unpackDeeds, learnLore, friendTier, nextFriend, noteDeed, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
+import { deedCost, deedMessage, DEEDS_KEY, fadeDeeds, friendLine, guarded, packDeeds, readDeedMessage, theirLine, unpackDeeds, learnLore, friendTier, nextFriend, noteDeed, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
@@ -399,7 +399,7 @@ let mapFollow = true;
 let mapCenter = [0, -150];
 let mapDrag = null;
 const friends = new Map();
-const deeds = (() => { try { return unpackDeeds(JSON.parse(localStorage.getItem(DEEDS_KEY) || "{}")); } catch { return new Map(); } })();
+const deeds = (() => { try { return fadeDeeds(unpackDeeds(JSON.parse(localStorage.getItem(DEEDS_KEY) || "{}"))); } catch { return new Map(); } })();
 const theirDeeds = new Map();
 // Record a deed about someone, keep it on this device, and tell them what you now hold.
 function recordDeed(id, kind) {
