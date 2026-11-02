@@ -14,9 +14,13 @@ Friendliness is not only a number. Each person keeps a record of what passed bet
 
 `test/slice.test.js` covers the refusal. `test/batch12.test.js` covers the record.
 
+## This pass (record)
+
+The record now stays on the device (`meridian-deeds`) and each new deed is sent to the person it is about. Selecting someone shows what they hold about you: "they hold told 2 refused 1".
+
 ## Next
 
-A record the other client sees. Your record of them is still only on your client. Not in this build.
+A record that changes how a person answers. They see what you hold; nothing yet acts on it. Not in this build.
 
 ## Later
 

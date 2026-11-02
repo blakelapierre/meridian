@@ -38,6 +38,43 @@ export function friendLine(score = 0, rec = null) {
   return parts.join(" · ");
 }
 
+export const DEEDS_KEY = "meridian-deeds";
+export function packDeeds(deeds) {
+  const out = {};
+  for (const [id, rec] of deeds || []) out[id] = { told: rec.told | 0, refused: rec.refused | 0 };
+  return out;
+}
+export function unpackDeeds(raw) {
+  const deeds = new Map();
+  if (!raw || typeof raw !== "object") return deeds;
+  for (const [id, rec] of Object.entries(raw)) {
+    if (!rec || typeof rec !== "object") continue;
+    deeds.set(id, { told: Math.max(0, rec.told | 0), refused: Math.max(0, rec.refused | 0) });
+  }
+  return deeds;
+}
+// The record you keep of someone is sent to them, so they see what you hold against them.
+export function deedMessage(about, rec) {
+  if (!about || !rec) return "";
+  return JSON.stringify({ t: "deed", about, told: rec.told | 0, refused: rec.refused | 0 });
+}
+export function readDeedMessage(text) {
+  try {
+    const m = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
+    if (m?.t !== "deed" || !m.about) return null;
+    return { about: String(m.about), told: Math.max(0, m.told | 0), refused: Math.max(0, m.refused | 0) };
+  } catch {
+    return null;
+  }
+}
+export function theirLine(rec) {
+  if (!rec || !(rec.told || rec.refused)) return "";
+  const parts = [];
+  if (rec.told) parts.push(`told ${rec.told}`);
+  if (rec.refused) parts.push(`refused ${rec.refused}`);
+  return `they hold ${parts.join(" ")}`;
+}
+
 export function friendTier(score = 0) {
   if (score < 0) return "hostile";
   if (score >= 40) return "friend";

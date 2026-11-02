@@ -120,3 +120,21 @@ test("rain you can see under the deck that rains on pools", () => {
   assert.match(gpu, /uniform float uRain;/);
   assert.match(gpu, /gl\.uniform1f\(u\("uRain"\), scene\.rain \|\| 0\)/);
 });
+
+import { packDeeds, unpackDeeds, deedMessage, readDeedMessage, theirLine, DEEDS_KEY } from "../src/sim/lore.js";
+
+test("friendliness record is kept on the device and sent to the person it is about", () => {
+  const deeds = new Map([["ab", { told: 2, refused: 1 }]]);
+  const back = unpackDeeds(JSON.parse(JSON.stringify(packDeeds(deeds))));
+  assert.deepEqual(back.get("ab"), { told: 2, refused: 1 });
+  assert.equal(unpackDeeds("junk").size, 0);
+  const msg = readDeedMessage(deedMessage("ab", deeds.get("ab")));
+  assert.deepEqual(msg, { about: "ab", told: 2, refused: 1 });
+  assert.equal(readDeedMessage('{"t":"drag"}'), null);
+  assert.equal(theirLine(msg), "they hold told 2 refused 1");
+  assert.equal(theirLine(null), "");
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /localStorage\.setItem\(DEEDS_KEY/);
+  assert.match(main, /deed\.about === meId/);
+  assert.equal(DEEDS_KEY, "meridian-deeds");
+});
