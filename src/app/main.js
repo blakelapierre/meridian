@@ -1455,7 +1455,8 @@ function sceneFor(sample, width, height) {
     feet: player.position,
     yaw: sample.yaw ?? yaw,
     pitch: sample.pitch ?? pitch,
-    crouch: !!sample.crouch,
+    // A roll shows: the figure stays balled up until the roll runs out.
+    crouch: !!sample.crouch || rollSpeed(roll, tick) > 0,
     tick,
     atoll,
     crust: terrain.log.crust,

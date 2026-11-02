@@ -151,3 +151,8 @@ test("the focus is a circle on the screen, not an angle cone", () => {
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /float a = atan\(length\(d\)\);/);
 });
+
+test("the third-person figure balls up while the roll runs", () => {
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /crouch: !!sample\.crouch \|\| rollSpeed\(roll, tick\) > 0/);
+});

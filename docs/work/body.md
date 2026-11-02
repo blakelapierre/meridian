@@ -18,9 +18,13 @@ A fall reads a soak you can change. Holding crouch as you land tucks: the soak i
 
 `test/batch12.test.js` covers the tuck.
 
+## This pass (roll shows)
+
+The third-person figure stays crouched for the length of the roll, so you see it ball up and carry through.
+
 ## Next
 
-A roll the third-person figure shows. The body still crouches through it. Not in this build.
+A roll other players see: peers get crouch only from held keys, not from a roll. Not in this build.
 
 ## Later
 
