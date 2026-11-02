@@ -14,9 +14,13 @@ A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky dra
 
 `test/slice.test.js` covers the aim by day and the clear aim at night. `test/batch12.test.js` covers the cut.
 
+## This pass (wet ground)
+
+Where the deck overhead rains, upward faces darken by up to 30%, by the same rule as `rainAt`, so wet patches line up with the visible rain and the pools that fill.
+
 ## Next
 
-Rain that wets the sand. Ground under the rain still looks dry. Not in this build.
+Puddles that shine: wet ground is darker but not glossy; no sky reflection on it yet. Not in this build.
 
 ## Later
 

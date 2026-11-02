@@ -156,3 +156,12 @@ test("the third-person figure balls up while the roll runs", () => {
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /crouch: !!sample\.crouch \|\| rollSpeed\(roll, tick\) > 0/);
 });
+
+test("ground under raining cloud looks wet, by the same rule as rainAt", async () => {
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /float wet = clamp\(\(cloudShadeAt\(p, vec3\(0\.0, 0\.0, 1\.0\)\) - 0\.3\) \/ 0\.2, 0\.0, 1\.0\);/);
+  const cloud = readFileSync(new URL("../src/sim/cloud.js", import.meta.url), "utf8");
+  assert.match(cloud, /\(shade - 0\.3\) \/ 0\.2|\(s - 0\.3\) \/ 0\.2/);
+  const { WET_DARKEN } = await import("../src/render/gpu.js");
+  assert.ok(WET_DARKEN > 0 && WET_DARKEN < 0.5);
+});

@@ -102,6 +102,7 @@ export function screenFoveaAngle(uv, gaze, view, tanHalf) {
   const dy = (uv[1] - gaze[1]) * 2 * tanHalf;
   return Math.atan(Math.hypot(dx, dy));
 }
+export const WET_DARKEN = 0.3;
 export const FOVEA_GLSL = `
 uniform vec2 uGaze;
 uniform vec4 uFovea;
@@ -946,6 +947,7 @@ vec3 skyColor(vec3 rd) {
   return mix(color, cloud, puff);
 }
 
+const float WET_DARKEN = 0.3;
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);
   float day = smoothstep(0.0, 0.2, sun.z);
@@ -954,6 +956,12 @@ vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   if (direct > 0.0 && blocked(p + n * 0.06 + sun * 0.05, sun)) direct *= 0.28;
   // A cloud's shadow on the ground: the same deck the fin reads (src/sim/cloud.js).
   if (direct > 0.0) direct *= 1.0 - 0.75 * cloudShadeAt(p, sun);
+  // Wet ground: where the deck overhead rains (the same rule as rainAt in src/sim/cloud.js),
+  // upward faces darken, the way rain-soaked sand and grass do.
+  if (n.z > 0.3) {
+    float wet = clamp((cloudShadeAt(p, vec3(0.0, 0.0, 1.0)) - 0.3) / 0.2, 0.0, 1.0);
+    albedo *= 1.0 - WET_DARKEN * wet * smoothstep(0.3, 0.8, n.z);
+  }
   return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * direct);
 }
 

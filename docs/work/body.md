@@ -24,7 +24,7 @@ The third-person figure stays crouched for the length of the roll, so you see it
 
 ## Next
 
-A roll other players see: peers get crouch only from held keys, not from a roll. Not in this build.
+A roll other players see: crouch is not on the wire at all, so peers never see a tuck or a roll. Not in this build.
 
 ## Later
 
