@@ -22,9 +22,13 @@ The record now stays on the device (`meridian-deeds`) and each new deed is sent 
 
 The record now changes how you answer: anyone who has refused you at least two more times than they have told you something gets no lore from you, until telling you things evens it out.
 
+## This pass (told why)
+
+The person you guard against sees it in the record line: "they hold refused 2 · no lore from them".
+
 ## Next
 
-A guard you can see: the other person is not told why your lore stopped. Not in this build.
+A record that fades: old refusals never expire. Not in this build.
 
 ## Later
 

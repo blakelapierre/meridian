@@ -72,7 +72,7 @@ export function theirLine(rec) {
   const parts = [];
   if (rec.told) parts.push(`told ${rec.told}`);
   if (rec.refused) parts.push(`refused ${rec.refused}`);
-  return `they hold ${parts.join(" ")}`;
+  return `they hold ${parts.join(" ")}${guarded(rec) ? " · no lore from them" : ""}`;
 }
 
 export function friendTier(score = 0) {

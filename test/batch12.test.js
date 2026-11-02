@@ -239,3 +239,8 @@ test("a record changes how you answer: repeat refusers get no lore", () => {
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /if \(guarded\(deeds\.get\(other\.id\)\)\) continue;\n    const offer = offerLore/);
 });
+
+test("the guarded person is told why the lore stopped", () => {
+  assert.equal(theirLine({ told: 0, refused: 2 }), "they hold refused 2 · no lore from them");
+  assert.equal(theirLine({ told: 1, refused: 1 }), "they hold told 1 refused 1");
+});
