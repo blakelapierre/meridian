@@ -1,3 +1,4 @@
+import { cloudShade } from "./cloud.js";
 export function createPools() {
   return [];
 }
@@ -44,8 +45,13 @@ export function rainOn(tick = 0) {
   return (Math.floor(tick) % 1800) < 450;
 }
 
-export function rainPool(pool, tick = 0) {
-  if (!pool || !rainOn(tick)) return pool || null;
+// deck: rain comes from the cloud over the pool (src/sim/cloud.js) instead of the quarter-minute clock.
+export const RAIN_SHADE = 0.35;
+export function rainOver(x, y, tick) {
+  return cloudShade([x || 0, y || 0, 0], [0, 0, 1], tick / 30) >= RAIN_SHADE;
+}
+export function rainPool(pool, tick = 0, { deck = false } = {}) {
+  if (!pool || !(deck ? rainOver(pool.x, pool.y, tick) : rainOn(tick))) return pool || null;
   return { ...pool, rain: (pool.rain || 0) + 1 };
 }
 

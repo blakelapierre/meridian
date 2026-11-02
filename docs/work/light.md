@@ -16,7 +16,7 @@ A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky dra
 
 ## Next
 
-Rain from the cloud over you. A pool's rain is still its own clock, not the deck. Not in this build.
+A cloud you can see rain from. The deck rains on a pool, but the picture draws no rain. Not in this build.
 
 ## Later
 

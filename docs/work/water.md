@@ -10,11 +10,11 @@ Z on a road opens a gate. Water steps through an open gate and is dammed by a sh
 
 ## This pass
 
-Rain marks a pool for the first quarter of each minute. It does not make a new pool.
+Rain comes from the cloud over the pool. A pool is marked when the cloud deck straight above it (`src/sim/cloud.js`, the deck the sky draws) is thick, at least 0.35 shade. The quarter-minute clock is only the fallback when no deck is asked for. Rain still does not make a new pool.
 
 ## Proves
 
-`test/slice.test.js` covers the mark, and a dry quarter that does not add one.
+`test/slice.test.js` covers the clock mark. `test/batch12.test.js` covers rain from the deck.
 
 ## Next
 

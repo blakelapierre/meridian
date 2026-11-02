@@ -3277,7 +3277,7 @@ if (params.get("still") !== "1") {
       if (tick % 30 === 0) {
         let rained = false;
         for (const pool of pools) {
-          const wet = rainPool(pool, tick);
+          const wet = rainPool(pool, tick, { deck: true });
           if (wet && wet.rain !== pool.rain) {
             pool.rain = wet.rain;
             rained = true;

@@ -56,3 +56,17 @@ test("a cloud's shadow falls on the sand", () => {
   assert.match(gpu, /direct \*= 1\.0 - 0\.75 \* cloudShadeAt\(p, sun\)/);
   assert.match(gpu, /float cloudShade\(vec3 rd\) \{\n  return cloudShadeAt\(uOrigin, rd\);/);
 });
+
+import { rainOver, rainPool, RAIN_SHADE } from "../src/sim/pool.js";
+
+test("rain comes from the cloud over the pool", () => {
+  assert.equal(RAIN_SHADE, 0.35);
+  let wet = null, dry = null;
+  for (let t = 0; t < 129600 && (wet === null || dry === null); t += 300) {
+    if (rainOver(0, 0, t)) wet ??= t; else dry ??= t;
+  }
+  assert.ok(wet !== null && dry !== null);
+  assert.equal(rainPool({ x: 0, y: 0, rain: 0 }, wet, { deck: true }).rain, 1);
+  assert.equal(rainPool({ x: 0, y: 0, rain: 0 }, dry, { deck: true }).rain, 0);
+  assert.equal(rainPool({ x: 1, y: 1, rain: 0 }, 0).rain, 1, "the old clock still works without the deck");
+});
