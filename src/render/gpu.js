@@ -96,6 +96,12 @@ export const EDGE_LAST_BOUNCE = 1;
 export function edgeBounces(fade, full = false) {
   return !full && fade > Number(EDGE_FADE) ? EDGE_LAST_BOUNCE : 4;
 }
+// JS mirror of fovT's screen distance (radians-equivalent), for tests and tools.
+export function screenFoveaAngle(uv, gaze, view, tanHalf) {
+  const dx = (uv[0] - gaze[0]) * 2 * view * tanHalf;
+  const dy = (uv[1] - gaze[1]) * 2 * tanHalf;
+  return Math.atan(Math.hypot(dx, dy));
+}
 export const FOVEA_GLSL = `
 uniform vec2 uGaze;
 uniform vec4 uFovea;
@@ -106,7 +112,10 @@ vec3 camDir(vec2 uv) {
   return normalize(vec3((uv.x * 2.0 - 1.0) * uView * uTanHalf, (1.0 - uv.y * 2.0) * uTanHalf, 1.0));
 }
 float fovT(vec2 uv) {
-  float a = acos(clamp(dot(camDir(uv), camDir(uGaze)), -1.0, 1.0));
+  // A circle on the screen: the gaze-to-pixel offset on the image plane, read as an angle.
+  // Matches the true angle at the gaze; away from it the sharp area stays round, not stretched.
+  vec2 d = (uv - uGaze) * 2.0 * vec2(uView, 1.0) * uTanHalf;
+  float a = atan(length(d));
   return smoothstep(uFovea.x, uFovea.x + uFovea.y, a);
 }
 float fovPeriod(float t) {

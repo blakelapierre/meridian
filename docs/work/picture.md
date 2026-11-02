@@ -12,9 +12,13 @@ The edge drops the second bounce. Past the middle of the fovea fade, a mirror hi
 
 `test/pace.test.js`, `test/batch11.test.js` (motion resolution), `test/batch12.test.js` (edge bounce).
 
+## This pass (circle)
+
+The sharp area is now a circle on the screen: the gaze-to-pixel offset on the image plane, aspect corrected, read as an angle. It matches the old angle at the gaze and no longer stretches toward the screen edges.
+
 ## Next
 
-A screen-space circle: the fovea is still an angle around the gaze, not a circle on the screen. Not in this build.
+A circle that follows the eyes: the gaze is still the screen centre or the tap point, not where the player looks on a phone. Not in this build.
 
 ## Later
 

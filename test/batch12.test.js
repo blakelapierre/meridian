@@ -138,3 +138,16 @@ test("friendliness record is kept on the device and sent to the person it is abo
   assert.match(main, /deed\.about === meId/);
   assert.equal(DEEDS_KEY, "meridian-deeds");
 });
+
+import { screenFoveaAngle } from "../src/render/gpu.js";
+
+test("the focus is a circle on the screen, not an angle cone", () => {
+  const gaze = [0.5, 0.5], view = 16 / 9, tan = Math.tan(0.6);
+  // The same screen distance across and up gives the same reading (aspect corrected).
+  const across = screenFoveaAngle([0.5 + 0.1 / view, 0.5], gaze, view, tan);
+  const up = screenFoveaAngle([0.5, 0.6], gaze, view, tan);
+  assert.ok(Math.abs(across - up) < 1e-9);
+  assert.equal(screenFoveaAngle(gaze, gaze, view, tan), 0);
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /float a = atan\(length\(d\)\);/);
+});
