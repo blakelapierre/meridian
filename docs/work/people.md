@@ -8,15 +8,15 @@ While you drag someone, they are drawn just ahead of you. Their client is sent o
 
 ## This pass
 
-The other person can refuse a drag. 4 sends it, and the drag stops.
+Friendliness is not only a number. Each person keeps a record of what passed between you: lore they told you, and drags they refused. A refused drag also costs 5, never below 0. The line reads `acquaintance 14 · told 2 · refused 1`.
 
 ## Proves
 
-`test/slice.test.js` covers the refusal.
+`test/slice.test.js` covers the refusal. `test/batch12.test.js` covers the record.
 
 ## Next
 
-Friendliness that is not only a number. Not in this build.
+A record the other client sees. Your record of them is still only on your client. Not in this build.
 
 ## Later
 

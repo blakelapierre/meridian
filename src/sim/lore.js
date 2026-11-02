@@ -18,6 +18,26 @@ export function nextFriend(score = 0, nearby = false) {
   return Math.min(100, score + 1);
 }
 
+// Friendliness is not only a number: each person keeps a short record of what passed between you.
+// "told" is lore they shared with you; "refused" is a drag they refused, which also costs 5.
+export const DEED_KINDS = ["told", "refused"];
+export function noteDeed(deeds, id, kind) {
+  if (!deeds || !id || !DEED_KINDS.includes(kind)) return null;
+  const rec = deeds.get(id) || { told: 0, refused: 0 };
+  rec[kind] += 1;
+  deeds.set(id, rec);
+  return rec;
+}
+export function deedCost(kind) {
+  return kind === "refused" ? -5 : 0;
+}
+export function friendLine(score = 0, rec = null) {
+  const parts = [`${friendTier(score)} ${score}`];
+  if (rec?.told) parts.push(`told ${rec.told}`);
+  if (rec?.refused) parts.push(`refused ${rec.refused}`);
+  return parts.join(" · ");
+}
+
 export function friendTier(score = 0) {
   if (score < 0) return "hostile";
   if (score >= 40) return "friend";

@@ -90,7 +90,7 @@ import { acceptWear, encodeWear } from "../net/wear.js?v=1";
 import { cellSize, contourDetail, contourLines, createSurvey, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
 import { agilityFactor } from "../sim/agility.js";
 import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
-import { learnLore, friendTier, nextFriend, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
+import { deedCost, friendLine, learnLore, friendTier, nextFriend, noteDeed, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
@@ -399,6 +399,7 @@ let mapFollow = true;
 let mapCenter = [0, -150];
 let mapDrag = null;
 const friends = new Map();
+const deeds = new Map();
 const vitals = createVitals();
 let loreNote = "";
 let brush = "dig";
@@ -2172,7 +2173,7 @@ function publish() {
   listener.setLevel(light === "night" ? 0.45 : light === "dawn" || light === "dusk" ? 0.7 : 1);
   const muteNote = listener.muted ? " · muted" : "";
   const friendNote = selection?.kind === "player" && friends.has(selection.id)
-    ? ` · ${friendTier(friends.get(selection.id))} ${friends.get(selection.id)}`
+    ? ` · ${friendLine(friends.get(selection.id), deeds.get(selection.id))}`
     : "";
   const withYou = [...bonds.entries()].filter(([, state]) => state === "both").map(([id]) => id);
   const bondNote = withYou.length ? ` · with ${withYou.join(" ")}` : "";
@@ -2539,6 +2540,7 @@ function onOps(bytes, from) {
     const heard = unpackLore(accepted);
     const learned = learnLore(survey, plate, heard, skillBag(), stamp, GEO_COLOR);
     if (from) friends.set(from, nextFriend(Math.max(friends.get(from) || 0, accepted.friend || 0), true));
+    if (from && (heard.ground?.length || heard.places?.length)) noteDeed(deeds, from, "told");
     let told = 0;
     for (const line of accepted.notes || []) {
       if (takeTold(notes, skillBag(), line, from || "", accepted.sig || 0)) told += 1;
@@ -2692,6 +2694,8 @@ async function openLink(to, offer, role) {
     const refusedDrag = readDragRefuse(text);
     if (refusedDrag && dragging && selection?.id === refusedDrag.id) {
       dragging = false;
+      noteDeed(deeds, refusedDrag.id, "refused");
+      friends.set(refusedDrag.id, Math.max(0, (friends.get(refusedDrag.id) || 0) + deedCost("refused")));
       report = "refused";
       return;
     }

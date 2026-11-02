@@ -70,3 +70,18 @@ test("rain comes from the cloud over the pool", () => {
   assert.equal(rainPool({ x: 0, y: 0, rain: 0 }, dry, { deck: true }).rain, 0);
   assert.equal(rainPool({ x: 1, y: 1, rain: 0 }, 0).rain, 1, "the old clock still works without the deck");
 });
+
+import { deedCost, friendLine, noteDeed } from "../src/sim/lore.js";
+
+test("friendliness is not only a number: a record of what passed between you", () => {
+  const deeds = new Map();
+  assert.equal(friendLine(14), "acquaintance 14");
+  noteDeed(deeds, "pell", "told"); noteDeed(deeds, "pell", "told"); noteDeed(deeds, "pell", "refused");
+  assert.equal(noteDeed(deeds, "pell", "hugged"), null);
+  assert.equal(friendLine(41, deeds.get("pell")), "friend 41 · told 2 · refused 1");
+  assert.equal(deedCost("refused"), -5);
+  assert.equal(deedCost("told"), 0);
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /noteDeed\(deeds, refusedDrag\.id, "refused"\)/);
+  assert.match(main, /Math\.max\(0, \(friends\.get\(refusedDrag\.id\) \|\| 0\) \+ deedCost\("refused"\)\)/);
+});
