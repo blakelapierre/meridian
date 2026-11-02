@@ -18,9 +18,13 @@ Friendliness is not only a number. Each person keeps a record of what passed bet
 
 The record now stays on the device (`meridian-deeds`) and each new deed is sent to the person it is about. Selecting someone shows what they hold about you: "they hold told 2 refused 1".
 
+## This pass (guard)
+
+The record now changes how you answer: anyone who has refused you at least two more times than they have told you something gets no lore from you, until telling you things evens it out.
+
 ## Next
 
-A record that changes how a person answers. They see what you hold; nothing yet acts on it. Not in this build.
+A guard you can see: the other person is not told why your lore stopped. Not in this build.
 
 ## Later
 

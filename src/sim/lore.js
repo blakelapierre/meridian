@@ -156,3 +156,10 @@ export function learnLore(survey, plate, offer, skills, stamp, colors) {
   }
   return learned;
 }
+
+// A record that changes how you answer: someone who has refused you at least twice more than they
+// have told you anything gets no lore from you until they make it up.
+export const GUARD_MARGIN = 2;
+export function guarded(rec) {
+  return !!rec && (rec.refused | 0) - (rec.told | 0) >= GUARD_MARGIN;
+}

@@ -90,7 +90,7 @@ import { acceptWear, encodeWear } from "../net/wear.js?v=1";
 import { cellSize, contourDetail, contourLines, createSurvey, mapAbilities, mapMarks, noteNearby, notePath, notePlace, noteSurvey, pathStamp, rememberGround } from "../sim/map.js";
 import { agilityFactor } from "../sim/agility.js";
 import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAfter, mapSpan, revealLook, revealRange, samplePlate, stamp, zoomForSpan } from "../sim/plate.js";
-import { deedCost, deedMessage, DEEDS_KEY, friendLine, packDeeds, readDeedMessage, theirLine, unpackDeeds, learnLore, friendTier, nextFriend, noteDeed, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
+import { deedCost, deedMessage, DEEDS_KEY, friendLine, guarded, packDeeds, readDeedMessage, theirLine, unpackDeeds, learnLore, friendTier, nextFriend, noteDeed, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint } from "../sim/prints.js";
@@ -2485,6 +2485,7 @@ function exchangeLore() {
     friends.set(other.id, score);
     if (bonds.get(other.id) === "ours" && (score >= 12 || other.id.startsWith("ai-"))) hearBond(bonds, other.id);
     if (dist > range) continue;
+    if (guarded(deeds.get(other.id))) continue;
     const offer = offerLore({
       skills: bag,
       friend: bondOpen(bonds, other.id, true) ? Math.max(score, 40) : score,

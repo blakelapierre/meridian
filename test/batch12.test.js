@@ -228,3 +228,14 @@ test("rain view stops under a roof", () => {
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /uRain > 0\.0 && !blocked\(uOrigin \+ vec3\(0\.0, 0\.0, 0\.3\), vec3\(0\.0, 0\.0, 1\.0\)\)/);
 });
+
+import { guarded } from "../src/sim/lore.js";
+
+test("a record changes how you answer: repeat refusers get no lore", () => {
+  assert.equal(guarded(undefined), false);
+  assert.equal(guarded({ told: 0, refused: 1 }), false);
+  assert.equal(guarded({ told: 0, refused: 2 }), true);
+  assert.equal(guarded({ told: 1, refused: 2 }), false);
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /if \(guarded\(deeds\.get\(other\.id\)\)\) continue;\n    const offer = offerLore/);
+});
