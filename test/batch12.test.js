@@ -82,7 +82,7 @@ test("friendliness is not only a number: a record of what passed between you", (
   assert.equal(deedCost("refused"), -5);
   assert.equal(deedCost("told"), 0);
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
-  assert.match(main, /noteDeed\(deeds, refusedDrag\.id, "refused"\)/);
+  assert.match(main, /recordDeed\(refusedDrag\.id, "refused"\)/);
   assert.match(main, /Math\.max\(0, \(friends\.get\(refusedDrag\.id\) \|\| 0\) \+ deedCost\("refused"\)\)/);
 });
 
