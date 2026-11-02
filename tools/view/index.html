@@ -36,7 +36,7 @@
       #tip { position: fixed; z-index: 7; max-width: 16rem; background: rgba(12,16,22,.94); color: #dde; border: 1px solid #456; border-radius: 5px; padding: 6px 9px; font: 12px/1.4 sans-serif; pointer-events: none; }
       #tip .tier { color: #9f9; margin-top: 3px; }
       #log-open { position: fixed; right: 14px; bottom: calc(12px + var(--skills-h, 0px)); z-index: 4; font: 12px sans-serif; padding: 6px 12px; min-height: 32px; background: rgba(0,0,0,.72); color: #ddd; border: 1px solid #456; border-radius: 4px; }
-      html.touch #log-open { right: 58px; bottom: 135px; min-height: 26px; padding: 3px 10px; border-radius: 8px; z-index: 9; }
+      html.touch #log-open { left: max(18px, env(safe-area-inset-left)); right: auto; bottom: calc(140px + env(safe-area-inset-bottom)); min-height: 26px; padding: 3px 10px; border-radius: 8px; z-index: 9; }
       html.touch #ablog, html.touch #tip { z-index: 9; }
       #ablog { position: fixed; right: 14px; top: 64px; z-index: 6; width: min(22rem, calc(100vw - 28px)); max-height: 60vh; overflow: auto; background: rgba(8,12,18,.92); color: #dde; border: 1px solid #456; border-radius: 6px; font: 12px/1.45 sans-serif; }
       #ablog header { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #345; position: sticky; top: 0; background: inherit; }
@@ -128,6 +128,7 @@
       html.touch #notes { top: 162px; max-width: 9rem; font-size: 10px; }
       html.touch #hint { top: 8px; font-size: 12px; max-width: calc(100vw - 360px); min-width: 12rem; }
       html.touch #fps { font-size: 11px; top: 10px; }
+      html:not(.touch) #fps { top: calc(54px + env(safe-area-inset-top)); }
       /* Phone portrait: the tour line sits under the demo links, left of the map, instead of over both. */
       @media (orientation: portrait) { html.touch #hint { left: 12px; top: 98px; transform: none; min-width: 0; max-width: calc(100vw - 180px); text-align: left; } }
       #glerr { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; max-width: 90vw; padding: 8px 12px; background: #400; color: #fdd; font: 13px/1.4 system-ui, sans-serif; border: 1px solid #a44; }
@@ -135,7 +136,13 @@
       #corner { position: fixed; top: 10px; right: 10px; z-index: 12; display: flex; gap: 6px; }
       #corner button, #fullscreen { min-width: 36px; height: 36px; padding: 0 8px; border: 1px solid #567; background: rgba(0,0,0,.6); color: #cde; font: 14px system-ui, sans-serif; border-radius: 6px; }
       #fullscreen.on { color: #9f9; }
-      html.touch #corner { top: 200px; }
+      #corner { top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); z-index: 31; }
+      html.touch #corner { top: calc(200px + env(safe-area-inset-top)); }
+      /* Phones: the card sits left of the map column so it never covers ?, Reset or fullscreen. */
+      html.touch #onboard { left: max(10px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); transform: none; width: min(26rem, calc(100vw - 160px - env(safe-area-inset-left) - env(safe-area-inset-right))); max-height: calc(100vh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); font-size: 12px; padding: 10px 12px; }
+      html.touch #onboard li b { min-width: 0; display: block; }
+      /* Debug links only with ?dev=1 or after I. */
+      html:not(.dev):not(.debug) #demolinks, html:not(.dev):not(.debug) #devlinks { display: none; }
       #onboard { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30; width: min(26rem, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; padding: 14px 18px; background: rgba(8,12,18,.95); color: #e6eef6; border: 1px solid #4a6a88; border-radius: 10px; font: 14px/1.45 system-ui, sans-serif; box-shadow: 0 8px 32px rgba(0,0,0,.6); }
       #onboard h2 { margin: 0 0 8px; font-size: 1.05rem; }
       #onboard ul { list-style: none; margin: 0 0 10px; padding: 0; }
@@ -161,13 +168,14 @@
     </script>
     <script>
       if (new URLSearchParams(location.search).get("quiet") === "1") document.documentElement.classList.add("quiet");
+      if (new URLSearchParams(location.search).get("dev") === "1") document.documentElement.classList.add("dev");
     </script>
   </head>
   <body>
     <aside aria-label="Help and status">
       <div id="help">
       <h1>Walk check</h1>
-      <p>First time here? The <b>?</b> button (top right) opens the how-to-play card. Press <b>L</b> (or the Log button) for the abilities log, where every unlocked ability is kept, and the sound-cue toggle. Press <b>I</b> to show or hide the network/debug panel; <code>?debug=1</code> starts with it shown. The full key list is in <a href="https://github.com/blakelapierre/meridian/blob/main/docs/keymap.md">docs/keymap.md</a>.</p>
+      <p>First time here? The <b>?</b> button (top right) opens the how-to-play card. Press <b>L</b> (or the Log button) for the abilities log, where every unlocked ability is kept, and the sound-cue toggle. Press <b>I</b> to show or hide the network/debug panel; <code>?debug=1</code> starts with it shown, and I or <code>?dev=1</code> also shows the debug start links. The full key list is in <a href="https://github.com/blakelapierre/meridian/blob/main/docs/keymap.md">docs/keymap.md</a>.</p>
       <p>The camera sits directly behind your body and eases toward wherever it needs to be. It does not jump, and it will not go under the ground. The wheel sets how far behind you it follows, and how high it sits, and that move eases instead of jumping. It does not zoom. Press V for the eyes, and V again to come back out. From the eyes, R cycles none, glasses, binoculars, and a telescope. A zoom still counts in the picture score: its speed and its acceleration pull the buffer the same way a camera move does. The range under the crosshair appears only once you are in first person. Hold the right mouse and move to orbit. Let go and the camera swings back behind the body. A quick right-click, without moving, still salvages a wall.</p>
       <p>The second column is four AI clients. Each one is the same view as the primary, including the map. The controller only presses the keys and mouse buttons a player can press. The surveyor names things and does not dig. The miner opens pits. The builder raises a wall and then salvages it. The marksman shoots the dummy. Their line starts with the agenda. Building skill shortens the raise and the finished wall starts stronger than 80.</p>
       <p>Press E to identify what the crosshair is on. That becomes your action target, and a plate at the top of the picture names it in full. Esc, Backspace, or the Clear button drops that target. Esc still hides the map. Backspace only drops the target. While a target is active and you are in third person, the camera slides out and to the side so your body and the target both stay in view. Tab cycles people, including Pell, Hask, and Nim in Southmere, and the other clients. Shift+Tab goes backward. Backtick cycles interesting objects: the dummy, walls, and props, not the sand or the people. A ring marks the current target. At appraisal 0 you can name sand. A dummy is harder until the skill rises. When the line includes an action, press U to do it. U speaks to a person you have targeted, if you are close enough to hear them. Q toggles auto run. Running, with Shift or with Q, trains the run skill and that skill makes the sprint faster. The panel at the lower right is the skill list.</p>
@@ -190,7 +198,7 @@
       <p id="bit">sand is intact</p>
       <p id="link"></p>
       <p id="demolinks"><a href="../../tools/view/index.html?look=dummy">Dummy</a> · <a href="../../tools/view/index.html?dig=1">Dig</a> · <a href="../../tools/view/index.html?gate=1">Gate</a></p>
-      <p><a href="../../tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="../../tools/view/index.html?id=b&to=a">Tab B</a> · <a id="fresh" href="?fresh=1">Start over</a> · <a href="../../">All checks</a></p>
+      <p><span id="devlinks"><a href="../../tools/view/index.html?id=a&to=b&offer=1">Tab A</a> · <a href="../../tools/view/index.html?id=b&to=a">Tab B</a> · </span><a id="fresh" href="?fresh=1">Start over</a> · <a href="../../">All checks</a></p>
     </aside>
     <canvas width="160" height="90" role="img" aria-label="Game view"></canvas>
     <div id="target"></div>
@@ -227,7 +235,7 @@
     <div id="mpnote" role="status" hidden></div>
     <div id="corner"><button id="reset" type="button" aria-label="Reset: forget saved data and start a new session" title="Reset / new session: forget saved data and start over">Reset</button></div>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=149"></script>
+    <script type="module" src="../../src/app/main.js?v=150"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {

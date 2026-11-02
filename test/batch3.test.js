@@ -15,10 +15,10 @@ const memory = () => { const data = new Map(); return { getItem: (k) => data.get
 
 test("foveation fade is continuous: no step anywhere across the falloff", () => {
   const sight = perceptionFrom({}).senses.sight;
-  assert.equal(SENSE_DEFAULTS.sight.falloff, 45 * DEG);
+  assert.equal(SENSE_DEFAULTS.sight.falloff, 60 * DEG);
   let last = fadeLevel(sight, 0);
   let maxJump = 0;
-  for (let a = 0; a <= 70; a += 0.1) {
+  for (let a = 0; a <= 90; a += 0.1) {
     const level = fadeLevel(sight, a * DEG);
     maxJump = Math.max(maxJump, Math.abs(level - last));
     last = level;

@@ -18,7 +18,7 @@ function unit(value, top = 140) {
 const DEG = Math.PI / 180;
 
 export const SENSE_DEFAULTS = {
-  sight: { acuity: 0.55, fovea: 6 * DEG, falloff: 45 * DEG, period: 6, block: 2, range: 160, tickMs: 1000 / 30 },
+  sight: { acuity: 0.55, fovea: 11 * DEG, falloff: 60 * DEG, period: 6, block: 2, range: 160, tickMs: 1000 / 30 },
   hearing: { acuity: 0.5, fovea: 40 * DEG, falloff: 120 * DEG, period: 4, block: 0, range: 45, tickMs: 50 },
 };
 

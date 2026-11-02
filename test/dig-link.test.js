@@ -37,8 +37,8 @@ test("two browsers apply one dig and print the same hash", { skip: blocked, time
     browserB.kill("SIGKILL");
     await lighthouse.close();
     await site.close();
-    await rm(dirA, { recursive: true, force: true });
-    await rm(dirB, { recursive: true, force: true });
+    await rm(dirA, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(dirB, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

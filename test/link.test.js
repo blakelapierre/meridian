@@ -82,8 +82,8 @@ test("a late second tab still receives a position", { skip: blocked, timeout: 30
     browserB.kill("SIGKILL");
     await lighthouse.close();
     await site.close();
-    await rm(dirA, { recursive: true, force: true });
-    await rm(dirB, { recursive: true, force: true });
+    await rm(dirA, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(dirB, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -107,8 +107,8 @@ test("two browsers trade an unreliable position", { skip: blocked, timeout: 2000
     browserB.kill("SIGKILL");
     await lighthouse.close();
     await site.close();
-    await rm(dirA, { recursive: true, force: true });
-    await rm(dirB, { recursive: true, force: true });
+    await rm(dirA, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(dirB, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
