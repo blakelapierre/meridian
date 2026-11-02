@@ -105,3 +105,18 @@ test("phone controls send crouch, so a tuck works on touch", () => {
   const touch = readFileSync(new URL("../src/app/touch.js", import.meta.url), "utf8");
   assert.match(touch, /\{ code: "ControlLeft", label: "Crouch", hold: true \}/);
 });
+
+import { rainAt } from "../src/sim/cloud.js";
+
+test("rain you can see under the deck that rains on pools", () => {
+  let wet = -1, dry = -1;
+  for (let t = 0; t < 129600 && (wet < 0 || dry < 0); t += 300) {
+    const r = rainAt(0, 0, t); assert.ok(r >= 0 && r <= 1);
+    if (r >= 0.25 && wet < 0) wet = t; if (r === 0 && dry < 0) dry = t;
+  }
+  assert.ok(wet >= 0 && dry >= 0);
+  assert.ok(rainOver(0, 0, wet), "visible rain only where the pool rule also rains");
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /uniform float uRain;/);
+  assert.match(gpu, /gl\.uniform1f\(u\("uRain"\), scene\.rain \|\| 0\)/);
+});

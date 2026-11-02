@@ -217,6 +217,7 @@ uniform int uDigs;
 uniform int uPrints;
 uniform vec4 uWork;
 uniform float uTime;
+uniform float uRain;
 uniform float uFrame;
 uniform float uFull;
 ${FOVEA_GLSL}
@@ -1156,6 +1157,16 @@ void main() {
     rd = normalize(reflect(rd, bestN));
     ro = bestP + bestN * 0.05;
   }
+  // Rain you can see: under a thick deck (uRain from src/sim/cloud.js) thin falling streaks dim and
+  // grey the view. Streak columns are hashed, and each falls at its own pace on tick time.
+  if (uRain > 0.0) {
+    vec2 rp = vec2(vRay.x * 140.0, vRay.y * 9.0);
+    float col = floor(rp.x);
+    float h = hash21(vec2(col, 7.0));
+    float fall = fract(rp.y + uTime * (2.2 + h * 1.6) + h * 13.0);
+    float streak = step(0.86, fract(rp.x)) * smoothstep(0.0, 0.25, fall) * step(fall, 0.25) * step(0.55, h);
+    accum = mix(accum, vec3(0.55, 0.6, 0.66), uRain * (0.18 + 0.5 * streak));
+  }
   // Alpha carries log depth (0 near, 1 at 4 km) for future reprojection.
   float depthCode = clamp(log2(1.0 + firstT) / 12.0, 0.0, 1.0);
   fragColor = vec4(present(accum), depthCode);
@@ -1696,6 +1707,7 @@ void main() {
       gl.uniform1i(u("uBoxes"), boxes);
       gl.uniform1i(u("uDigs"), digs);
       gl.uniform1i(u("uPrints"), shown);
+      gl.uniform1f(u("uRain"), scene.rain || 0);
       const work = scene.work;
       gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
       gl.uniform1f(u("uTime"), scene.time || 0);

@@ -14,7 +14,7 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=69";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=87";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=88";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -76,7 +76,7 @@ import {
   bloodDrop,
   trackFin,
 } from "../sim/hearth.js";
-import { finCloud } from "../sim/cloud.js?v=1";
+import { finCloud, rainAt } from "../sim/cloud.js?v=2";
 import { haltFeet } from "../sim/town.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
@@ -401,6 +401,8 @@ let mapDrag = null;
 const friends = new Map();
 const deeds = new Map();
 let roll = null;
+// ?rain=0..1 forces the rain you see (for checking the picture); otherwise it is the deck overhead.
+const rainForced = (() => { const v = Number(new URLSearchParams(location.search).get("rain")); return new URLSearchParams(location.search).has("rain") && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : -1; })();
 const vitals = createVitals();
 let loreNote = "";
 let brush = "dig";
@@ -2282,6 +2284,7 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   scene.prints = prints;
   scene.work = work;
   scene.time = tick / 30;
+  scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
   scene.gaze = gazeFor(
     scene.camera,
     eyeOf(sample),

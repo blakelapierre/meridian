@@ -8,7 +8,7 @@ Using a fin breaks it. A broken fin gives no flux. Four metal repairs a broken f
 
 ## This pass
 
-A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky draws (same noise, heights and drift, on tick time) along the sun ray from the fin. The fin loses that share of its flux, and the line says `flux N cloud` while one is over it. The same cloud darkens the ground under it: direct sun on any lit surface is cut by up to three quarters.
+A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky draws (same noise, heights and drift, on tick time) along the sun ray from the fin. The fin loses that share of its flux, and the line says `flux N cloud` while one is over it. The same cloud darkens the ground under it: direct sun on any lit surface is cut by up to three quarters. Under a thick deck you see rain: the view greys and thin streaks fall, harder as the deck overhead thickens. `?rain=0..1` forces it.
 
 ## Proves
 
@@ -16,7 +16,7 @@ A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky dra
 
 ## Next
 
-A cloud you can see rain from. The deck rains on a pool, but the picture draws no rain. Not in this build.
+Rain that wets the sand. Ground under the rain still looks dry. Not in this build.
 
 ## Later
 

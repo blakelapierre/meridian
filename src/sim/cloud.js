@@ -38,3 +38,10 @@ export function finCloud(at, tick) {
   const len = Math.hypot(sun[0], sun[1], sun[2]) || 1;
   return cloudShade([at?.[0] || 0, at?.[1] || 0, 1], [sun[0] / len, sun[1] / len, sun[2] / len], tick / 30);
 }
+
+// How hard it rains where you stand: 0 under a thin deck, rising to 1 as the deck overhead thickens
+// past the pool rain line (0.35 shade).
+export function rainAt(x, y, tick) {
+  const shade = cloudShade([x || 0, y || 0, 0], [0, 0, 1], tick / 30);
+  return Math.min(1, Math.max(0, (shade - 0.3) / 0.2));
+}
