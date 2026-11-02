@@ -14,7 +14,8 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=69";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=85";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=86";
+import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
 import { cameraAccel, cameraSpeed, createPacer, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=88";
@@ -189,6 +190,12 @@ canvas.addEventListener("webglcontextlost", (event) => {
 const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
+let smoothUpscale = true;
+// ?res=0.25: cap the render scale (testing the low-resolution look on fast machines).
+const resCap = Math.max(0, Math.min(1, Number(params.get("res")) || 0));
+try { smoothUpscale = smoothingFrom(location.search, window.localStorage); } catch { smoothUpscale = smoothingFrom(location.search, null); }
+painter?.setSmoothing?.(smoothUpscale);
+canvas.dataset.aa = smoothUpscale ? "1" : "0";
 let holdKeep = false;
 const freshBoot = params.get("fresh") === "1";
 const bootBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-boot");
@@ -2315,7 +2322,7 @@ function paint(sample, width = canvas.width, height = canvas.height) {
       return scene;
     }
     canvas.dataset.renderer = "cpu";
-    canvas.style.imageRendering = "pixelated";
+    canvas.style.imageRendering = smoothUpscale ? "auto" : "pixelated";
   }
   const pixels = paintFrame(scene, canvas.width, canvas.height);
   if (slot === "line") {
@@ -3766,7 +3773,8 @@ if (params.get("still") !== "1") {
     const fraction = painter ? tracedFraction(sight, { aspect: camAspect, gaze: perception.focus, grid: 24 }) : 1;
     const frameBudget = settled ? STILL_FRAME_MS : Math.max(paced.refresh || decision.refresh || 16, 1000 / 30);
     const fit = traceBudget.scale({ displayW, displayH, fraction });
-    const finalScale = painter && !extra ? (settled ? fit : Math.min(paced.scale, fit)) : paced.scale;
+    const pacedScale = painter && !extra ? (settled ? fit : Math.min(paced.scale, fit)) : paced.scale;
+    const finalScale = resCap > 0 ? Math.min(pacedScale, resCap) : pacedScale;
     const trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
     // Trace cost is the extra frame time a trace adds over a present-only frame; it lands in the next gap.
     if (!extra && decision.gap > 0) {
@@ -3787,7 +3795,7 @@ if (params.get("still") !== "1") {
     canvas.dataset.traceH = String(trace.height);
     canvas.dataset.level = Number(finalScale || 0).toFixed(2);
     canvas.dataset.detail = "0";
-    canvas.style.imageRendering = trace.width >= displayW - 4 ? "auto" : "pixelated";
+    canvas.style.imageRendering = canvasRendering(smoothUpscale, trace.width, displayW);
     if (painter) {
       if (canvas.width !== displayW) canvas.width = displayW;
       if (canvas.height !== displayH) canvas.height = displayH;
