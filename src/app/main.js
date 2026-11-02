@@ -6,7 +6,7 @@ import { mountOnboard } from "./onboard.js?v=2";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
 import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=4";
 import { hearStep, seaGain } from "../audio/cues.js";
-import { createListener } from "../audio/play.js?v=3";
+import { createListener } from "../audio/play.js?v=4";
 import { createAmbient, planAmbient } from "../audio/ambient.js";
 import { cueStyle, darkLift, exposureSkills, hearSource, sensePresence } from "../sim/hearing.js";
 import { skillLabel, tooltipFor } from "./skill-text.js";
@@ -76,7 +76,7 @@ import {
   bloodDrop,
   trackFin,
 } from "../sim/hearth.js";
-import { finCloud, rainAt, rainWord } from "../sim/cloud.js?v=4";
+import { finCloud, rainAt, rainWord, splashes, wetAt } from "../sim/cloud.js?v=5";
 import { haltFeet } from "../sim/town.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
@@ -3638,6 +3638,8 @@ if (params.get("still") !== "1") {
       const stride = hearStep(stepAt, player.position, !!sample.sprint);
       stepAt = stride.at;
       hear(stride.cue);
+      // Wet ground splashes underfoot (same wetness the picture shows; src/sim/cloud.js wetAt).
+      if (stride.cue && splashes(wetAt(player.position[0], player.position[1], tick))) listener.ambient("splash", tick % 4, 0.5, { angle: 0, precise: false });
       stepWearAll();
       if (stride.cue) {
         stepWear(wear, player.position[0], player.position[1]);

@@ -277,3 +277,14 @@ test("the status line says when it rains", () => {
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /lightNote = ` · \$\{light\}\$\{rainWord\(rainNow\)\}`/);
 });
+
+import { splashes } from "../src/sim/cloud.js";
+
+test("steps splash on wet ground", () => {
+  assert.equal(splashes(0), false);
+  assert.equal(splashes(0.3), true);
+  const play = readFileSync(new URL("../src/audio/play.js", import.meta.url), "utf8");
+  assert.match(play, /case "splash":/);
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /stride\.cue && splashes\(wetAt\(/);
+});

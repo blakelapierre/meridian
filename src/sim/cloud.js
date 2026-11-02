@@ -61,3 +61,9 @@ export function rainWord(rain) {
   if (!(rain > 0.05)) return "";
   return rain < 0.5 ? " drizzle" : " rain";
 }
+
+// Steps splash once the ground is properly wet.
+export const SPLASH_WET = 0.3;
+export function splashes(wet) {
+  return wet >= SPLASH_WET;
+}

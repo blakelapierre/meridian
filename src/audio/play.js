@@ -105,6 +105,9 @@ export function createListener() {
       case "gust":
         end = hiss("bandpass", (380 + variant * 90) * jitter, 1.2, 1.6 + variant * 0.5, 0.7, 0.8);
         break;
+      case "splash":
+        end = hiss("bandpass", (900 + variant * 150) * jitter, 1.4, 0.22, 0.02, 0.8);
+        break;
       case "rain":
         end = hiss("highpass", (1700 + variant * 200) * jitter, 0.5, 2.6, 0.6, 0.9);
         break;

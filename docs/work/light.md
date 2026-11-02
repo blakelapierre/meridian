@@ -42,6 +42,10 @@ Ground with anything solid straight above it stays dry: no darkening, no sheen. 
 
 The status line names the weather: "day drizzle" or "day rain" where you stand.
 
+## This pass (splash)
+
+Steps splash on wet ground (wetness 0.3 and up), using the same `wetAt` the picture shows. A roof does not dry the splash yet.
+
 ## Next
 
 A roof you hear: rain sound still ignores a roof; it should drum and muffle under one. Not in this build.
