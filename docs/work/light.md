@@ -30,9 +30,13 @@ Ground stays wet after the cloud passes: rain from 30 s ago counts at 65% and fr
 
 Under a raining deck you hear it: a soft high hiss around you every 1–2.5 s, louder as the rain gets harder, and silent once it stops (`src/audio/ambient.js` kind `rain`).
 
+## This pass (roof)
+
+Under anything solid straight overhead, the near rain streaks and grey stop; the shader asks the same occluder query the sun shadow uses.
+
 ## Next
 
-Rain on a roof: under a built floor or roof, rain should sound different and the view should stay clear. Not in this build.
+A roof you hear and a dry floor: the rain sound and wet ground still ignore a roof. Not in this build.
 
 ## Later
 

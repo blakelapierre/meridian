@@ -1201,7 +1201,8 @@ void main() {
   }
   // Rain you can see: under a thick deck (uRain from src/sim/cloud.js) thin falling streaks dim and
   // grey the view. Streak columns are hashed, and each falls at its own pace on tick time.
-  if (uRain > 0.0) {
+  // Under a roof (anything solid straight above the camera) the near streaks and grey stop.
+  if (uRain > 0.0 && !blocked(uOrigin + vec3(0.0, 0.0, 0.3), vec3(0.0, 0.0, 1.0))) {
     vec2 rp = vec2(vRay.x * 140.0, vRay.y * 9.0);
     float col = floor(rp.x);
     float h = hash21(vec2(col, 7.0));

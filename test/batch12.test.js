@@ -223,3 +223,8 @@ test("you hear rain only while it rains, louder as it rains harder", () => {
   const play = readFileSync(new URL("../src/audio/play.js", import.meta.url), "utf8");
   assert.match(play, /case "rain":/);
 });
+
+test("rain view stops under a roof", () => {
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /uRain > 0\.0 && !blocked\(uOrigin \+ vec3\(0\.0, 0\.0, 0\.3\), vec3\(0\.0, 0\.0, 1\.0\)\)/);
+});
