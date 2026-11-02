@@ -18,7 +18,7 @@ import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=86";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createMotionGovernor, createPicturePace, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=89";
+import { cameraAccel, cameraSpeed, createPacer, createMotionGovernor, createPicturePace, minFpsFrom, MINFPS_KEY, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=90";
 import {
   authority,
   bandage,
@@ -153,8 +153,16 @@ let painter = createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
 const picture = createPicturePace();
-const motionRes = createMotionGovernor();
+// ?minfps= sets the lowest frame rate motion may fall to before resolution drops (default 12, remembered).
+const minFps = (() => {
+  const raw = new URLSearchParams(location.search).get("minfps");
+  let stored = null;
+  try { stored = localStorage.getItem(MINFPS_KEY); if (raw !== null && minFpsFrom(raw, null) === Number(raw)) localStorage.setItem(MINFPS_KEY, raw); } catch {}
+  return minFpsFrom(raw, stored);
+})();
+const motionRes = createMotionGovernor({ minFps });
 let lastShownScale = 1;
+let stillShownScale = 1;
 let detailRays = 0;
 let rayBudget = 4000;
 let paintKind = "full";
@@ -3773,19 +3781,20 @@ if (params.get("still") !== "1") {
     const sight = perception.senses.sight;
     const camAspect = displayW / Math.max(1, displayH);
     const fraction = painter ? tracedFraction(sight, { aspect: camAspect, gaze: perception.focus, grid: 24 }) : 1;
-    const frameBudget = settled ? STILL_FRAME_MS : Math.max(paced.refresh || decision.refresh || 16, 1000 / 30);
+    const frameBudget = settled ? STILL_FRAME_MS : motionRes.budget;
     const fit = traceBudget.scale({ displayW, displayH, fraction });
     // Moving: resolution follows real frame time (motionRes), not the trace-cost heuristics, so a
     // device that holds 60 fps keeps its resolution instead of collapsing on the first move.
     let pacedScale;
     if (painter && !extra && !settled) {
-      pacedScale = motionRes.step({ gap: decision.gap, refresh: paced.refresh || decision.refresh, start: lastShownScale });
+      pacedScale = motionRes.step({ gap: decision.gap, start: stillShownScale });
     } else {
       if (settled) motionRes.rest();
       pacedScale = painter && !extra ? fit : paced.scale;
     }
     const finalScale = resCap > 0 ? Math.min(pacedScale, resCap) : pacedScale;
     if (!extra) lastShownScale = finalScale;
+    if (!extra && settled) stillShownScale = Math.max(finalScale, 0.15);
     const trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
     // Trace cost is the extra frame time a trace adds over a present-only frame; it lands in the next gap.
     if (!extra && decision.gap > 0) {
@@ -3819,7 +3828,7 @@ if (params.get("still") !== "1") {
     canvas.dataset.info = String(Math.round(paced.info || 0));
     canvas.dataset.speed = speed.toFixed(1);
     canvas.dataset.accel = accel.toFixed(1);
-    const late = !extra && active && decision.gap > (paced.refresh || decision.refresh) * 1.35;
+    const late = !extra && active && decision.gap > (settled ? (paced.refresh || decision.refresh) * 1.35 : motionRes.budget);
     const paceLabel = late ? "behind" : paceWord(decision.mode, { still, arrived, holding: decision.holding });
     canvas.dataset.pace = paceLabel;
     const interval = extra ? Math.max(decision.interval || 1000, 250) : traceInterval(settled, accel, paced.refresh || decision.refresh);
