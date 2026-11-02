@@ -103,6 +103,7 @@ export function screenFoveaAngle(uv, gaze, view, tanHalf) {
   return Math.atan(Math.hypot(dx, dy));
 }
 export const WET_DARKEN = 0.3;
+export const WET_SHEEN = 0.45;
 export const FOVEA_GLSL = `
 uniform vec2 uGaze;
 uniform vec4 uFovea;
@@ -948,6 +949,10 @@ vec3 skyColor(vec3 rd) {
 }
 
 const float WET_DARKEN = 0.3;
+const float WET_SHEEN = 0.45;
+float wetAt(vec3 p) {
+  return clamp((cloudShadeAt(p, vec3(0.0, 0.0, 1.0)) - 0.3) / 0.2, 0.0, 1.0);
+}
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);
   float day = smoothstep(0.0, 0.2, sun.z);
@@ -959,7 +964,7 @@ vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   // Wet ground: where the deck overhead rains (the same rule as rainAt in src/sim/cloud.js),
   // upward faces darken, the way rain-soaked sand and grass do.
   if (n.z > 0.3) {
-    float wet = clamp((cloudShadeAt(p, vec3(0.0, 0.0, 1.0)) - 0.3) / 0.2, 0.0, 1.0);
+    float wet = wetAt(p);
     albedo *= 1.0 - WET_DARKEN * wet * smoothstep(0.3, 0.8, n.z);
   }
   return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * direct);
@@ -1117,7 +1122,17 @@ void main() {
     if (bounce == 0) firstT = min(bestT, workT);
     if (found) {
       if (dot(bestN, rd) > 0.0) bestN = -bestN;
-      if (bounce == 0) bestRgb = sunLit(bestP, bestN, bestRgb);
+      if (bounce == 0) {
+        bestRgb = sunLit(bestP, bestN, bestRgb);
+        // Wet ground shines: a grazing-angle sky sheen where it rains, so puddled flats catch the light.
+        if (bestN.z > 0.6) {
+          float wetness = wetAt(bestP);
+          if (wetness > 0.0) {
+            float graze = pow(1.0 - abs(dot(bestN, rd)), 4.0);
+            bestRgb = mix(bestRgb, skyColor(reflect(rd, bestN)), wetness * WET_SHEEN * (0.15 + 0.85 * graze));
+          }
+        }
+      }
       else {
         float nd = max(dot(bestN, normalize(uSun)), 0.0);
         bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;

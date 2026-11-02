@@ -159,7 +159,7 @@ test("the third-person figure balls up while the roll runs", () => {
 
 test("ground under raining cloud looks wet, by the same rule as rainAt", async () => {
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
-  assert.match(gpu, /float wet = clamp\(\(cloudShadeAt\(p, vec3\(0\.0, 0\.0, 1\.0\)\) - 0\.3\) \/ 0\.2, 0\.0, 1\.0\);/);
+  assert.match(gpu, /return clamp\(\(cloudShadeAt\(p, vec3\(0\.0, 0\.0, 1\.0\)\) - 0\.3\) \/ 0\.2, 0\.0, 1\.0\);/);
   const cloud = readFileSync(new URL("../src/sim/cloud.js", import.meta.url), "utf8");
   assert.match(cloud, /\(shade - 0\.3\) \/ 0\.2|\(s - 0\.3\) \/ 0\.2/);
   const { WET_DARKEN } = await import("../src/render/gpu.js");
@@ -179,4 +179,11 @@ test("peers see a tuck or roll: stance goes on the wire on change", () => {
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /rollSpeed\(roll, tick\) > 0;\n  if \(!stanceDue/);
   assert.match(main, /stances\.get\(actor\.id\)\?\.crouch/);
+});
+
+test("wet ground shines with a grazing sky sheen", async () => {
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /skyColor\(reflect\(rd, bestN\)\), wetness \* WET_SHEEN/);
+  const { WET_SHEEN } = await import("../src/render/gpu.js");
+  assert.ok(WET_SHEEN > 0 && WET_SHEEN < 1);
 });

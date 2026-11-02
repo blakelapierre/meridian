@@ -18,9 +18,13 @@ A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky dra
 
 Where the deck overhead rains, upward faces darken by up to 30%, by the same rule as `rainAt`, so wet patches line up with the visible rain and the pools that fill.
 
+## This pass (sheen)
+
+Flat wet ground mixes in the reflected sky, strongest at grazing angles, so wet patches shine toward the horizon.
+
 ## Next
 
-Puddles that shine: wet ground is darker but not glossy; no sky reflection on it yet. Not in this build.
+Rain that stops: the deck drifts, so rain and wet patches move with it, but ground does not stay wet after the cloud passes. Not in this build.
 
 ## Later
 
