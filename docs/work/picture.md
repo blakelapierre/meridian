@@ -18,7 +18,7 @@ The sharp area is now a circle on the screen: the gaze-to-pixel offset on the im
 
 ## Next
 
-A circle that follows the eyes: the gaze is still the screen centre or the tap point, not where the player looks on a phone. Not in this build.
+A circle that follows a tap: the gaze follows the body's look (`gazeFor`), but a tap on the phone does not move the focus. Not in this build.
 
 ## Later
 

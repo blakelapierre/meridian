@@ -48,7 +48,7 @@ Steps splash on wet ground (wetness 0.3 and up), using the same `wetAt` the pict
 
 ## Next
 
-A roof you hear: rain sound still ignores a roof; it should drum and muffle under one. Not in this build.
+A roof to stand under: floors sit on the ground, so the only cover today is a wall lip or beam; the dry-floor and no-streak rules wait for a raised roof piece, and rain sound should then drum and muffle under it. Not in this build.
 
 ## Later
 
