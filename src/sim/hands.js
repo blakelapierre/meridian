@@ -69,3 +69,20 @@ export function startRoll(tuck, velocity, tick) {
 export function rollSpeed(roll, tick) {
   return roll && tick < roll.until ? roll.speed : 0;
 }
+
+// Stance on the wire: a tuck or a roll is a crouch peers draw. Sent on change and as a slow refresh.
+export const STANCE_REFRESH = 90;
+export function stanceMessage(crouch) {
+  return JSON.stringify({ t: "stance", crouch: !!crouch });
+}
+export function readStance(text) {
+  try {
+    const m = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
+    return m?.t === "stance" ? { crouch: m.crouch === true } : null;
+  } catch {
+    return null;
+  }
+}
+export function stanceDue(crouch, last, tick) {
+  return !last || last.crouch !== !!crouch || tick - last.tick >= STANCE_REFRESH;
+}

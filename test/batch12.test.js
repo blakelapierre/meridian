@@ -165,3 +165,18 @@ test("ground under raining cloud looks wet, by the same rule as rainAt", async (
   const { WET_DARKEN } = await import("../src/render/gpu.js");
   assert.ok(WET_DARKEN > 0 && WET_DARKEN < 0.5);
 });
+
+import { readStance, stanceDue, stanceMessage, STANCE_REFRESH } from "../src/sim/hands.js";
+
+test("peers see a tuck or roll: stance goes on the wire on change", () => {
+  assert.deepEqual(readStance(stanceMessage(true)), { crouch: true });
+  assert.deepEqual(readStance(stanceMessage(false)), { crouch: false });
+  assert.equal(readStance('{"t":"deed"}'), null);
+  assert.equal(stanceDue(false, null, 0), true);
+  assert.equal(stanceDue(false, { crouch: false, tick: 0 }, 5), false);
+  assert.equal(stanceDue(true, { crouch: false, tick: 0 }, 5), true);
+  assert.equal(stanceDue(false, { crouch: false, tick: 0 }, STANCE_REFRESH), true);
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /rollSpeed\(roll, tick\) > 0;\n  if \(!stanceDue/);
+  assert.match(main, /stances\.get\(actor\.id\)\?\.crouch/);
+});

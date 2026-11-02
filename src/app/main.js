@@ -80,7 +80,7 @@ import { finCloud, rainAt } from "../sim/cloud.js?v=2";
 import { haltFeet } from "../sim/town.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
-import { lookDirection, moveIntent, rollSpeed, startRoll, stepHands } from "../sim/hands.js?v=59";
+import { lookDirection, moveIntent, readStance, rollSpeed, stanceDue, stanceMessage, startRoll, stepHands } from "../sim/hands.js?v=60";
 import { createJump } from "../sim/jump.js";
 import { createSkills, claimSpecialty, grantUse, skillRows, teachEmpty, teachMore } from "../sim/skills.js?v=3";
 import { chaseOrigin, createCameraSpring, frameCamera, liftCamera, stepCamera, stepLook, CHASE, BODY_COLORS } from "../sim/body.js?v=57";
@@ -1336,8 +1336,17 @@ function otherActors() {
   return list;
 }
 
+const stances = new Map();
+let sentStance = null;
+function sendStance() {
+  const crouch = keys.has("ControlLeft") || keys.has("ControlRight") || rollSpeed(roll, tick) > 0;
+  if (!stanceDue(crouch, sentStance, tick)) return;
+  sentStance = { crouch, tick };
+  const text = stanceMessage(crouch);
+  for (const link of links) if (link.ctrl?.readyState === "open") try { link.ctrl.send(text); } catch { /* next refresh */ }
+}
 function drawnOthers() {
-  const list = otherActors();
+  const list = otherActors().map((actor) => (stances.get(actor.id)?.crouch ? { ...actor, crouch: true } : actor));
   if (!dragging || selection?.kind !== "player") return list;
   const dir = lookDirection(yaw, 0);
   return list.map((actor) => {
@@ -2708,6 +2717,11 @@ async function openLink(to, offer, role) {
       report = "dragged";
       return;
     }
+    const stance = readStance(text);
+    if (stance) {
+      stances.set(to, stance);
+      return;
+    }
     const deed = readDeedMessage(text);
     if (deed && deed.about === meId) {
       theirDeeds.set(to, deed);
@@ -3042,6 +3056,7 @@ let motionTick = -1;
 
 function publishPose() {
   if (followId) return;
+  sendStance();
   const pose = { tick, x: player.position[0], y: player.position[1], z: player.position[2], yaw, pitch };
   const packet = encodePosition(pose);
   let packetV2 = null;

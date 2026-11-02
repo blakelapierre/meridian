@@ -22,9 +22,13 @@ A fall reads a soak you can change. Holding crouch as you land tucks: the soak i
 
 The third-person figure stays crouched for the length of the roll, so you see it ball up and carry through.
 
+## This pass (stance on the wire)
+
+Crouch, tuck and roll go to peers as a small `stance` message, sent when it changes and every 3 s, so others see you ball up.
+
 ## Next
 
-A roll other players see: crouch is not on the wire at all, so peers never see a tuck or a roll. Not in this build.
+A roll that tumbles: the figure crouches but does not turn over. Not in this build.
 
 ## Later
 
