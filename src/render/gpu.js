@@ -90,6 +90,12 @@ export function exposureFor(sun) {
 }
 // Shared GLSL for perception-driven foveation; mirrors falloff/refreshPeriod/blockLevel in src/sim/perception.js.
 // Angles are measured in camera space, so only the field of view and aspect are needed.
+// Past this fovea fade the trace stops after EDGE_LAST_BOUNCE reflections (the edge drops the second bounce).
+export const EDGE_FADE = "0.5";
+export const EDGE_LAST_BOUNCE = 1;
+export function edgeBounces(fade, full = false) {
+  return !full && fade > Number(EDGE_FADE) ? EDGE_LAST_BOUNCE : 4;
+}
 export const FOVEA_GLSL = `
 uniform vec2 uGaze;
 uniform vec4 uFovea;
@@ -965,6 +971,10 @@ void main() {
   float thru = 1.0;
   float firstT = 4000.0;
   float limit = 0.0;
+  // The foveated edge drops the second bounce: past the fovea fade a mirror hit takes the sky tint
+  // instead of tracing on, so the periphery pays for at most one reflection.
+  float edgeT = uFull < 0.5 ? fovT(vRay) : 0.0;
+  int lastBounce = edgeT > ${EDGE_FADE} ? ${EDGE_LAST_BOUNCE} : 4;
   for (int bounce = 0; bounce < 5; bounce++) {
     float bestT = 1.0e30;
     vec3 bestP = ro;
@@ -1125,8 +1135,8 @@ void main() {
       }
     }
     float mirror = bounce == 4 ? 0.0 : clamp(bestRef, 0.0, 1.0);
-    // One material rule everywhere: faint mirrors take a cheap sky tint instead of a traced bounce.
-    if (found && mirror < 0.2) {
+    // One material rule everywhere: faint mirrors (and any mirror on the edge's last hop) take a cheap sky tint.
+    if (found && (mirror < 0.2 || bounce >= lastBounce)) {
       vec3 rr = reflect(rd, bestN);
       float up = clamp(rr.z * 0.85 + 0.2, 0.0, 1.0);
       float day = smoothstep(-0.02, 0.25, normalize(uSun).z);
