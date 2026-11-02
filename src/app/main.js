@@ -2162,7 +2162,7 @@ function publish() {
   const bound = yard.bound ? peerDeed({ cell: yard.bound, holder: pubkeyHex(identity.pubkey), radius: 6 }, yard.grace) : null;
   const boundNote = bound ? ` · bound${bound.grace ? " grace" : ""}` : "";
   const legNote = (vitals.left < 100 || vitals.right < 100) ? ` · L${Math.ceil(vitals.left)} R${Math.ceil(vitals.right)}` : "";
-  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${landingNote(skills)}${legNote}${windNote}`;
+  const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${landingNote(skills, keys.has("ControlLeft") || keys.has("ControlRight"))}${legNote}${windNote}`;
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}/${spoilCap(skills.mining.value)}` : "";
   const brushNote = slot === "bit" && brush !== "dig" ? ` · ${brush}` : "";
   const light = dayWord(tick);
@@ -3641,7 +3641,7 @@ if (params.get("still") !== "1") {
         if (player.velocity[2] < 0) player.velocity[2] = 0;
       }
       if (falling < -9 && player.position[2] <= (world.ground || 0) + 0.2) {
-        vitals.integrity = fallFromCount(vitals.integrity, falling, seedLanding(skills));
+        vitals.integrity = fallFromCount(vitals.integrity, falling, seedLanding(skills), keys.has("ControlLeft") || keys.has("ControlRight"));
         countLanding(skills);
       }
       claimSpecialty(skills);

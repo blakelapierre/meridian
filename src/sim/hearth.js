@@ -114,9 +114,11 @@ export function finOutput(tick) {
   return finFluxPerMin([0, 0, 1], sunDirection(tick));
 }
 
-export function fallHurt(integrity, speedDown, landing = 0) {
+// A crouched (tucked) landing adds TUCK_SOAK on top of the landing count; the fall reads the sum.
+export const TUCK_SOAK = 2;
+export function fallHurt(integrity, speedDown, landing = 0, tuck = false) {
   if (speedDown > -9) return integrity;
-  const soak = Math.min(6, Math.floor(Math.max(0, landing) / 24));
+  const soak = Math.min(8, Math.min(6, Math.floor(Math.max(0, landing) / 24)) + (tuck ? TUCK_SOAK : 0));
   return Math.max(0, integrity - (8 - soak));
 }
 
@@ -139,14 +141,14 @@ export function landingSoak(falls = 0) {
   return Math.min(6, Math.max(0, falls | 0));
 }
 
-export function landingNote(skills) {
+export function landingNote(skills, tuck = false) {
   const falls = skills?.landing?.falls;
   if (!(falls > 0)) return "";
-  return ` land ${falls} soak ${landingSoak(falls)}`;
+  return ` land ${falls} soak ${landingSoak(falls) + (tuck ? TUCK_SOAK : 0)}${tuck ? " tuck" : ""}`;
 }
 
-export function fallFromCount(integrity, speedDown, falls = 0) {
-  return fallHurt(integrity, speedDown, Math.max(0, falls) * 24);
+export function fallFromCount(integrity, speedDown, falls = 0, tuck = false) {
+  return fallHurt(integrity, speedDown, Math.max(0, falls) * 24, tuck);
 }
 
 export function fluxMetal(tick, yaw = 0, broken = false) {
