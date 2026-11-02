@@ -22,9 +22,13 @@ Where the deck overhead rains, upward faces darken by up to 30%, by the same rul
 
 Flat wet ground mixes in the reflected sky, strongest at grazing angles, so wet patches shine toward the horizon.
 
+## This pass (drying)
+
+Ground stays wet after the cloud passes: rain from 30 s ago counts at 65% and from 90 s ago at 30%. The shader reads the past as the rain upwind now, since the deck drifts at a fixed rate (`DECK_DRIFT`); a test checks that shortcut against the deck's own clock.
+
 ## Next
 
-Rain that stops: the deck drifts, so rain and wet patches move with it, but ground does not stay wet after the cloud passes. Not in this build.
+Rain you hear: the rain is seen, but there is no sound for it yet. Not in this build.
 
 ## Later
 

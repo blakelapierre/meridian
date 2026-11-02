@@ -187,3 +187,21 @@ test("wet ground shines with a grazing sky sheen", async () => {
   const { WET_SHEEN } = await import("../src/render/gpu.js");
   assert.ok(WET_SHEEN > 0 && WET_SHEEN < 1);
 });
+
+import { cloudShade as deckShade, DECK_DRIFT, wetAt as groundWet } from "../src/sim/cloud.js";
+
+test("ground stays wet after the rain moves on, and the drift shortcut matches time", () => {
+  // The shader reads the past as rain upwind now; check that equals the deck Δ seconds ago.
+  for (const [x, y, s] of [[3, 4, 100], [-50, 20, 900], [200, -7, 3000]]) {
+    const past = deckShade([x, y, 0], [0, 0, 1], s - 30);
+    const upwind = deckShade([x - 30 * DECK_DRIFT, y, 0], [0, 0, 1], s);
+    assert.ok(Math.abs(past - upwind) < 1e-6, `${past} vs ${upwind}`);
+  }
+  let lingered = false;
+  for (let t = 2700; t < 200000 && !lingered; t += 450) {
+    if (rainAt(0, 0, t) === 0 && groundWet(0, 0, t) > 0) lingered = true;
+  }
+  assert.ok(lingered, "some dry-sky moment still has wet ground");
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /rainNow\(p - vec3\(30\.0 \* DECK_DRIFT/);
+});

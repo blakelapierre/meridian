@@ -950,8 +950,18 @@ vec3 skyColor(vec3 rd) {
 
 const float WET_DARKEN = 0.3;
 const float WET_SHEEN = 0.45;
-float wetAt(vec3 p) {
+const float DECK_DRIFT = 0.004 / 0.018;
+float rainNow(vec3 p) {
   return clamp((cloudShadeAt(p, vec3(0.0, 0.0, 1.0)) - 0.3) / 0.2, 0.0, 1.0);
+}
+// Ground stays wet after the rain moves on and dries over about 90 s of game time. The deck drifts
+// toward +x at DECK_DRIFT m/s, so the rain that fell here Δ seconds ago is the rain over p - Δ·drift now.
+float wetAt(vec3 p) {
+  float now = rainNow(p);
+  if (now >= 1.0) return now;
+  float recent = rainNow(p - vec3(30.0 * DECK_DRIFT, 0.0, 0.0)) * 0.65;
+  float older = rainNow(p - vec3(90.0 * DECK_DRIFT, 0.0, 0.0)) * 0.3;
+  return max(now, max(recent, older));
 }
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);

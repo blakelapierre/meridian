@@ -45,3 +45,13 @@ export function rainAt(x, y, tick) {
   const shade = cloudShade([x || 0, y || 0, 0], [0, 0, 1], tick / 30);
   return Math.min(1, Math.max(0, (shade - 0.3) / 0.2));
 }
+
+// The deck drifts toward +x at this many metres per second (shader: uTime * 0.004 over a 0.018 scale).
+export const DECK_DRIFT = 0.004 / 0.018;
+// How wet the ground is: rain now, or rain that fell 30 s (×0.65) or 90 s (×0.3) ago and is drying.
+// Mirrors wetAt in src/render/gpu.js.
+export function wetAt(x, y, tick) {
+  const now = rainAt(x, y, tick);
+  if (now >= 1) return now;
+  return Math.max(now, rainAt(x, y, tick - 900) * 0.65, rainAt(x, y, tick - 2700) * 0.3);
+}
