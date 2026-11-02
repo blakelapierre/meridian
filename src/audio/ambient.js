@@ -12,6 +12,8 @@ export const AMBIENT_KINDS = {
   insect: { category: "nature", interval: [2, 6], when: "night", place: "land", gain: 0.35 },
   rustle: { category: "nature", interval: [4, 10], when: "any", place: "near", gain: 0.4 },
   activity: { category: "people", interval: [5, 12], when: "any", place: "actor", gain: 0.6 },
+  // Rain on the ground around you, only under a raining deck; its gain follows how hard it rains.
+  rain: { category: "weather", interval: [1.2, 2.4], when: "any", place: "near", gain: 0.7, needs: "rain" },
   rare: { category: "rare", interval: [45, 120], when: "any", place: "far", gain: 0.5 },
 };
 
@@ -50,11 +52,15 @@ function placeFor(kind, listener, actors, rand) {
 }
 
 // Advance the schedule to `now` (seconds). Returns the events due: { kind, category, at:[x,y], gain, variant }.
-export function planAmbient(state, { now, listener, light = "day", actors = [], rand = Math.random }) {
+export function planAmbient(state, { now, listener, light = "day", actors = [], rain = 0, rand = Math.random }) {
   const night = light === "night";
   const due = [];
   for (const [name, kind] of Object.entries(AMBIENT_KINDS)) {
     if ((kind.when === "day" && night) || (kind.when === "night" && !night)) continue;
+    if (kind.needs === "rain" && !(rain > 0.05)) {
+      delete state.next[name];
+      continue;
+    }
     const gap = () => kind.interval[0] + rand() * (kind.interval[1] - kind.interval[0]);
     if (state.next[name] === undefined) {
       state.next[name] = now + gap() * rand();
@@ -68,7 +74,8 @@ export function planAmbient(state, { now, listener, light = "day", actors = [], 
     let variant = Math.floor(rand() * 4);
     if (variant === state.variant[name]) variant = (variant + 1) % 4;
     state.variant[name] = variant;
-    due.push({ kind: name, category: kind.category, at, gain: kind.gain * (0.75 + rand() * 0.5), variant });
+    const weight = kind.needs === "rain" ? Math.min(1, rain) : 1;
+    due.push({ kind: name, category: kind.category, at, gain: kind.gain * weight * (0.75 + rand() * 0.5), variant });
   }
   return due;
 }

@@ -6,7 +6,7 @@ import { mountOnboard } from "./onboard.js?v=2";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
 import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=4";
 import { hearStep, seaGain } from "../audio/cues.js";
-import { createListener } from "../audio/play.js?v=2";
+import { createListener } from "../audio/play.js?v=3";
 import { createAmbient, planAmbient } from "../audio/ambient.js";
 import { cueStyle, darkLift, exposureSkills, hearSource, sensePresence } from "../sim/hearing.js";
 import { skillLabel, tooltipFor } from "./skill-text.js";
@@ -478,6 +478,7 @@ function stepAmbient() {
     listener: player.position,
     light: dayWord(tick),
     actors: otherActors().map((other) => other.feet),
+    rain: rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick),
   });
   for (const event of events) {
     const heard = hearSource(player.position, yaw, event.at, perception.senses.hearing, skills, event.category);

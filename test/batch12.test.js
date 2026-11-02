@@ -205,3 +205,21 @@ test("ground stays wet after the rain moves on, and the drift shortcut matches t
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /rainNow\(p - vec3\(30\.0 \* DECK_DRIFT/);
 });
+
+import { createAmbient, planAmbient } from "../src/audio/ambient.js";
+
+test("you hear rain only while it rains, louder as it rains harder", () => {
+  const seeded = () => { let s = 7; return () => ((s = (s * 16807) % 2147483647) / 2147483647); };
+  const run = (rain) => {
+    const state = createAmbient(), rand = seeded(), out = [];
+    for (let now = 0; now < 60; now += 0.5) out.push(...planAmbient(state, { now, listener: [0, 0], rain, rand }));
+    return out.filter((e) => e.kind === "rain");
+  };
+  assert.equal(run(0).length, 0);
+  const soft = run(0.3), hard = run(1);
+  assert.ok(hard.length > 10);
+  const mean = (list) => list.reduce((a, e) => a + e.gain, 0) / list.length;
+  assert.ok(mean(hard) > mean(soft) * 2);
+  const play = readFileSync(new URL("../src/audio/play.js", import.meta.url), "utf8");
+  assert.match(play, /case "rain":/);
+});

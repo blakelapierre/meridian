@@ -26,9 +26,13 @@ Flat wet ground mixes in the reflected sky, strongest at grazing angles, so wet 
 
 Ground stays wet after the cloud passes: rain from 30 s ago counts at 65% and from 90 s ago at 30%. The shader reads the past as the rain upwind now, since the deck drifts at a fixed rate (`DECK_DRIFT`); a test checks that shortcut against the deck's own clock.
 
+## This pass (rain sound)
+
+Under a raining deck you hear it: a soft high hiss around you every 1–2.5 s, louder as the rain gets harder, and silent once it stops (`src/audio/ambient.js` kind `rain`).
+
 ## Next
 
-Rain you hear: the rain is seen, but there is no sound for it yet. Not in this build.
+Rain on a roof: under a built floor or roof, rain should sound different and the view should stay clear. Not in this build.
 
 ## Later
 
