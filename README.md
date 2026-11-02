@@ -15,10 +15,10 @@ Pre-alpha. The Atoll slice is playable solo in the browser; multiplayer, progres
 | Area | State |
 |---|---|
 | Specs (`docs/`) | Written and locked for the Atoll slice |
-| `src/` | About 10,100 lines of browser JS across 86 modules: engine port (raycaster, N-body tick), sim (crust brush and chunk hash, strike, damage, shots and certs, op log, support/collapse, hearth/corpse), net (identity, room, positions, shots, terrain, archive), render (software and WebGL2 ray pass) |
+| `src/` | About 17,900 lines of browser JS across 102 modules: engine port (raycaster, N-body tick), sim (crust brush and chunk hash, strike, damage, shots and certs, op log, support/collapse, hearth/corpse), net (identity, room, positions, shots, terrain, archive), render (software and WebGL2 ray pass) |
 | `tools/` | Dev static server, signaling "lighthouse", launcher page, and browser harnesses (`view`, `link`, `dig`, `shot`, `archive`, `bench`, `scale`) |
-| Tests | 250 Node tests; 246 pass. The 4 two-browser WebRTC tests report **KNOWN-BLOCKED** where the machine's WebRTC policy stops peer data channels (a probe checks first), and run where it does not (as of 31 Oct 2026) |
-| Network phases | P0 Link and parts of P2 (signed, witnessed shots) and P3 (dig op hash) are exercised by browser tests; nothing beyond one island yet |
+| Tests | 341 Node tests; 337 pass. The 4 two-browser WebRTC tests report **KNOWN-BLOCKED** where the machine's WebRTC policy stops peer data channels (a probe checks first), and run where it does not (as of 2 Nov 2026) |
+| Network phases | P0 Link and parts of P2 (signed, witnessed shots) and P3 (dig op hash) are exercised by browser tests; nothing beyond one island yet. Each phase P0–P9 is a [`roadmap` issue](https://github.com/blakelapierre/meridian/labels/roadmap); see [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ## Run it
 
