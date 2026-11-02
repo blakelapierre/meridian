@@ -267,3 +267,13 @@ test("ground under a roof stays dry", () => {
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /if \(wet > 0\.0 && blocked\(p \+ vec3\(0\.0, 0\.0, 0\.08\), vec3\(0\.0, 0\.0, 1\.0\)\)\) return 0\.0;/);
 });
+
+import { rainWord } from "../src/sim/cloud.js";
+
+test("the status line says when it rains", () => {
+  assert.equal(rainWord(0), "");
+  assert.equal(rainWord(0.3), " drizzle");
+  assert.equal(rainWord(0.9), " rain");
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /lightNote = ` · \$\{light\}\$\{rainWord\(rainNow\)\}`/);
+});

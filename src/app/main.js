@@ -76,7 +76,7 @@ import {
   bloodDrop,
   trackFin,
 } from "../sim/hearth.js";
-import { finCloud, rainAt } from "../sim/cloud.js?v=3";
+import { finCloud, rainAt, rainWord } from "../sim/cloud.js?v=4";
 import { haltFeet } from "../sim/town.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
@@ -2195,7 +2195,8 @@ function publish() {
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}/${spoilCap(skills.mining.value)}` : "";
   const brushNote = slot === "bit" && brush !== "dig" ? ` · ${brush}` : "";
   const light = dayWord(tick);
-  const lightNote = ` · ${light}`;
+  const rainNow = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
+  const lightNote = ` · ${light}${rainWord(rainNow)}`;
   listener.setLevel(light === "night" ? 0.45 : light === "dawn" || light === "dusk" ? 0.7 : 1);
   const muteNote = listener.muted ? " · muted" : "";
   const friendNote = selection?.kind === "player" && friends.has(selection.id)

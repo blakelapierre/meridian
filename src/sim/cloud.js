@@ -55,3 +55,9 @@ export function wetAt(x, y, tick) {
   if (now >= 1) return now;
   return Math.max(now, rainAt(x, y, tick - 900) * 0.65, rainAt(x, y, tick - 2700) * 0.3);
 }
+
+// The status word for rain where you stand: nothing when dry, "drizzle" or "rain" as it thickens.
+export function rainWord(rain) {
+  if (!(rain > 0.05)) return "";
+  return rain < 0.5 ? " drizzle" : " rain";
+}

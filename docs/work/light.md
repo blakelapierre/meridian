@@ -38,6 +38,10 @@ Under anything solid straight overhead, the near rain streaks and grey stop; the
 
 Ground with anything solid straight above it stays dry: no darkening, no sheen. The roof check runs only where the ground would otherwise be wet.
 
+## This pass (status)
+
+The status line names the weather: "day drizzle" or "day rain" where you stand.
+
 ## Next
 
 A roof you hear: rain sound still ignores a roof; it should drum and muffle under one. Not in this build.
