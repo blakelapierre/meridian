@@ -151,10 +151,12 @@ export function fallFromCount(integrity, speedDown, falls = 0, tuck = false) {
   return fallHurt(integrity, speedDown, Math.max(0, falls) * 24, tuck);
 }
 
-export function fluxMetal(tick, yaw = 0, broken = false) {
+// shade: the cloud between the fin and the sun (src/sim/cloud.js) cuts that share of the flux.
+export function fluxMetal(tick, yaw = 0, broken = false, shade = 0) {
   if (broken) return 0;
   const gain = yaw ? 0.6 : 1;
-  return Math.floor((finOutput(tick) * gain) / 10);
+  const open = 1 - Math.min(1, Math.max(0, shade || 0));
+  return Math.floor((finOutput(tick) * gain * open) / 10);
 }
 
 export function finCredit(metal) {

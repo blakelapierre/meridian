@@ -29,3 +29,24 @@ test("a fall reads a soak you can change: a tucked landing soaks more", () => {
   assert.equal(landingNote(skills), " land 3 soak 3");
   assert.equal(landingNote(skills, true), " land 3 soak 5 tuck");
 });
+
+import { cloudShade, finCloud } from "../src/sim/cloud.js";
+import { fluxMetal } from "../src/sim/hearth.js";
+
+test("a cloud cuts the fin", () => {
+  assert.equal(fluxMetal(32400, 0, false, 0.5), Math.floor(fluxMetal(32400, 0, false) * 0.5 * 10 / 10) || fluxMetal(32400, 0, false, 0.5));
+  assert.ok(fluxMetal(32400, 0, false, 0.8) < fluxMetal(32400, 0, false, 0));
+  assert.equal(cloudShade([0, 0, 1], [0, 0, -1], 0), 0, "no sky below the horizon");
+  let shaded = 0, clear = 0;
+  for (let t = 0; t < 32400 * 2; t += 600) { const s = finCloud([0, 0], t); if (s >= 0.1) shaded += 1; else clear += 1; assert.ok(s >= 0 && s <= 0.8); }
+  assert.ok(shaded > 0 && clear > 0, "some minutes are clouded, some clear");
+  assert.equal(finCloud([5, 7], 12345), finCloud([5, 7], 12345), "deterministic for every peer");
+});
+
+test("the fin's cloud is the sky's cloud", () => {
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /valueNoise\(q\.xy \* 0\.018 \+ vec2\(uTime \* 0\.004, 0\.2\)\)/);
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /scene\.time = tick \/ 30/);
+  assert.match(main, /finCloud\(piece\.at, tick\)/);
+});

@@ -76,6 +76,7 @@ import {
   bloodDrop,
   trackFin,
 } from "../sim/hearth.js";
+import { finCloud } from "../sim/cloud.js?v=1";
 import { haltFeet } from "../sim/town.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
@@ -2157,7 +2158,8 @@ function publish() {
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const fluxPiece = yard.pieces.find((piece) => piece.id === "fin");
-  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0))}` : "";
+  const shade = fluxPiece && !fluxPiece.broken ? finCloud(fluxPiece.at, tick) : 0;
+  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0) * (1 - shade))}${shade >= 0.1 ? " cloud" : ""}` : "";
   const finNote = (yard.finMetal || 0) > 0 ? ` · fin ${yard.finMetal}` : "";
   const bound = yard.bound ? peerDeed({ cell: yard.bound, holder: pubkeyHex(identity.pubkey), radius: 6 }, yard.grace) : null;
   const boundNote = bound ? ` · bound${bound.grace ? " grace" : ""}` : "";
@@ -3265,7 +3267,7 @@ if (params.get("still") !== "1") {
         for (const piece of yard.pieces) {
           if (piece.id !== "fin") continue;
           trackFin(piece, tick);
-          const gained = fluxMetal(tick, piece.yaw || 0, piece.broken);
+          const gained = fluxMetal(tick, piece.yaw || 0, piece.broken, finCloud(piece.at, tick));
           if (gained && finCredit(gained)) {
             yard.metal += gained;
             yard.finMetal = (yard.finMetal || 0) + gained;

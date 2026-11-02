@@ -8,15 +8,15 @@ Using a fin breaks it. A broken fin gives no flux. Four metal repairs a broken f
 
 ## This pass
 
-While the sun is up, a fin turns to face it. Night pays no flux, which was already true.
+A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky draws (same noise, heights and drift, on tick time) along the sun ray from the fin. The fin loses that share of its flux, and the line says `flux N cloud` while one is over it.
 
 ## Proves
 
-`test/slice.test.js` covers the aim by day and the clear aim at night.
+`test/slice.test.js` covers the aim by day and the clear aim at night. `test/batch12.test.js` covers the cut.
 
 ## Next
 
-A cloud that cuts the fin. Not in this build.
+A cloud's shadow on the sand. The picture does not darken the ground under a cloud yet. Not in this build.
 
 ## Later
 
