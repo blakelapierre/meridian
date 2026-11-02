@@ -286,21 +286,25 @@ float valueNoise(vec2 p) {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-float cloudShade(vec3 rd) {
+float cloudShadeAt(vec3 ro, vec3 rd) {
   if (rd.z <= 0.02) return 0.0;
-  float t0 = clamp((34.0 - uOrigin.z) / rd.z, 0.0, 2400.0);
-  float t1 = clamp((62.0 - uOrigin.z) / rd.z, 0.0, 2400.0);
+  float t0 = clamp((34.0 - ro.z) / rd.z, 0.0, 2400.0);
+  float t1 = clamp((62.0 - ro.z) / rd.z, 0.0, 2400.0);
   float span = max(t1 - t0, 0.0);
   float sum = 0.0;
   for (int i = 0; i < 5; i++) {
     float t = t0 + span * ((float(i) + 0.5) / 5.0);
-    vec3 q = uOrigin + rd * t;
+    vec3 q = ro + rd * t;
     float n = valueNoise(q.xy * 0.018 + vec2(uTime * 0.004, 0.2));
     float puff = smoothstep(0.5, 0.78, n);
     float band = smoothstep(34.0, 42.0, q.z) * smoothstep(62.0, 50.0, q.z);
     sum += puff * band * step(1.0, span);
   }
   return clamp(sum * 0.22, 0.0, 0.8);
+}
+
+float cloudShade(vec3 rd) {
+  return cloudShadeAt(uOrigin, rd);
 }
 
 float duneHeight(vec2 p) {
@@ -938,6 +942,8 @@ vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   float ndotl = max(dot(n, sun), 0.0);
   float direct = ndotl * day;
   if (direct > 0.0 && blocked(p + n * 0.06 + sun * 0.05, sun)) direct *= 0.28;
+  // A cloud's shadow on the ground: the same deck the fin reads (src/sim/cloud.js).
+  if (direct > 0.0) direct *= 1.0 - 0.75 * cloudShadeAt(p, sun);
   return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * direct);
 }
 

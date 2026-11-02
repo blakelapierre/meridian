@@ -50,3 +50,9 @@ test("the fin's cloud is the sky's cloud", () => {
   assert.match(main, /scene\.time = tick \/ 30/);
   assert.match(main, /finCloud\(piece\.at, tick\)/);
 });
+
+test("a cloud's shadow falls on the sand", () => {
+  const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
+  assert.match(gpu, /direct \*= 1\.0 - 0\.75 \* cloudShadeAt\(p, sun\)/);
+  assert.match(gpu, /float cloudShade\(vec3 rd\) \{\n  return cloudShadeAt\(uOrigin, rd\);/);
+});

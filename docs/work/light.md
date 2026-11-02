@@ -8,7 +8,7 @@ Using a fin breaks it. A broken fin gives no flux. Four metal repairs a broken f
 
 ## This pass
 
-A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky draws (same noise, heights and drift, on tick time) along the sun ray from the fin. The fin loses that share of its flux, and the line says `flux N cloud` while one is over it.
+A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky draws (same noise, heights and drift, on tick time) along the sun ray from the fin. The fin loses that share of its flux, and the line says `flux N cloud` while one is over it. The same cloud darkens the ground under it: direct sun on any lit surface is cut by up to three quarters.
 
 ## Proves
 
@@ -16,7 +16,7 @@ A cloud cuts the fin. `src/sim/cloud.js` samples the same cloud deck the sky dra
 
 ## Next
 
-A cloud's shadow on the sand. The picture does not darken the ground under a cloud yet. Not in this build.
+Rain from the cloud over you. A pool's rain is still its own clock, not the deck. Not in this build.
 
 ## Later
 
