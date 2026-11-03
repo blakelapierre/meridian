@@ -1,7 +1,8 @@
 import { createIdentity, packFrame, packetValid, signBytes, unpackFrame } from "../../src/net/identity.js";
 import { connectPeer, createRoom } from "../../src/net/room.js";
 import { decode, encode } from "../../src/sim/cbor.js";
-import { appendOp, createLog, sealOp, signProposal, signVote, terrainBody } from "../../src/sim/oplog.js";
+import { appendOp, createLog, sealOp, signVote } from "../../src/sim/oplog.js";
+import { digProposal } from "./proposal.js";
 
 const params = new URLSearchParams(location.search);
 const me = params.get("id");
@@ -37,19 +38,7 @@ function same(a, b) {
   return true;
 }
 
-const proposal = signProposal(identity, {
-  cell: "atoll-0",
-  nonce: 1,
-  body: terrainBody({
-    cell: "atoll-0",
-    eye: [25, 25, 165],
-    aim: [25, 25, -25],
-    chunk: [0, 0, -1],
-    before: cell.crust.hash(0, 0, -1),
-    mode: "dig",
-    writes: [{ i: 0, j: 0, k: -1, sdf_mm: 500 }],
-  }),
-});
+const proposal = digProposal(identity, cell);
 
 function show() {
   write("applied");

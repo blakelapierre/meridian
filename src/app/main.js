@@ -101,7 +101,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=8";
+import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=9";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=3";
 import { carryPhrase, createIdentity, exportKey, importKey, importPhrase, keyPhrase, packBook, recoveryPhrase, rememberKey, restoreKey, signBytes, unpackBook } from "../net/identity.js";
 import {
@@ -138,7 +138,7 @@ import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
 import { shellDrop, shellTilt } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
-import { connectPeer, createRoom } from "../net/room.js";
+import { connectPeer, createRoom, startRoom } from "../net/room.js?v=2";
 import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
 import { acceptShot, encodeShot } from "../net/shots.js";
 import { acceptPosition, encodePosition } from "../net/position.js";
@@ -2666,14 +2666,14 @@ function ensureRoom() {
       role: "player",
       catalog: catalogHex,
     });
-    // A lighthouse that does not answer in 3 s means solo. Try again in 30 s.
-    lighthouseState = "connecting";
-    roomReady = Promise.race([
-      room.start().then(() => { lighthouseState = "up"; return room; }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("lighthouse timeout")), 3000)),
-    ]);
+    // A lighthouse that is slow to answer reads "unreachable" after 3 s, but the socket is
+    // kept: a busy page often opens it later. Only a real failure retries, after 30 s.
+    roomReady = startRoom(room, {
+      onState: (state) => {
+        lighthouseState = state === "slow" || state === "failed" ? "unreachable" : state;
+      },
+    });
     roomReady.catch(() => {
-      lighthouseState = "unreachable";
       room.close();
       setTimeout(() => { roomReady = null; }, 30000);
     });
@@ -3057,7 +3057,11 @@ function stepPeers() {
 const motionEst = createEstimator();
 let motionTick = -1;
 
+// Frames stop in a hidden or starved tab; keep peers fed by wall time so they still see us.
+let lastPublishMs = 0;
+
 function publishPose() {
+  lastPublishMs = performance.now();
   if (followId) return;
   sendStance();
   const pose = { tick, x: player.position[0], y: player.position[1], z: player.position[2], yaw, pitch };
@@ -3145,6 +3149,7 @@ if (params.get("still") !== "1") {
     seekArchives();
     setInterval(() => { seekArchives(); }, 1000);
   }
+  setInterval(() => { if (performance.now() - lastPublishMs > 900) publishPose(); }, 1000);
   const pacer = createPacer();
   let issued = false;
   let blend = 1;

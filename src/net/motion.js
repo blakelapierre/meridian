@@ -244,6 +244,10 @@ export function shouldSend(rec, now, tierIndex) {
     const oldErr = Math.hypot(old.p[0] - now.p[0], old.p[1] - now.p[1], old.p[2] - now.p[2]);
     if (oldErr > tier.err) return "loss";
   }
+  // Wall-clock keepalive: a hidden or starved tab stops advancing ticks, so a body standing
+  // still (or a lost first state on the unreliable lane) was never repeated and the peer saw
+  // nobody. Repeat by wall time at the tier's keepalive period too.
+  if (Number.isFinite(now.wallMs) && Number.isFinite(rec.sentWallMs) && now.wallMs - rec.sentWallMs >= (tier.keepalive / TICK_HZ) * 1000) return "keepalive";
   if (gap < tier.minGap) return null;
   if (gap >= tier.keepalive) return "keepalive";
   if (turned > tier.yawErr) return "yaw";
