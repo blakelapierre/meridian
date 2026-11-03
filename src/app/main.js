@@ -106,7 +106,7 @@ import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packabl
 import { bareAckDue, createNotify, isNotify, KIND, notifyStats, unwrap as unwrapNotify, wrap as wrapNotify } from "../net/notify.js?v=1";
 import { adapt as adaptBudget, createBudget, pick as pickSends, weightOf } from "../net/budget.js?v=2";
 import { addReceiver, createState as createPlayerState, onLoss as stateLost, packFor as packState16, readState, setField } from "../net/dirty.js?v=1";
-import { createLoopbackPair } from "../net/loopback.js?v=1";
+import { createLoopbackPair } from "../net/loopback.js?v=2";
 import { netGraphLines, rateTracker, sampleRate } from "./netgraph.js?v=1";
 import { carryPhrase, createIdentity, exportKey, importKey, importPhrase, keyPhrase, packBook, recoveryPhrase, rememberKey, restoreKey, signBytes, unpackBook } from "../net/identity.js";
 import {
@@ -146,7 +146,7 @@ import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom, startRoom } from "../net/room.js?v=2";
 import { createTorrentRoom, trackersFrom } from "../net/signal-torrent.js?v=1";
 import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
-import { acceptShot, encodeShot } from "../net/shots.js";
+import { acceptShot, encodeShot } from "../net/shots.js?v=2";
 import { acceptPosition, encodePosition } from "../net/position.js";
 import { createEntry, entryLine, SMOKE, stepEntry } from "../sim/enter.js";
 import { pubkeyHex } from "../sim/keeper.js";
@@ -2637,7 +2637,7 @@ function onOps(bytes, from) {
     width,
     height,
   });
-  const accepted = acceptShot(bytes, scene.objects);
+  const accepted = acceptShot(bytes, scene.objects, { shooterAt: poseAt(from) });
   if (!accepted.ok || accepted.hitbox === "miss" || seenShots.has(accepted.nonce)) {
     if (accepted.reason === "split") report = "split";
     return;
