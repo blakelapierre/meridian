@@ -101,8 +101,13 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=9";
-import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=3";
+import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=10";
+import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=4";
+import { bareAckDue, createNotify, isNotify, KIND, notifyStats, unwrap as unwrapNotify, wrap as wrapNotify } from "../net/notify.js?v=1";
+import { adapt as adaptBudget, createBudget, pick as pickSends, weightOf } from "../net/budget.js?v=2";
+import { addReceiver, createState as createPlayerState, onLoss as stateLost, packFor as packState16, readState, setField } from "../net/dirty.js?v=1";
+import { createLoopbackPair } from "../net/loopback.js?v=1";
+import { netGraphLines, rateTracker, sampleRate } from "./netgraph.js?v=1";
 import { carryPhrase, createIdentity, exportKey, importKey, importPhrase, keyPhrase, packBook, recoveryPhrase, rememberKey, restoreKey, signBytes, unpackBook } from "../net/identity.js";
 import {
   acceptSheet,
@@ -202,6 +207,11 @@ canvas.addEventListener("webglcontextlost", (event) => {
 const width = canvas.width;
 const height = canvas.height;
 const params = new URLSearchParams(location.search);
+const NOTIFY_ON = params.get("notify") !== "0";
+const playerState = createPlayerState();
+const peerStates = new Map();
+const POSE_BYTES = 24; // budget estimate for one v3 pose before it is encoded
+let loopLink = null;
 let smoothUpscale = true;
 // ?res=0.25: cap the render scale (testing the low-resolution look on fast machines).
 const resCap = Math.max(0, Math.min(1, Number(params.get("res")) || 0));
@@ -1350,7 +1360,7 @@ function sendStance() {
   if (!stanceDue(crouch, sentStance, tick)) return;
   sentStance = { crouch, tick };
   const text = stanceMessage(crouch);
-  for (const link of links) if (link.ctrl?.readyState === "open") try { link.ctrl.send(text); } catch { /* next refresh */ }
+  for (const link of links) if (!link.notify && link.ctrl?.readyState === "open") try { link.ctrl.send(text); } catch { /* next refresh */ }
 }
 function drawnOthers() {
   const list = otherActors().map((actor) => (stances.get(actor.id)?.crouch ? { ...actor, crouch: true } : actor));
@@ -2022,6 +2032,7 @@ function paintNet() {
     `lore in ${net.loreIn} out ${net.loreOut}    heard ${net.heard}`,
     `block ${tip.height} ${chainWord}    behind ${behind}    dupes ${net.dupes}`,
     `sheet ${sheetSeq}    poses ${poses.size}    buffered ${buffered}`,
+    ...netGraphLines(netGraphRows()),
     linkNote,
   ].filter(Boolean).join("\n");
 }
@@ -2708,7 +2719,7 @@ async function openLink(to, offer, role) {
   const link = { to, role, ctrl: channels.ctrl, ops: channels.ops, snap: channels.snap, lore: channels.lore, pc, proto: 1, packIn: packState(), packOut: packState(), loreIn: packState(), sent: null, motion: createSendState(), view: createView() };
   channels.ctrl.onopen = () => {
     try {
-      channels.ctrl.send(helloMessage(catalogHex, viewFov(), Math.round(senseReach(perception))));
+      channels.ctrl.send(helloMessage(catalogHex, viewFov(), Math.round(senseReach(perception)), NOTIFY_ON));
       link.sentFov = viewFov();
       link.sentRange = Math.round(senseReach(perception));
     } catch {
@@ -2776,6 +2787,7 @@ async function openLink(to, offer, role) {
     link.proto = hello.proto;
     if (hello.fov) link.fov = hello.fov;
     if (hello.range) link.range = hello.range;
+    if (hello.notify && NOTIFY_ON && link.proto >= 3) enableNotify(link);
   };
   const deliver = (bytes, state) => {
     let frames;
@@ -2807,6 +2819,11 @@ async function openLink(to, offer, role) {
     net.snapIn += 1;
     const raw = new Uint8Array(event.data);
     let pose;
+    // Batch 16: seq/ack framed packets (the peer saw our notify hello before we saw theirs is fine).
+    if (NOTIFY_ON && isNotify(raw) && raw.length !== 16 && raw.length !== 24) {
+      receiveNotified(link, raw);
+      return;
+    }
     if (isMotion(raw)) {
       // v3: keep the dead-reckoned state; the pose itself is drawn every tick by stepPeers().
       try {
@@ -2988,6 +3005,9 @@ globalThis.meridianProbe = {
     }
     return [...fresh.values()];
   },
+  netGraph: () => netGraphRows(),
+  peerState: (id) => peerStates.get(id) || null,
+  loopback: () => (loopLink ? { stats: notifyStats(loopLink.notify), budget: loopLink.budget.perTick, ghost: loopLink.mirror.view.state ? 1 : 0, state: peerStates.get("self") || null } : null),
   links: () => links.map((link) => ({ to: link.to, role: link.role, proto: link.proto, open: link.snap?.readyState === "open", fov: link.fov || null })),
   net: () => ({ ...net }),
   lighthouse: () => lighthouseState,
@@ -3069,6 +3089,111 @@ function stepPeers() {
 const motionEst = createEstimator();
 let motionTick = -1;
 
+function motionNow(nowMs) {
+  const e = estimate(motionEst);
+  const airborne = Math.abs(player.velocity?.[2] || 0) > 0.5;
+  return { tick, p: [...player.position], v: e.v, a: e.a, yaw, yawRate: e.yawRate, pitch, floor: player.position[2], mode: modeOf(e.v, airborne), wallMs: nowMs };
+}
+
+// Batch 16: Torque-style netcode on v3 links (notify acks, budget, dirty-masked player state).
+// ?notify=0 keeps the Batch 6 JSON acks. Ideas after the Tribes model (Frohnmayer & Gift 2000)
+// and Torque3D (MIT); see docs/netcode.md.
+
+function enableNotify(link) {
+  if (link.notify) return;
+  link.notify = createNotify();
+  link.budget = createBudget();
+  link.rate = rateTracker();
+  addReceiver(playerState, link.to);
+}
+
+function refreshPlayerState() {
+  const crouch = keys.has("ControlLeft") || keys.has("ControlRight") || rollSpeed(roll, tick) > 0;
+  setField(playerState, "stance", { crouch, roll: rollSpeed(roll, tick) > 0 });
+  setField(playerState, "held", slot);
+  setField(playerState, "hp", Math.round((vitals.integrity ?? 100) / 5) * 5);
+  setField(playerState, "wear", { left: Math.round((vitals.left ?? 100) / 10) * 10, right: Math.round((vitals.right ?? 100) / 10) * 10 });
+}
+
+function sendNotified(link, motion, tierIdx, nowMs) {
+  if (!link.notify.sent.size && !link.notify.stats.sent) addReceiver(playerState, link.to);
+  const cands = [];
+  const why = motion ? shouldSend(link.motion, motion, tierIdx) : null;
+  if (why) {
+    const speed = Math.hypot(motion.v[0], motion.v[1]);
+    cands.push({ key: "pose", bytes: POSE_BYTES, weight: weightOf({ tier: tierIdx, inView: tierIdx < 2, speed }), must: why === "mode" || why === "tier" || why === "keepalive" });
+  }
+  const statePack = packState16(playerState, link.to);
+  if (statePack) cands.push({ key: "state", bytes: statePack.bytes.length + 2, weight: weightOf({ tier: Math.min(tierIdx, 2), base: 2 }), pack: statePack });
+  adaptBudget(link.budget, link.notify.stats.loss, link.snap.bufferedAmount || 0);
+  const chosen = cands.length ? pickSends(link.budget, cands) : [];
+  // Skipped state stays dirty for the next tick.
+  if (statePack && !chosen.some((c) => c.key === "state")) stateLost(playerState, statePack.meta);
+  const items = [];
+  for (const c of chosen) {
+    if (c.key === "pose") items.push({ kind: KIND.pose, bytes: sendNow(link.motion, motion, tierIdx), meta: { tick: motion.tick } });
+    else items.push({ kind: KIND.state, bytes: c.pack.bytes, meta: c.pack.meta });
+  }
+  if (!items.length && !bareAckDue(link.notify, nowMs)) return;
+  net.snapOut += 1;
+  try { link.snap.send(wrapNotify(link.notify, items, nowMs)); } catch { /* the next tick resends what is still current */ }
+}
+
+function receiveNotified(link, raw) {
+  if (!link.notify) enableNotify(link);
+  const nowMs = performance.now();
+  const got = unwrapNotify(link.notify, raw, nowMs);
+  if (!got) return;
+  for (const done of got.acked) for (const item of done.items) if (item.kind === KIND.pose) noteAck(link.motion, item.meta.tick);
+  for (const miss of got.lost) for (const item of miss.items) if (item.kind === KIND.state) stateLost(playerState, item.meta);
+  for (const item of got.items) {
+    if (item.kind === KIND.pose && isMotion(item.bytes)) {
+      try {
+        const ahead = decodeMotion(item.bytes);
+        if (link.role === "loopback" || Math.hypot(ahead.p[0] - player.position[0], ahead.p[1] - player.position[1]) <= senseReach(perception) + 20) {
+          if (receive(link.view, item.bytes, tick, undefined, nowMs)) net.motionIn += 1;
+        }
+      } catch { /* the next send repairs it */ }
+    } else if (item.kind === KIND.state) {
+      const state = readState(item.bytes);
+      if (!state) continue;
+      const merged = { ...(peerStates.get(link.to) || {}), ...state };
+      peerStates.set(link.to, merged);
+      if (state.stance && link.role !== "loopback") stances.set(link.to, { crouch: !!state.stance.crouch });
+    }
+  }
+}
+
+// Solo runs the same send path through an in-process loopback link (Torque's local connection).
+// The far end decodes our own pose and state and acks it; nothing it receives is drawn.
+function startLoopback() {
+  if (loopLink || params.get("loopback") === "0") return;
+  const [near, far] = createLoopbackPair();
+  loopLink = { to: "loopback", role: "loopback", proto: 3, snap: near, motion: createSendState(), view: createView() };
+  enableNotify(loopLink);
+  const mirror = { to: "self", role: "loopback", proto: 3, snap: far, motion: createSendState(), view: createView() };
+  enableNotify(mirror);
+  loopLink.mirror = mirror;
+  far.onmessage = (event) => {
+    const raw = new Uint8Array(event.data);
+    receiveNotified(mirror, raw);
+    if (bareAckDue(mirror.notify, performance.now(), 0)) try { far.send(wrapNotify(mirror.notify, [], performance.now())); } catch {}
+  };
+  near.onmessage = (event) => receiveNotified(loopLink, new Uint8Array(event.data));
+}
+
+function netGraphRows() {
+  const nowMs = performance.now();
+  const rows = [];
+  for (const link of [...links, ...(loopLink ? [loopLink] : [])]) {
+    if (!link.notify) continue;
+    const st = notifyStats(link.notify);
+    sampleRate(link.rate, st.bytesIn, st.bytesOut, nowMs);
+    const ghosts = link === loopLink ? (loopLink.mirror.view.state ? 1 : 0) : (link.view?.state ? 1 : 0);
+    rows.push({ name: link === loopLink ? "loopback" : String(link.to).slice(0, 8), inRate: link.rate.inRate, outRate: link.rate.outRate, loss: st.loss, rtt: st.rtt, ghosts, budget: link.budget.perTick });
+  }
+  return rows;
+}
 // Frames stop in a hidden or starved tab; keep peers fed by wall time so they still see us.
 let lastPublishMs = 0;
 
@@ -3076,6 +3201,9 @@ function publishPose() {
   lastPublishMs = performance.now();
   if (followId) return;
   sendStance();
+  refreshPlayerState();
+  if (!loopLink && (params.get("loopback") === "1" || (!meetPlayers && !peer))) startLoopback();
+  if (loopLink) sendNotified(loopLink, motionNow(performance.now()), 0, performance.now());
   const pose = { tick, x: player.position[0], y: player.position[1], z: player.position[2], yaw, pitch };
   const packet = encodePosition(pose);
   let packetV2 = null;
@@ -3094,20 +3222,20 @@ function publishPose() {
       const fovChanged = link.sentFov && Math.abs(fovNow - link.sentFov) > 0.05;
       const rangeChanged = link.sentRange && Math.abs(reachNow - link.sentRange) >= 4;
       if (fovChanged || rangeChanged) {
-        try { link.ctrl.send(helloMessage(catalogHex, fovNow, reachNow)); link.sentFov = fovNow; link.sentRange = reachNow; } catch {}
+        try { link.ctrl.send(helloMessage(catalogHex, fovNow, reachNow, NOTIFY_ON)); link.sentFov = fovNow; link.sentRange = reachNow; } catch {}
       }
     }
     // The archive never reads poses.
     if (link.role !== "archive" && link.proto >= 3 && link.snap.readyState === "open") {
       // v3: the receiver's own pose (as drawn here) plus our fov decides its tier; send on drift.
-      if (!motion) {
-        const e = estimate(motionEst);
-        const airborne = Math.abs(player.velocity?.[2] || 0) > 0.5;
-        motion = { tick, p: [...player.position], v: e.v, a: e.a, yaw, yawRate: e.yawRate, pitch, floor: player.position[2], mode: modeOf(e.v, airborne), wallMs: nowMs };
-      }
+      if (!motion) motion = motionNow(nowMs);
       const them = poses.get(link.to);
       const view = them ? { x: them.x, y: them.y, yaw: them.yaw || 0, fov: link.fov || 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * 16 / 9), range: link.range || senseReach(perception) } : null;
       const tierIdx = tierFor(view, player.position);
+      if (link.notify) {
+        sendNotified(link, motion, tierIdx, nowMs);
+        continue;
+      }
       const why = shouldSend(link.motion, motion, tierIdx);
       if (!why) continue;
       net.snapOut += 1;

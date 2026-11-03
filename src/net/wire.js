@@ -21,8 +21,10 @@ const CACHE = 32;
 
 // fov (horizontal radians) is optional: the peer uses it to pick what we can see.
 // range (metres) is optional: past it, that peer does not need our pose.
-export function helloMessage(catalog = "", fov = 0, range = 0) {
+// notify (Batch 16): this side reads seq/ack-framed `snap` packets (src/net/notify.js).
+export function helloMessage(catalog = "", fov = 0, range = 0, notify = false) {
   const message = { t: "hello", proto: PROTO, catalog };
+  if (notify) message.notify = 1;
   if (Number.isFinite(fov) && fov > 0.1 && fov < 3.1) message.fov = Math.round(fov * 1000) / 1000;
   if (Number.isFinite(range) && range >= 8 && range <= 2000) message.range = Math.round(range);
   return JSON.stringify(message);
@@ -37,6 +39,7 @@ export function readHello(text) {
     if (Number.isFinite(fov) && fov > 0.1 && fov < 3.1) hello.fov = fov;
     const range = Number(message.range);
     if (Number.isFinite(range) && range >= 8 && range <= 2000) hello.range = Math.round(range);
+    if (message.notify === 1) hello.notify = true;
     return hello;
   } catch {
     return null;
