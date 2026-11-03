@@ -2,7 +2,7 @@ import { paintFrame } from "../engine/frame.js";
 import { mountFullscreen, mountTouch, wantsTouch } from "./touch.js?v=5";
 import { BOT_KEYS, createWander, stepWander } from "./bot.js?v=1";
 import { chatMessage, createChatLog, noteChat, readChat } from "../net/chat.js?v=1";
-import { STALL_MAX_DT, STALL_MS, stalledFor } from "./stall.js?v=1";
+import { FRAME_MAX_DT, STALL_MAX_DT, STALL_POLL_MS, stalledFor } from "./stall.js?v=1";
 import { resetEverything } from "./reset.js?v=1";
 import { mountOnboard } from "./onboard.js?v=2";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
@@ -2708,7 +2708,15 @@ function ensureRoom() {
 async function openLink(to, offer, role) {
   if (!to || to === meId || links.some((link) => link.to === to) || opening.has(to)) return;
   opening.add(to);
-  const room = await ensureRoom();
+  let room;
+  try {
+    room = await ensureRoom();
+  } catch (error) {
+    // Without this a failed room join left `to` in `opening` forever and the peer was never retried.
+    opening.delete(to);
+    if (linkLine) linkLine.textContent = String(error);
+    return;
+  }
   const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
   const channels = {};
   for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false], ["lore", 3, true]]) {
@@ -3337,7 +3345,7 @@ if (params.get("still") !== "1") {
   const frame = (now, fromTimer = false) => {
     lastFrameMs = performance.now();
     try {
-    const dt = Math.min(fromTimer ? STALL_MAX_DT : 0.1, (now - last) / 1000);
+    const dt = Math.min(fromTimer ? STALL_MAX_DT : FRAME_MAX_DT, (now - last) / 1000);
     bank += dt;
     last = now;
     if (agent) {
@@ -4103,7 +4111,7 @@ if (params.get("still") !== "1") {
     }
     if (!fromTimer) requestAnimationFrame(frame);
   };
-  setInterval(() => { if (stalledFor(lastFrameMs, performance.now())) frame(performance.now(), true); }, STALL_MS);
+  setInterval(() => { if (stalledFor(lastFrameMs, performance.now())) frame(performance.now(), true); }, STALL_POLL_MS);
   if (keepSlot && keptWorld) {
     for (const [key, sample] of keptWorld.crust || []) terrain.log.crust.overrides.set(key, sample);
     for (const text of keptWorld.frames) {

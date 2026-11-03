@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -5,7 +6,7 @@ import { createLoopbackPair } from "../src/net/loopback.js";
 import { chatMessage, createChatLog, noteChat, readChat } from "../src/net/chat.js";
 import { ackMessage, noteAck, readAck, createSendState, createView, encodeMotion, modeOf, receive, sendNow, shouldSend, settle, shown, TICK_HZ } from "../src/net/motion.js";
 import { PLAYER_DEGREE, ringNeighbors } from "../src/net/mesh.js";
-import { STALL_MAX_DT, STALL_MS, stalledFor } from "../src/app/stall.js";
+import { FRAME_MAX_DT, STALL_MAX_DT, STALL_MS, STALL_POLL_MS, stalledFor } from "../src/app/stall.js";
 
 // Deterministic clock: a queue of timed callbacks the tests run by hand.
 function clock() {
@@ -160,11 +161,17 @@ test("P1 exit test: eight peers at 80 ms RTT — local body immediate, remotes i
 test("stalled tabs step the sim by wall time and the bench accepts unpainted clients", async () => {
   assert.equal(stalledFor(0, STALL_MS - 1), false);
   assert.equal(stalledFor(0, STALL_MS), true);
-  assert.ok(STALL_MAX_DT >= STALL_MS / 1000);
+  assert.ok(STALL_MAX_DT >= STALL_POLL_MS / 1000 && FRAME_MAX_DT > 0.1);
   const main = await readFile(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /if \(stalledFor\(lastFrameMs, performance\.now\(\)\)\) frame\(performance\.now\(\), true\)/);
   assert.match(main, /if \(!fromTimer\) requestAnimationFrame\(frame\)/);
   assert.match(main, /&& !capped && !fromTimer\)/);
   const bench = await readFile(new URL("../tools/scale/bench.js", import.meta.url), "utf8");
   assert.match(bench, /probe\(c\)\.tick\?\.\(\)/);
+});
+
+test("openLink clears opening when the room join fails", () => {
+  const src = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  const body = src.slice(src.indexOf("async function openLink"), src.indexOf("const pc =", src.indexOf("async function openLink")));
+  assert.match(body, /catch[\s\S]*opening\.delete\(to\)/);
 });
