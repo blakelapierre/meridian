@@ -4,7 +4,7 @@ import { BOT_KEYS, createWander, stepWander } from "./bot.js?v=1";
 import { resetEverything } from "./reset.js?v=1";
 import { mountOnboard } from "./onboard.js?v=2";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
-import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=4";
+import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, signalMode, torrentLine, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=5";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js?v=4";
 import { createAmbient, planAmbient } from "../audio/ambient.js";
@@ -139,6 +139,7 @@ import { separate } from "../sim/separate.js";
 import { shellDrop, shellTilt } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom, startRoom } from "../net/room.js?v=2";
+import { createTorrentRoom, trackersFrom } from "../net/signal-torrent.js?v=1";
 import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
 import { acceptShot, encodeShot } from "../net/shots.js";
 import { acceptPosition, encodePosition } from "../net/position.js";
@@ -255,7 +256,11 @@ const catalogHex = await Promise.all([
 const lighthouseConfig = await fetchRetry(new URL("../../content/lighthouse.json?v=2", import.meta.url))
   .then((response) => (response.ok ? response.json() : null))
   .catch(() => null);
-const signalUrl = lighthouseUrl(params, location.hostname, lighthouseConfig);
+const lighthouseAt = lighthouseUrl(params, location.hostname, lighthouseConfig);
+// "lighthouse", "torrent" (public WebTorrent trackers, the default with no lighthouse) or "solo".
+const signalKind = signalMode(params, lighthouseAt);
+const signalUrl = signalKind === "lighthouse" ? lighthouseAt : null;
+const signalOn = signalKind !== "solo";
 const home = agent ? AGENDAS[agendaName].home : null;
 const tourWanted = (demo || params.get("tour") === "1") && params.get("tour") !== "0" && !followId && !agendaName;
 const tourSeen = params.get("tour") === "1" ? [] : (() => { try { return JSON.parse(localStorage.getItem(TOUR_KEY) || "[]"); } catch { return []; } })();
@@ -723,7 +728,8 @@ if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 let linkNote = "";
 const askedSolo = ["off", "none"].includes(params.get("lighthouse") || params.get("signal") || "");
 // No lighthouse configured (and solo not asked for): say the multiplayer server is offline.
-let lighthouseState = signalUrl || askedSolo ? "off" : "offline";
+let lighthouseState = signalOn || askedSolo ? "off" : "offline";
+let torrentRoom = null;
 const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0, motionIn: 0 };
 const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const wear = keptWorld?.wear ? unpackWear(keptWorld.wear) : createWear();
@@ -2009,7 +2015,7 @@ function paintNet() {
   const chainWord = terrain.log.seq > tip.seq ? "provisional" : tip.height ? "official" : "empty";
   node.textContent = [
     players || archives ? `players ${players}    archives ${archives}` : "alone",
-    ...(lighthouseLine(lighthouseState) ? [lighthouseLine(lighthouseState)] : []),
+    ...(signalKind === "torrent" ? [torrentLine(lighthouseState, torrentRoom?.peers() || 0)].filter(Boolean) : lighthouseLine(lighthouseState) ? [lighthouseLine(lighthouseState)] : []),
     `links ${open.length} open    ${connecting} connecting`,
     `ice ${iceLine}`,
     `ops in ${net.opsIn} out ${net.opsOut}    snap in ${net.snapIn} out ${net.snapOut}`,
@@ -2655,27 +2661,32 @@ function witnessed() {
 }
 
 function ensureRoom() {
-  if (!roomReady && !signalUrl) {
+  if (!roomReady && !signalOn) {
     roomReady = Promise.reject(new Error("solo"));
     roomReady.catch(() => {});
   }
   if (!roomReady) {
-    const room = createRoom({
-      url: signalUrl,
-      me: meId,
-      role: "player",
-      catalog: catalogHex,
-    });
-    // A lighthouse that is slow to answer reads "unreachable" after 3 s, but the socket is
-    // kept: a busy page often opens it later. Only a real failure retries, after 30 s.
+    const torrent = signalKind === "torrent";
+    const room = torrent
+      ? createTorrentRoom({ me: meId, role: "player", catalog: catalogHex, trackers: trackersFrom(params) })
+      : createRoom({
+        url: signalUrl,
+        me: meId,
+        role: "player",
+        catalog: catalogHex,
+      });
+    if (torrent) torrentRoom = room;
+    // A lighthouse slow to answer (3 s; trackers: 10 s) reads "unreachable", but the socket is
+    // kept: a busy page often opens it later. Only a real failure retries (30 s; trackers: 10 s).
     roomReady = startRoom(room, {
+      slowMs: torrent ? 10000 : 3000,
       onState: (state) => {
         lighthouseState = state === "slow" || state === "failed" ? "unreachable" : state;
       },
     });
     roomReady.catch(() => {
       room.close();
-      setTimeout(() => { roomReady = null; }, 30000);
+      setTimeout(() => { roomReady = null; }, torrent ? 10000 : 30000);
     });
   }
   return roomReady;
@@ -2875,7 +2886,7 @@ async function link() {
   }));
 }
 
-const meetPlayers = !peer && !followId && !agendaName && params.get("solo") !== "1" && Boolean(signalUrl);
+const meetPlayers = !peer && !followId && !agendaName && params.get("solo") !== "1" && signalOn;
 
 // A failed or closed peer connection does not recover. "disconnected" can, so it is left alone.
 function linkDead(link) {
@@ -2980,6 +2991,7 @@ globalThis.meridianProbe = {
   links: () => links.map((link) => ({ to: link.to, role: link.role, proto: link.proto, open: link.snap?.readyState === "open", fov: link.fov || null })),
   net: () => ({ ...net }),
   lighthouse: () => lighthouseState,
+  signal: () => ({ kind: signalKind, state: lighthouseState, peers: torrentRoom?.peers() || 0, trackers: torrentRoom?.trackersUp() || 0 }),
   fps: () => Number(canvas.dataset.fps || 0),
   renderer: () => canvas.dataset.renderer || "",
   gpuError: () => canvas.dataset.gpuError || "",
@@ -3148,6 +3160,17 @@ if (params.get("still") !== "1") {
   if (!followId) {
     seekArchives();
     setInterval(() => { seekArchives(); }, 1000);
+    // Public-tracker multiplayer: a small line says so, with the live peer count.
+    if (signalKind === "torrent" && meetPlayers) {
+      const note = document.querySelector("#mpnote");
+      const show = () => {
+        const line = torrentLine(lighthouseState, torrentRoom?.peers() || 0);
+        if (!note || !line) return;
+        if (note.textContent !== line) note.textContent = line;
+        note.hidden = false;
+      };
+      setInterval(show, 2000);
+    }
   }
   setInterval(() => { if (performance.now() - lastPublishMs > 900) publishPose(); }, 1000);
   const pacer = createPacer();

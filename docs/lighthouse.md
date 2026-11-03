@@ -43,3 +43,12 @@ The lighthouse only relays presence and WebRTC offers/answers. Game traffic is p
 - `?lighthouse=wss://host/path` points this visit at a lighthouse of your choice (for example `tools/signal`, which `npm start` runs locally on port 8787).
 - `?lighthouse=off` stays solo on purpose and stops the retries.
 - With no parameter the page uses `content/lighthouse.json`; if that is missing or does not answer in 3 s, it plays solo and tries again 30 s later.
+
+## Without a lighthouse: public WebTorrent trackers
+
+When no lighthouse is set (the public demo today), the page signals through public WebTorrent trackers instead (`src/net/signal-torrent.js`). Each announce carries a few "offers" holding the player's presence; the tracker hands them to other peers in the room (info_hash = SHA-1 of `meridian/torrent/1/<cell>`), and they answer back. Signals for `connectPeer()` ride as answers addressed to one peer. Several trackers run at once and duplicate messages are dropped.
+
+- `tracker.openwebtorrent.com` relays every addressed answer, so it carries the full handshake.
+- `tracker.webtorrent.dev` routes only one answer per offer it handed out, so it is good for finding peers but cannot carry a whole handshake by itself.
+- Not provided: a world directory, an authoritative roster, TURN. Players behind strict NATs may not connect.
+- `?signal=torrent` forces it even with a lighthouse configured; `?trackers=wss://a,wss://b` replaces the list.
