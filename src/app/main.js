@@ -144,7 +144,8 @@ import { separate } from "../sim/separate.js";
 import { shellDrop, shellTilt } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
 import { connectPeer, createRoom, startRoom } from "../net/room.js?v=2";
-import { createTorrentRoom, trackersFrom } from "../net/signal-torrent.js?v=1";
+import { backupsFrom, createTorrentRoom, trackersFrom } from "../net/signal-torrent.js?v=2";
+import { iceServers, rtcConfig } from "../net/ice.js?v=1";
 import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
 import { acceptShot, encodeShot } from "../net/shots.js";
 import { acceptPosition, encodePosition } from "../net/position.js";
@@ -2679,7 +2680,7 @@ function ensureRoom() {
   if (!roomReady) {
     const torrent = signalKind === "torrent";
     const room = torrent
-      ? createTorrentRoom({ me: meId, role: "player", catalog: catalogHex, trackers: trackersFrom(params) })
+      ? createTorrentRoom({ me: meId, role: "player", catalog: catalogHex, trackers: trackersFrom(params), backups: backupsFrom(params) })
       : createRoom({
         url: signalUrl,
         me: meId,
@@ -2707,7 +2708,7 @@ async function openLink(to, offer, role) {
   if (!to || to === meId || links.some((link) => link.to === to) || opening.has(to)) return;
   opening.add(to);
   const room = await ensureRoom();
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  const pc = new RTCPeerConnection(rtcConfig(await iceServers(params), params));
   const channels = {};
   for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false], ["lore", 3, true]]) {
     const options = { negotiated: true, id: spec[1], ordered: spec[2] };

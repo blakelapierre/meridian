@@ -13,10 +13,17 @@
 // Lost compared with a lighthouse: no world directory and no authoritative roster. The roster is
 // "who we heard from lately", so it can lag a dead peer by up to peerTtlMs.
 
+// Live-checked 2026-11-03 (two clients, one room, offer routed): all three relayed offers.
+// Checked and NOT added (TLS dropped or no relay from our network): tracker.files.fm:7073,
+// tracker.btorrent.xyz, tracker.ghostchu-services.top, qot.abiir.top, tracker.webtorrent.io,
+// tracker.sloppyta.co, tracker.magnetoo.io, wstracker.online, peertube.cpy.re (opens, no relay).
 export const DEFAULT_TRACKERS = [
   "wss://tracker.webtorrent.dev",
   "wss://tracker.openwebtorrent.com",
+  "wss://tracker.novage.com.ua:443/announce",
 ];
+// Tried only when a tracker above is marked dead. Empty by default; ?backups=wss://a,wss://b.
+export const BACKUP_TRACKERS = [];
 const TAG = "a=x-meridian:";
 const SDP_HEAD = "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n";
 
@@ -56,11 +63,25 @@ export function trackersFrom(params) {
   return list.length ? list : DEFAULT_TRACKERS.slice();
 }
 
+export function backupsFrom(params) {
+  const asked = params?.get?.("backups");
+  if (!asked) return BACKUP_TRACKERS.slice();
+  return asked.split(",").map((item) => item.trim()).filter((item) => /^wss?:\/\//.test(item));
+}
+
+// Health (Batch 20): each tracker has a state. A socket that errors, closes, or goes quiet for
+// staleMs after an announce is dropped and reopened with backoff (1 s doubling to 60 s). After
+// deadAfter failures in a row the tracker is "dead" and the next backup is opened in its place.
 export function createTorrentRoom({
   me, cell = "atoll-0", role = "player", catalog = "", trackers = DEFAULT_TRACKERS,
   announceMs = 30000, peerTtlMs = 100000, offers = 5, numwant = 10,
   Socket = globalThis.WebSocket, subtle = globalThis.crypto?.subtle, random = Math.random, now = () => Date.now(),
+  backups = BACKUP_TRACKERS, staleMs = 0, deadAfter = 3, backoffMs = 1000, maxBackoffMs = 60000,
+  later = (fn, ms) => setTimeout(fn, ms),
 }) {
+  const stale = staleMs || announceMs * 2 + 10000;
+  const health = new Map(); // url -> { url, state, fails, lastHeard, opened, backup }
+  const spare = backups.filter((url) => !trackers.includes(url));
   const listeners = new Set();
   const roster = new Map(); // pubkey -> { pubkey, role, catalog, peerId, seen }
   const seenMsg = new Map();
@@ -121,6 +142,8 @@ export function createTorrentRoom({
     rawSend(socket, body);
   }
   function onTracker(socket, data) {
+    const h = socket.health;
+    if (h) { h.lastHeard = now(); h.fails = 0; h.state = "up"; }
     let message;
     try { message = JSON.parse(typeof data === "string" ? data : String(data)); } catch { return; }
     if (!message || message.info_hash !== hash || message.peer_id === peerId) return;
@@ -158,21 +181,75 @@ export function createTorrentRoom({
     }
   }
 
+  function connect(url, h = health.get(url)) {
+    if (closed) return Promise.reject(new Error("closed"));
+    if (!h) { h = { url, state: "connecting", fails: 0, lastHeard: 0, opened: 0, backup: !trackers.includes(url) }; health.set(url, h); }
+    h.state = "connecting";
+    return new Promise((resolve, reject) => {
+      let socket;
+      let settled = false;
+      const fail = () => {
+        const index = sockets.indexOf(socket);
+        if (index >= 0) sockets.splice(index, 1);
+        if (h.state === "dead" || closed) return;
+        h.fails += 1;
+        h.state = h.fails >= deadAfter ? "dead" : "down";
+        if (!settled) { settled = true; reject(new Error(`tracker failed ${url}`)); }
+        if (h.state === "dead") { promote(); return; }
+        later(() => { if (!closed) connect(url, h).catch(() => {}); }, Math.min(maxBackoffMs, backoffMs * 2 ** (h.fails - 1)));
+      };
+      try { socket = new Socket(url); } catch { fail(); return; }
+      socket.health = h;
+      sockets.push(socket);
+      socket.onopen = () => {
+        h.opened = now();
+        h.lastHeard = now();
+        h.state = "up";
+        if (hash) announce(socket, "started");
+        settled = true;
+        resolve(socket);
+      };
+      socket.onerror = () => { try { socket.close(); } catch { /* gone */ } fail(); socket.onclose = null; };
+      socket.onclose = () => fail();
+      socket.onmessage = (event) => onTracker(socket, event.data);
+    });
+  }
+  function promote() {
+    const next = spare.shift();
+    if (next) connect(next).catch(() => {});
+  }
+  // Health check, run with each announce: a socket silent for `stale` ms is dropped and retried.
+  function check() {
+    for (const socket of [...sockets]) {
+      const h = socket.health;
+      if (h && socket.readyState === 1 && now() - h.lastHeard > stale) {
+        socket.onclose = null;
+        socket.onerror = null;
+        try { socket.close(); } catch { /* gone */ }
+        const index = sockets.indexOf(socket);
+        if (index >= 0) sockets.splice(index, 1);
+        h.fails += 1;
+        h.state = h.fails >= deadAfter ? "dead" : "down";
+        if (h.state === "dead") promote(); else connect(h.url, h).catch(() => {});
+      }
+    }
+    if (!sockets.some((socket) => socket.readyState === 1) && ![...health.values()].some((h) => h.state === "connecting")) promote();
+  }
+
   async function start() {
     hash = await roomHash(cell, subtle);
-    const opened = trackers.map((url) => new Promise((resolve, reject) => {
-      let socket;
-      try { socket = new Socket(url); } catch (error) { reject(error); return; }
-      sockets.push(socket);
-      socket.onopen = () => { announce(socket, "started"); resolve(socket); };
-      socket.onerror = () => reject(new Error(`tracker failed ${url}`));
-      socket.onmessage = (event) => onTracker(socket, event.data);
-    }));
-    // Ready once any one tracker answers; the rest keep joining in the background.
-    await Promise.any(opened).catch(() => { throw new Error("no tracker reachable"); });
+    const opened = trackers.map((url) => connect(url));
+    // Ready once any one tracker answers; the rest keep joining (and retrying) in the background.
+    await Promise.any(opened).catch(async () => {
+      // Every primary failed its first try: fail over to the backups before giving up.
+      const tried = spare.splice(0).map((url) => connect(url));
+      if (!tried.length) throw new Error("no tracker reachable");
+      await Promise.any(tried).catch(() => { throw new Error("no tracker reachable"); });
+    });
     timer = setInterval(() => {
       if (closed) return;
       prune();
+      check();
       for (const socket of sockets) announce(socket);
     }, announceMs);
   }
@@ -201,7 +278,9 @@ export function createTorrentRoom({
   function close() {
     closed = true;
     clearInterval(timer);
-    for (const socket of sockets) {
+    for (const socket of [...sockets]) {
+      socket.onclose = null;
+      socket.onerror = null;
       if (hash) rawSend(socket, { action: "announce", info_hash: hash, peer_id: peerId, numwant: 0, uploaded: 0, downloaded: 0, left: 1, event: "stopped" });
       try { socket.close(); } catch { /* already closed */ }
     }
@@ -211,5 +290,7 @@ export function createTorrentRoom({
     subscribed: () => true,
     peers: () => roster.size,
     trackersUp: () => sockets.filter((socket) => socket.readyState === 1).length,
+    health: () => [...health.values()].map(({ url, state, fails, lastHeard, backup }) => ({ url, state, fails, lastHeard, backup })),
+    check,
   };
 }

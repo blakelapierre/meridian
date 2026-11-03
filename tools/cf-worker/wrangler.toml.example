@@ -1,0 +1,21 @@
+# Copy to wrangler.toml, then: npx wrangler deploy   (needs Blake's Cloudflare login)
+name = "meridian-lighthouse"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+[[durable_objects.bindings]]
+name = "LIGHTHOUSE"
+class_name = "Lighthouse"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Lighthouse"]
+
+[vars]
+# Comma list of page origins allowed to connect, e.g. "https://blakelapierre.github.io". Empty = any.
+ALLOWED_ORIGINS = ""
+MAX_SOCKETS = "512"
+
+# Secrets (never in this file):
+#   npx wrangler secret put TURN_KEY_ID
+#   npx wrangler secret put TURN_KEY_API_TOKEN
