@@ -172,6 +172,25 @@ export function tryPlaceBeam(yard, cell) {
   return { ok: true, metal: yard.metal };
 }
 
+// Batch 18: a raised roof. It rests on a beam (two posts and a span) but is lifted on struts to
+// ROOF_Z, clear of a standing head (1.65 m eye), so you can stand dry under it: the GPU rain test
+// treats anything solid straight above the camera as a roof. Costs 2 fiber or 2 metal.
+export const ROOF_Z = 2.3;
+export function tryPlaceRoof(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if (!yard.pieces.some((piece) => piece.id === "beam" && sameCell(piece.at, cell))) return { ok: false, reason: "beam" };
+  if (yard.pieces.some((piece) => piece.id === "roof" && sameCell(piece.at, cell))) return { ok: false, reason: "occupied" };
+  if ((yard.fiber || 0) >= 2) yard.fiber -= 2;
+  else if (yard.metal >= 2) yard.metal -= 2;
+  else return { ok: false, reason: "fiber" };
+  yard.pieces.push({ id: "roof", at: cell.slice(), anchors: false, raised: ROOF_Z });
+  return { ok: true, metal: yard.metal };
+}
+
+export function underRoof(pieces, x, y, headZ = 1.65) {
+  return pieces.some((piece) => piece.id === "roof" && Math.abs(piece.at[0] * 0.5 - x) <= 0.8 && Math.abs(piece.at[1] * 0.5 - y) <= 0.8 && (piece.raised || ROOF_Z) > headZ);
+}
+
 export function tryPlaceRoad(yard, cell) {
   if (!cell) return { ok: false, reason: "aim" };
   if (yard.metal < 1) return { ok: false, reason: "metal" };
@@ -364,6 +383,17 @@ export function pieceBoxes(pieces) {
         piece: piece.id,
       };
     }
+    if (piece.id === "roof") {
+      const z = piece.raised || ROOF_Z;
+      return {
+        type: "box",
+        min: [x - 0.8, y - 0.8, z],
+        max: [x + 0.8, y + 0.8, z + 0.1],
+        color: [0.55, 0.5, 0.32, 1],
+        reflectivity: 0.05,
+        piece: piece.id,
+      };
+    }
     if (piece.id === "beam") {
       return {
         type: "box",
@@ -468,4 +498,10 @@ export function pieceBoxes(pieces) {
       piece: piece.id,
     };
   });
+}
+
+// Batch 18: digging is the stone source once the hearth spends the starting stone (the floor needs
+// 2). Every third dig that really moved crust turns up a stone.
+export function digStone(digs) {
+  return digs > 0 && digs % 3 === 0 ? 1 : 0;
 }

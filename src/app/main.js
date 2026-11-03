@@ -13,7 +13,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=69";
+import { buildScene } from "../render/scene.js?v=70";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=94";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
@@ -47,8 +47,8 @@ import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from 
 import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor, acceptCertifiedSlump, bitMode, certifySlump } from "../sim/crust.js";
 import { bitAim, crustFeet } from "../sim/bit.js?v=2";
-import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js";
+import { toolAim } from "../sim/aim.js?v=3";
+import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceRoof, digStone, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js?v=2";
 import {
   adoptPiece,
   bindHearth,
@@ -75,9 +75,10 @@ import {
   bleed,
   bloodDrop,
   trackFin,
-} from "../sim/hearth.js";
+} from "../sim/hearth.js?v=2";
 import { finCloud, rainAt, rainWord, splashes, wetAt } from "../sim/cloud.js?v=5";
 import { haltFeet } from "../sim/town.js?v=1";
+import { ledgeProps } from "../sim/ledge.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
 import { lookDirection, moveIntent, readStance, rollSpeed, stanceDue, stanceMessage, startRoll, stepHands } from "../sim/hands.js?v=60";
@@ -137,12 +138,12 @@ import { afterShot, boltHit, boltInSmoke, firePull, meleeHit, missDir, penFactor
 import { harmMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=76";
+import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=77";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
-import { createVein, tapVein } from "../sim/vein.js";
+import { createVein, tapVein } from "../sim/vein.js?v=2";
 import { separate } from "../sim/separate.js";
 import { shellDrop, shellTilt } from "../sim/shell.js";
-import { createTerrain } from "../net/terrain.js";
+import { createTerrain } from "../net/terrain.js?v=2";
 import { connectPeer, createRoom, startRoom } from "../net/room.js?v=2";
 import { createTorrentRoom, trackersFrom } from "../net/signal-torrent.js?v=1";
 import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
@@ -259,6 +260,7 @@ async function fetchRetry(url, options, tries = 5) {
   }
 }
 const atoll = await fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.json());
+atoll.props.push(...ledgeProps());
 const catalogHex = await Promise.all([
   fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.arrayBuffer()),
   fetchRetry(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
@@ -321,7 +323,9 @@ const bonds = new Map();
 const orders = new Map();
 const bolts = [];
 const deedKeys = new Set();
-const vein = createVein([8, -148]);
+// Batch 18: 12 metal (was 6). The hearth spends the 20 you start with and the fin needs 8, so a
+// 6-metal vein left the fin (and everything it pays for) out of reach.
+const vein = createVein([8, -148], 12);
 const WIND = [0.6, 0.1, 0];
 const terrain = createTerrain({
   identity,
@@ -365,7 +369,9 @@ let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look"
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
 // ?phase=<radians> sets the starting sun angle (0.87 is mid-morning, ~2.9 dusk, ~4.6 night) for repeatable screenshots.
 const phaseParam = Number(params.get("phase"));
-let tick = ((Number.isFinite(phaseParam) && params.get("phase") !== null ? phaseParam : 0.87) / (Math.PI * 2)) * DAY_TICKS;
+// Whole ticks (Batch 18): a fractional start made every `tick % N === 0` clock (upkeep, fin flux,
+// rain on pools) never fire.
+let tick = Math.round(((Number.isFinite(phaseParam) && params.get("phase") !== null ? phaseParam : 0.87) / (Math.PI * 2)) * DAY_TICKS);
 let trigger = false;
 let shotQueued = false;
 let cooldown = 0;
@@ -1036,7 +1042,7 @@ addEventListener("keydown", (event) => {
     }
   }
   if (turnKey(event.code) && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     if (mark.kind === "wall" || mark.kind === "fin") {
       const turned = mark.kind === "fin" ? turnFin(yard, mark.cell) : turnWall(yard, mark.cell);
       if (turned.ok && mark.kind === "wall") {
@@ -1087,7 +1093,7 @@ addEventListener("keydown", (event) => {
     }
   }
   if (event.code === "KeyF" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     const placed = tryPlaceFloor(yard, mark.cell);
     report = placed.ok ? "floor" : placed.reason;
   }
@@ -1101,30 +1107,36 @@ addEventListener("keydown", (event) => {
     } else report = "far";
   }
   if (event.code === "KeyJ" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     const placed = tryPlaceCart(yard, mark.cell);
     report = placed.ok ? "cart" : placed.reason;
   }
   if (event.code === "KeyT" && !event.repeat) {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     if (mark.cell) {
       yard.pieces.push({ id: "mission", at: mark.cell.slice(), anchors: true });
       report = "mission";
     }
   }
-  if (event.code === "KeyP" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+  // Shift+P with the hammer raises a roof on a beam (Batch 18); plain P is still a post.
+  if (event.code === "KeyP" && event.shiftKey && !event.repeat && slot === "hammer") {
+    const mark = refreshAim();
+    const placed = tryPlaceRoof(yard, mark.cell);
+    report = placed.ok ? "roof" : placed.reason;
+  }
+  if (event.code === "KeyP" && !event.shiftKey && !event.repeat && slot === "hammer") {
+    const mark = refreshAim();
     const placed = tryPlacePost(yard, mark.cell);
     report = placed.ok ? "post" : placed.reason;
   }
   if (event.code === "KeyL" && !event.repeat && slot !== "hammer") toggleLog();
   if (event.code === "KeyL" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     const placed = tryPlaceRoad(yard, mark.cell);
     report = placed.ok ? "road" : placed.reason;
   }
   if (event.code === "KeyM" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     const placed = tryPlaceDoor(yard, mark.cell);
     report = placed.ok ? "door" : placed.reason;
   }
@@ -1288,7 +1300,7 @@ function turnWheel(direction) {
 
 function useRightClick() {
   if (followId || slot !== "hammer") return;
-  const mark = refreshAim(input());
+  const mark = refreshAim();
   if (!mark.inRange || (mark.kind !== "wall" && mark.kind !== "crate" && mark.kind !== "wreck")) {
     if (agent) agent.salvage = false;
     report = "far";
@@ -1508,6 +1520,13 @@ function sceneFor(sample, width, height) {
   });
 }
 
+function hammerSnap(state) {
+  const has = (id) => state.pieces.some((piece) => piece.id === id);
+  if (!has("hearth")) return ["footing"];
+  if ((state.fins || 0) > 0 && !has("fin")) return ["hearth"];
+  return [];
+}
+
 function wornFor(hand) {
   const tool = hand === "line" ? "long" : hand === "hammer" ? "hammer" : "bit";
   return ["cloth", tool];
@@ -1523,7 +1542,10 @@ function refreshAim(sample = {}) {
     return toolAim("bit", eye, dir, [{ type: "crust", field: terrain.log.crust }], yard.pieces);
   }
   const objects = sceneFor(sample, 16, 9).objects.filter((object) => !object.self);
-  return toolAim(slot, eye, dir, objects, yard.pieces);
+  // Aim from crust space like the bit (#25): on a dune crest the eye sits above the scene's ground.
+  const feet = bitFeet();
+  const hammerEye = [feet[0], feet[1], feet[2] + (sample?.crouch ? 1.1 : 1.65)];
+  return toolAim(slot, hammerEye, dir, objects, yard.pieces, hammerSnap(yard));
 }
 
 function adoptTarget(subject) {
@@ -1797,6 +1819,18 @@ function cycle(step, kind) {
 }
 
 function identify(sample) {
+  // Batch 18: with the hammer out, E picks the hearth the hammer is aimed at (same crust-space aim
+  // and snap as building), so binding does not depend on where the chase camera happens to sit.
+  if (slot === "hammer" && yard.pieces.some((piece) => piece.id === "hearth")) {
+    const feet = bitFeet();
+    const eye = [feet[0], feet[1], feet[2] + (sample?.crouch ? 1.1 : 1.65)];
+    const mark = toolAim("hammer", eye, lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch), [], yard.pieces, ["hearth"]);
+    const hearth = mark.inRange && yard.pieces.find((piece) => piece.id === "hearth" && piece.at[0] === mark.cell[0] && piece.at[1] === mark.cell[1]);
+    if (hearth) {
+      adoptTarget({ name: "Hearth", material: "your stone", action: "bind with E", detail: "", difficulty: 0, kind: "hearth", cell: hearth.at.slice(), point: [hearth.at[0] * 0.5, hearth.at[1] * 0.5, feet[2]] });
+      return;
+    }
+  }
   const scene = sceneFor(sample, 16, 9);
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects.filter((object) => !object.self), scene.miss);
@@ -3039,6 +3073,45 @@ globalThis.meridianProbe = {
     return { before, after: terrainKey(), changed: before !== terrainKey() };
   },
   reset: () => resetEverything({ confirm: () => true, hold: () => { holdKeep = true; } }),
+  // Playthrough hooks (Batch 18, tools/playthrough): drive the same input paths a player does.
+  look(newYaw, newPitch) { yaw = newYaw; pitch = newPitch; return { yaw, pitch }; },
+  teleport(x, y) {
+    player.position[0] = x;
+    player.position[1] = y;
+    player.position[2] = standHeight(x, y, columnFloor(terrain.log.crust, x, y));
+    player.velocity[0] = player.velocity[1] = player.velocity[2] = 0;
+    return [...player.position];
+  },
+  hold(on) { trigger = Boolean(on); return trigger; },
+  key(code, { shift = false, up = true } = {}) {
+    dispatchEvent(new KeyboardEvent("keydown", { code, key: code, shiftKey: shift }));
+    if (up) dispatchEvent(new KeyboardEvent("keyup", { code, key: code, shiftKey: shift }));
+    return report;
+  },
+  slot(name) {
+    for (let i = 0; i < 6 && slot !== name; i += 1) playerPress("Digit3");
+    return slot;
+  },
+  aim: () => { const mark = refreshAim(); return mark ? { inRange: mark.inRange, kind: mark.kind, cell: mark.cell || null } : null; },
+  tick: () => tick,
+  skipTicks(n) { tick += Math.max(0, n | 0); return tick; },
+  state: () => ({
+    slot,
+    report,
+    metal: yard.metal,
+    stone: yard.stone ?? 0,
+    fiber: yard.fiber ?? 0,
+    fins: yard.fins ?? 0,
+    spoil: yard.spoil ?? 0,
+    finMetal: yard.finMetal ?? 0,
+    upkeeps: yard.upkeeps ?? 0,
+    bound: yard.bound ? yard.bound.slice() : null,
+    selection: selection ? { kind: selection.kind, cell: selection.cell || null } : null,
+    integrity: vitals.integrity,
+    pieces: yard.pieces.map((piece) => `${piece.id}@${piece.at[0]},${piece.at[1]}`),
+    deed: yard.bound ? Boolean(deedVolume(yard.bound, meId)) : false,
+    pose: [...player.position],
+  }),
 };
 if (agent) {
   const note = document.querySelector("#agenda");
@@ -3442,6 +3515,7 @@ if (params.get("still") !== "1") {
         }
       } else awayTicks = 0;
       if (tick > 0 && tick % 1800 === 0 && yard.bound) {
+        yard.upkeeps = (yard.upkeeps || 0) + 1;
         if (yard.metal >= 1) {
           yard.metal -= 1;
           report = "upkeep";
@@ -3671,14 +3745,17 @@ if (params.get("still") !== "1") {
           } else if (brush === "fill" && (yard.spoil || 0) < 1) {
             report = "spoil";
           } else {
-            terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush, cell: cellId(player.position[1]) });
+            const dugVoxels = terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush, cell: cellId(player.position[1]) }) || 0;
             const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
-            if (brush === "fill") {
+            if (!dugVoxels) {
+              // The brush is still saving up volume (or hit air): no crust moved, so no spoil.
+            } else if (brush === "fill") {
               yard.spoil = Math.max(0, (yard.spoil || 0) - 1);
               drainPool(pools, { x: player.position[0], y: player.position[1], floor });
             } else if (brush === "dig") {
               yard.spoil = (yard.spoil || 0) + 1;
               digs += 1;
+              yard.stone = (yard.stone || 0) + digStone(digs);
               yard.answer = beachAnswer(player.position[1] >= -190, digs) || yard.answer;
               notePool(pools, { x: player.position[0], y: player.position[1], floor });
               const found = tapVein(vein, player.position[0], player.position[1]);
