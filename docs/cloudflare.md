@@ -54,3 +54,17 @@ With no query the game behaves as before: public WebTorrent trackers plus Google
 - Tracker health (`src/net/signal-torrent.js`): reconnect with 1 s → 60 s backoff, a tracker
   silent for 2 announce periods is dropped and retried, after 3 straight failures it is "dead"
   and the next `?backups=` tracker opens. `room.health()` reports each tracker's state.
+
+## TURN free-tier cap (Batch 21)
+
+Cloudflare Realtime TURN: first 1,000 GB/month egress free (shared with SFU), then $0.05/GB
+(https://developers.cloudflare.com/realtime/sfu/platform/pricing/, https://developers.cloudflare.com/realtime/turn/faq/).
+STUN at stun.cloudflare.com is free and unlimited.
+
+The Worker cannot see real relay bytes, so `/turn` is budgeted by the `TurnQuota` Durable Object:
+each credential is charged `EST_GB_PER_CRED` (0.25 GB) against `TURN_CAP_GB` (250 GB/month) and
+minting stops at 90% (225 GB, about 900 credentials/month). Credentials live 1 hour (`TURN_TTL`),
+so a refusal ends relayed traffic within the hour. Per IP: 4 credentials/hour. Refusals are HTTP 429;
+the client then falls back to STUN/direct. `GET /turn/status` shows the month's budget use.
+Even a credential that relayed flat out for its hour at 2 Mbit/s would use ~0.9 GB, so the worst case
+(900 x 0.9 GB = ~810 GB) still stays under 1,000 GB.
