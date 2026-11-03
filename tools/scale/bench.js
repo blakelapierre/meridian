@@ -91,7 +91,8 @@ function addClient() {
 async function waitReady(timeoutMs = 60000) {
   const t0 = performance.now();
   while (performance.now() - t0 < timeoutMs) {
-    if (clients.every((c) => probe(c) && probe(c).fps() > 0)) return true;
+    // A stalled (unpainted) client still counts once its sim is stepping.
+    if (clients.every((c) => probe(c) && (probe(c).fps() > 0 || (probe(c).tick?.() || 0) > 30))) return true;
     await sleep(250);
   }
   return false;

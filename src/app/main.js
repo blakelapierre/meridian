@@ -1,6 +1,8 @@
 import { paintFrame } from "../engine/frame.js";
 import { mountFullscreen, mountTouch, wantsTouch } from "./touch.js?v=5";
 import { BOT_KEYS, createWander, stepWander } from "./bot.js?v=1";
+import { chatMessage, createChatLog, noteChat, readChat } from "../net/chat.js?v=1";
+import { STALL_MAX_DT, STALL_MS, stalledFor } from "./stall.js?v=1";
 import { resetEverything } from "./reset.js?v=1";
 import { mountOnboard } from "./onboard.js?v=2";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
@@ -101,7 +103,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=10";
+import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=11";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=4";
 import { bareAckDue, createNotify, isNotify, KIND, notifyStats, unwrap as unwrapNotify, wrap as wrapNotify } from "../net/notify.js?v=1";
 import { adapt as adaptBudget, createBudget, pick as pickSends, weightOf } from "../net/budget.js?v=2";
@@ -2733,6 +2735,11 @@ async function openLink(to, offer, role) {
       noteAck(link.motion, ack.tick);
       return;
     }
+    const chat = readChat(text);
+    if (chat) {
+      noteChat(chatLog, to, chat, Date.now());
+      return;
+    }
     const drag = readDragMessage(text);
     if (drag?.id === meId) {
       const stepped = stepDrag(player.position, dragAsk(true), yaw, tick);
@@ -3013,6 +3020,20 @@ globalThis.meridianProbe = {
   lighthouse: () => lighthouseState,
   signal: () => ({ kind: signalKind, state: lighthouseState, peers: torrentRoom?.peers() || 0, trackers: torrentRoom?.trackersUp() || 0 }),
   fps: () => Number(canvas.dataset.fps || 0),
+  tick: () => tick,
+  // Chat (reliable ctrl lane): say() sends one line to every open link; chat() reads the inbox.
+  say: (text) => {
+    const line = chatMessage(chatSeq + 1, text);
+    if (!line) return 0;
+    chatSeq += 1;
+    let sent = 0;
+    for (const link of links) {
+      if (link.ctrl?.readyState !== "open") continue;
+      try { link.ctrl.send(line); sent += 1; } catch {}
+    }
+    return sent;
+  },
+  chat: () => chatLog.lines.map((line) => ({ ...line })),
   renderer: () => canvas.dataset.renderer || "",
   gpuError: () => canvas.dataset.gpuError || "",
   errors: () => [...pageErrors, ...(canvas.dataset.err ? [canvas.dataset.err] : [])],
@@ -3196,6 +3217,8 @@ function netGraphRows() {
 }
 // Frames stop in a hidden or starved tab; keep peers fed by wall time so they still see us.
 let lastPublishMs = 0;
+const chatLog = createChatLog();
+let chatSeq = 0;
 
 function publishPose() {
   lastPublishMs = performance.now();
@@ -3308,9 +3331,13 @@ if (params.get("still") !== "1") {
   let lastTraceKey = "";
   let last = performance.now();
   let bank = 0;
-  const frame = (now) => {
+  // Hidden, offscreen or starved tabs stop calling rAF. A wall-clock driver steps the sim (not
+  // the paint) by real elapsed time so bots, physics and the network keep pace (Batch 17).
+  let lastFrameMs = performance.now();
+  const frame = (now, fromTimer = false) => {
+    lastFrameMs = performance.now();
     try {
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const dt = Math.min(fromTimer ? STALL_MAX_DT : 0.1, (now - last) / 1000);
     bank += dt;
     last = now;
     if (agent) {
@@ -4042,7 +4069,7 @@ if (params.get("still") !== "1") {
     const due = extra ? decision.paint : active ? now - lastTrace >= interval * 0.85 : decision.paint;
     // ?paintfps= (or the probe) caps drawing only; the sim and network keep full speed.
     const capped = paintCap > 0 && now - lastCapped < 1000 / paintCap - 2;
-    if (params.get("nopaint") !== "1" && due && !capped) {
+    if (params.get("nopaint") !== "1" && due && !capped && !fromTimer) {
       lastCapped = now;
       const started = performance.now();
       paint(sample, trace.width, trace.height);
@@ -4074,8 +4101,9 @@ if (params.get("still") !== "1") {
       report = "frame";
       canvas.dataset.err = String(error && error.message || error);
     }
-    requestAnimationFrame(frame);
+    if (!fromTimer) requestAnimationFrame(frame);
   };
+  setInterval(() => { if (stalledFor(lastFrameMs, performance.now())) frame(performance.now(), true); }, STALL_MS);
   if (keepSlot && keptWorld) {
     for (const [key, sample] of keptWorld.crust || []) terrain.log.crust.overrides.set(key, sample);
     for (const text of keptWorld.frames) {
