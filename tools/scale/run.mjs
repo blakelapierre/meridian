@@ -32,6 +32,7 @@ if (!base) {
   }
 }
 const q = new URLSearchParams({ auto: "1", max: arg("max", solo ? "4" : "50"), settle: arg("settle", solo ? "5" : "8"), budget: arg("budget", "2.5") });
+for (const k of ["minhz", "minfps"]) if (arg(k)) q.set(k, arg(k));
 if (solo) {
   q.set("lighthouse", "off");
   q.set("expect", "move");

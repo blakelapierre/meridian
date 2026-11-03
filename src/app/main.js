@@ -6,7 +6,7 @@ import { FRAME_MAX_DT, STALL_MAX_DT, STALL_POLL_MS, stalledFor } from "./stall.j
 import { resetEverything } from "./reset.js?v=1";
 import { mountOnboard } from "./onboard.js?v=2";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
-import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, signalMode, torrentLine, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=5";
+import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, signalMode, torrentLine, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=6";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js?v=4";
 import { createAmbient, planAmbient } from "../audio/ambient.js";
@@ -145,7 +145,7 @@ import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
 import { shellDrop, shellTilt } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
-import { connectPeer, createRoom, startRoom } from "../net/room.js?v=2";
+import { connectPeer, createRoom, startRoom } from "../net/room.js?v=3";
 import { createTorrentRoom, trackersFrom } from "../net/signal-torrent.js?v=1";
 import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
 import { acceptShot, encodeShot } from "../net/shots.js";
