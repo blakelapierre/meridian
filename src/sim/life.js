@@ -1,4 +1,5 @@
 import { spanShape, triShape } from "./form.js?v=1";
+import { ledgeHeight } from "./ledge.js?v=1";
 
 export const HILL = 5.4;
 
@@ -46,7 +47,7 @@ export function herd(patch, at = [12, -150, 0], count = 3, parts = true, nowMs =
 
 export function standHeight(x, y, dug = 0) {
   if (dug < -0.01) return dug;
-  return duneHeight(x, y);
+  return Math.max(duneHeight(x, y), ledgeHeight(x, y));
 }
 
 function smoothstep(edge0, edge1, value) {
