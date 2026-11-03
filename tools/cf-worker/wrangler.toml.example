@@ -7,14 +7,24 @@ compatibility_date = "2026-11-01"
 name = "LIGHTHOUSE"
 class_name = "Lighthouse"
 
+[[durable_objects.bindings]]
+name = "TURN_QUOTA"
+class_name = "TurnQuota"
+
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["Lighthouse"]
+new_sqlite_classes = ["Lighthouse", "TurnQuota"]
 
 [vars]
 # Comma list of page origins allowed to connect, e.g. "https://blakelapierre.github.io". Empty = any.
-ALLOWED_ORIGINS = ""
+ALLOWED_ORIGINS = "https://blakelapierre.github.io"
 MAX_SOCKETS = "512"
+# TURN free-tier cap (Batch 21). Free tier is 1,000 GB/month egress, then $0.05/GB.
+TURN_CAP_GB = "250"        # monthly estimated budget
+EST_GB_PER_CRED = "0.25"   # charged per credential minted
+TURN_REFUSE_AT = "0.9"     # refuse new credentials at 90% of the budget
+TURN_TTL = "3600"          # credential lifetime, seconds
+TURN_PER_IP_HOUR = "4"
 
 # Secrets (never in this file):
 #   npx wrangler secret put TURN_KEY_ID
