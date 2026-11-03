@@ -27,6 +27,25 @@ export function lighthouseUrl(params, hostname = "", config = null) {
   return null;
 }
 
+// Which signaling to use: "lighthouse" (url set), "torrent" (public WebTorrent trackers), or "solo".
+// ?lighthouse=<url> wins; ?signal=torrent|lighthouse picks; off/none or ?solo=1 means solo.
+// With no lighthouse configured the default is torrent, so the public demo is multiplayer.
+export function signalMode(params, url) {
+  const asked = params.get("lighthouse") || params.get("signal") || "";
+  if (asked === "off" || asked === "none" || params.get("solo") === "1") return "solo";
+  if (/^wss?:\/\//.test(params.get("lighthouse") || "")) return "lighthouse";
+  if (params.get("signal") === "torrent") return "torrent";
+  if (params.get("signal") === "lighthouse") return url ? "lighthouse" : "solo";
+  return url ? "lighthouse" : "torrent";
+}
+
+export function torrentLine(state, peers = 0) {
+  if (state === "unreachable") return "public trackers unreachable, playing solo";
+  if (state === "connecting") return "multiplayer via public trackers · connecting";
+  if (state === "up") return `multiplayer via public trackers · ${peers} ${peers === 1 ? "peer" : "peers"}`;
+  return "";
+}
+
 // One line for the network panel about the lighthouse. "off" means solo was
 // chosen (no lighthouse configured, or ?lighthouse=off), so it says nothing.
 export function lighthouseLine(state) {
