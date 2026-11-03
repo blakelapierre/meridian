@@ -147,3 +147,17 @@ export async function connectPeer({ pc, room, me, to, offer, isOpen, status }) {
     await pause(1000);
   }
 }
+
+// Start a room without giving up on a slow socket. A busy page (shader compile, a weak
+// phone, many tabs) can delay the socket's open past a few seconds; closing it then left
+// game clients solo for 30 s. Now a slow start only reports "slow" and keeps waiting;
+// only a real socket error rejects.
+export function startRoom(room, { slowMs = 3000, onState = () => {} } = {}) {
+  let settled = false;
+  onState("connecting");
+  const timer = setTimeout(() => { if (!settled) onState("slow"); }, slowMs);
+  return room.start().then(
+    () => { settled = true; clearTimeout(timer); onState("up"); return room; },
+    (error) => { settled = true; clearTimeout(timer); onState("failed"); throw error; },
+  );
+}

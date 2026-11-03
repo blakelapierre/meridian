@@ -9,6 +9,7 @@ import test from "node:test";
 import { WebSocket } from "ws";
 import { createLighthouse } from "../tools/signal/server.js";
 import { createStaticServer } from "../tools/serve.js";
+import { DIG_SAMPLE_MM } from "../src/sim/crust.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 import { chrome, noChrome, p2pBlocked } from "./support/chrome.js";
@@ -27,8 +28,8 @@ test("two browsers apply one dig and print the same hash", { skip: blocked, time
     const query = `signal=${encodeURIComponent(lighthouse.url)}`;
     await open(portA, `${site}/tools/dig/index.html?id=a&to=b&offer=1&${query}`);
     await open(portB, `${site}/tools/dig/index.html?id=b&to=a&${query}`);
-    const leader = await pageText(portA, "dig", "voxel 500");
-    const witness = await pageText(portB, "dig", "voxel 500");
+    const leader = await pageText(portA, "dig", `voxel ${DIG_SAMPLE_MM}`);
+    const witness = await pageText(portB, "dig", `voxel ${DIG_SAMPLE_MM}`);
     assert.match(leader, /applied/);
     assert.match(witness, /applied/);
     assert.equal(leader.match(/hash ([0-9a-f]+)/)[1], witness.match(/hash ([0-9a-f]+)/)[1]);
@@ -40,6 +41,25 @@ test("two browsers apply one dig and print the same hash", { skip: blocked, time
     await rm(dirA, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     await rm(dirB, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
+});
+
+// Headless regression for the real-browser failure: the harness wrote 500 mm, but 25 cm
+// voxels dig to DIG_SAMPLE_MM, so the leader refused its own certified op ("dig").
+test("the dig harness proposal is one the edit rule accepts on both tabs", async () => {
+  const { digProposal, DIG_VOXEL } = await import("../tools/dig/proposal.js");
+  const { createIdentity } = await import("../src/net/identity.js");
+  const { appendOp, createLog, sealOp, signVote } = await import("../src/sim/oplog.js");
+  const leaderId = createIdentity();
+  const witnessId = createIdentity();
+  const leader = createLog();
+  const witness = createLog();
+  const proposal = digProposal(leaderId, leader);
+  const vote = signVote(witnessId, 1, true);
+  const op = sealOp({ leader: leaderId, proposal, seq: 1, tick: 30, votes: [vote] });
+  assert.deepEqual(appendOp(leader, op, 2), { ok: true });
+  assert.deepEqual(appendOp(witness, op, 2), { ok: true });
+  assert.equal(leader.crust.sampleIndex(...DIG_VOXEL), DIG_SAMPLE_MM);
+  assert.deepEqual([...leader.crust.hash(0, 0, -1)], [...witness.crust.hash(0, 0, -1)]);
 });
 
 function launch(bin, dir) {

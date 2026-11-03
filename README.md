@@ -4,7 +4,7 @@ A peer-to-peer, browser-native, real-time raytraced open sim on a living globe. 
 
 Design-first, now early implementation. The specs below are the contract; the first slice (**Atoll**) is being built against them.
 
-**[Play the solo demo](https://blakelapierre.github.io/meridian/tools/view/index.html)** in your browser. It runs on desktop and touch devices. No public lighthouse is configured right now (`content/lighthouse.json` has `url: null`), so the demo plays solo and says "multiplayer server offline". Add `?lighthouse=wss://...` to meet players through a lighthouse you run, or `?lighthouse=off` to force solo. For a local multiplayer setup, use `npm start`. See [docs/lighthouse.md](docs/lighthouse.md).
+**[Play the demo](https://blakelapierre.github.io/meridian/tools/view/index.html)** in your browser. It runs on desktop and touch devices. No public lighthouse is configured right now (`content/lighthouse.json` has `url: null`), so the demo meets other players through public WebTorrent trackers and shows "multiplayer via public trackers · N peers" (see [privacy](#public-trackers-and-privacy)). Add `?lighthouse=wss://...` to use a lighthouse you run, or `?lighthouse=off` to force solo. For a local multiplayer setup, use `npm start`. See [docs/lighthouse.md](docs/lighthouse.md).
 
 On the page: **Reset** (top right) forgets everything saved on this device (identity, world, tour, settings) and starts a new session; the fullscreen button sits next to it where the browser supports it. On a phone, drag the right side to look, pinch to pull the camera in or out, two-finger drag to orbit, and **V View** toggles first/third person, the same as the wheel, right-drag and V on desktop. If WebGL fails, a red banner says why and the slower CPU picture is used.
 
@@ -15,10 +15,10 @@ Pre-alpha. The Atoll slice is playable solo in the browser; multiplayer, progres
 | Area | State |
 |---|---|
 | Specs (`docs/`) | Written and locked for the Atoll slice |
-| `src/` | About 10,100 lines of browser JS across 86 modules: engine port (raycaster, N-body tick), sim (crust brush and chunk hash, strike, damage, shots and certs, op log, support/collapse, hearth/corpse), net (identity, room, positions, shots, terrain, archive), render (software and WebGL2 ray pass) |
+| `src/` | About 17,900 lines of browser JS across 102 modules: engine port (raycaster, N-body tick), sim (crust brush and chunk hash, strike, damage, shots and certs, op log, support/collapse, hearth/corpse), net (identity, room, positions, shots, terrain, archive), render (software and WebGL2 ray pass) |
 | `tools/` | Dev static server, signaling "lighthouse", launcher page, and browser harnesses (`view`, `link`, `dig`, `shot`, `archive`, `bench`, `scale`) |
-| Tests | 250 Node tests; 246 pass. The 4 two-browser WebRTC tests report **KNOWN-BLOCKED** where the machine's WebRTC policy stops peer data channels (a probe checks first), and run where it does not (as of 31 Oct 2026) |
-| Network phases | P0 Link and parts of P2 (signed, witnessed shots) and P3 (dig op hash) are exercised by browser tests; nothing beyond one island yet |
+| Tests | 341 Node tests; 337 pass. The 4 two-browser WebRTC tests report **KNOWN-BLOCKED** where the machine's WebRTC policy stops peer data channels (a probe checks first), and run where it does not (as of 2 Nov 2026) |
+| Network phases | P0 Link and parts of P2 (signed, witnessed shots) and P3 (dig op hash) are exercised by browser tests; nothing beyond one island yet. Each phase P0–P9 is a [`roadmap` issue](https://github.com/blakelapierre/meridian/labels/roadmap); see [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ## Run it
 
@@ -35,10 +35,15 @@ npm start                     # dev server on :8080, signaling on :8787
 
 ## Solo, offline, and multiplayer
 
-- **Solo / offline:** with no lighthouse the page plays solo: island, digging, building and the AI all work. The corner note "multiplayer server offline" links to [what `?lighthouse=` does](docs/lighthouse.md#the-lighthouse-parameter).
+- **Public trackers (default with no lighthouse):** `src/net/signal-torrent.js` uses public WebTorrent trackers (`wss://tracker.openwebtorrent.com`, `wss://tracker.webtorrent.dev`) to introduce peers, then play runs peer to peer exactly as with a lighthouse. `?signal=torrent|lighthouse` picks, `?lighthouse=<url>` always wins, `?trackers=wss://a,wss://b` overrides the list. Lost versus a lighthouse: no world directory and no authoritative roster (peers age out after ~100 s of silence), and no archive discovery unless an archive also announces on the trackers.
+- **Solo / offline:** `?lighthouse=off` or `?solo=1`, or when no tracker answers, the page plays solo: island, digging, building and the AI all work.
 - **Networking (v3):** a lighthouse only introduces peers; play then runs peer to peer over WebRTC. See [docs/net-v3.md](docs/net-v3.md) for the current protocol.
 - **Phone controls:** left stick moves (push fully to sprint), drag the right side to look, tap to fire or dig, plus Jump, Crouch, Use, Tool, Map and Info buttons. All are listed in [docs/keymap.md](docs/keymap.md#touch).
 - **First run:** a short how-to-play card opens once (desktop or touch tips); the **?** button in the corner reopens it. `?onboard=0` hides it.
+
+### Public trackers and privacy
+
+The trackers are run by third parties. They see your IP address, a random per-visit peer id, which room you joined (a SHA-1 of the world name) and when, plus the small introduction messages (WebRTC offers, answers and ICE candidates, which also contain IP addresses). They never see game traffic, which goes directly between players. Players you connect to see your IP, as with any WebRTC game. Use `?lighthouse=off` to play without contacting anyone, or point `?lighthouse=` at a server you trust.
 
 ## Test pages and hooks
 

@@ -7,7 +7,7 @@ import { createState, setField, addReceiver, packFor, onLoss, readState, pending
 import { createLoopbackPair } from "../src/net/loopback.js";
 import { netGraphLines, rateTracker, sampleRate } from "../src/app/netgraph.js";
 import { helloMessage, readHello } from "../src/net/wire.js";
-import { createSendState, sendNow, createView, receive, noteAck } from "../src/net/motion.js";
+import { createSendState, sendNow, createView, receive, noteAck, shouldSend } from "../src/net/motion.js";
 
 function seeded(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 
@@ -151,4 +151,20 @@ test("main wires Batch 16 modules and cites sources", () => {
   assert.match(main, /netGraphLines\(netGraphRows\(\)\)/);
   const doc = readFileSync(new URL("../docs/netcode.md", import.meta.url), "utf8");
   assert.match(doc, /Frohnmayer/); assert.match(doc, /MIT/);
+});
+
+test("keepalive goes out under a starved budget (merge of #45 + #46)", () => {
+  const rec = createSendState();
+  const m = (tick, wallMs) => ({ tick, p: [0, 0, 1], v: [0, 0, 0], a: [0, 0, 0], yaw: 0, yawRate: 0, pitch: 0, floor: 1, mode: 0, wallMs });
+  sendNow(rec, m(1, 0), 0);
+  // Ticks frozen (hidden tab), wall time moves on: keepalive is due.
+  const why = shouldSend(rec, m(1, 5000), 0);
+  assert.equal(why, "keepalive");
+  const b = createBudget({ start: 1, burst: 1 });
+  b.tokens = 0;
+  const out = pick(b, [{ key: "pose", bytes: 24, weight: 1, must: why === "keepalive" }]);
+  assert.deepEqual(out.map((c) => c.key), ["pose"]);
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /why === "keepalive"/);
+  assert.match(main, /wallMs: nowMs/);
 });

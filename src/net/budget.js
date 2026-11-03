@@ -27,7 +27,7 @@ export function pick(b, candidates) {
   const ranked = [...candidates].sort((x, y) => (y.must ? 1e9 : 0) + b.acc.get(y.key) - ((x.must ? 1e9 : 0) + b.acc.get(x.key)));
   const out = [];
   for (const c of ranked) {
-    if (c.bytes <= b.tokens) {
+    if (c.must || c.bytes <= b.tokens) { // must (mode/tier change, keepalive) may borrow against next tick
       b.tokens -= c.bytes;
       b.spent += c.bytes;
       b.acc.set(c.key, 0);
