@@ -1372,8 +1372,8 @@ function applyAgenda(command) {
   trigger = !!command.hold;
   if (command.shot) shotQueued = true;
   if (command.zoom) turnWheel(command.zoom);
-  if (command.salvage && slot === "hammer" && !agent.salvage) rightEdge = true;
-  agent.salvage = !!(command.salvage && slot === "hammer");
+  if (command.salvage && slot === "hammer" && !agent?.salvage) rightEdge = true;
+  if (agent) agent.salvage = !!(command.salvage && slot === "hammer");
 }
 
 function eyeOf(sample) {

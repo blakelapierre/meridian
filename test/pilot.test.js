@@ -61,3 +61,10 @@ test("a crossbow costs 8, watches 16 m, and salvages for 4", () => {
   assert.equal(trySalvage(yard, bow.at).ok, true);
   assert.equal(yard.metal - before, 4);
 });
+
+test("the local pilot does not touch the agenda agent", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const main = await readFile(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /if \(agent\) agent\.salvage = !!/);
+  assert.doesNotMatch(main, /^  agent\.salvage = /m);
+});
