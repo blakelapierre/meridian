@@ -16,7 +16,7 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=73";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=95";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=96";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -159,9 +159,14 @@ import { acceptBlock, createChain, hex, installTip, tipOf } from "../sim/chain.j
 import { decode } from "../sim/cbor.js";
 import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
+import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
+import { createCores } from "./cores.js";
+import { openPicture } from "./picture.js";
 
 const canvas = document.querySelector("canvas");
-let painter = createGpuPainter(canvas);
+bootNote("Loading Meridian", 0.08);
+const opened = openPicture(canvas, { search: location.search });
+let painter = opened.painter || createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
 const picture = createPicturePace();
@@ -186,11 +191,16 @@ const traceBudget = createTraceBudget();
 let pendingTrace = null;
 let idleGap = 0;
 const poseSeenAt = new Map();
-if (painter) {
+if (painter && !painter.remote) {
   fitCanvas(canvas, viewScale);
   canvas.style.imageRendering = "auto";
   canvas.dataset.renderer = "webgl2";
   addEventListener("resize", () => fitCanvas(canvas, viewScale));
+} else if (painter?.remote) {
+  canvas.style.imageRendering = "auto";
+  canvas.dataset.renderer = "webgl2";
+  canvas.dataset.picture = "worker";
+  painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
 } else {
   context = canvas.getContext("2d", { alpha: false });
   if (context) context.imageSmoothingEnabled = false;
@@ -263,14 +273,22 @@ async function fetchRetry(url, options, tries = 5) {
     }
   }
 }
-const atoll = await fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.json());
-const catalogHex = await Promise.all([
+bootNote("Reading the island", 0.28);
+const cores = createCores({ url: new URL("./core-worker.js?v=1", import.meta.url) });
+canvas.dataset.cores = String(cores.count);
+let cpuBusy = false;
+const [atoll, atollBytes, catalogBytes, lighthouseConfig] = await Promise.all([
+  fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.json()),
   fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.arrayBuffer()),
   fetchRetry(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
-]).then(([atollBytes, catalogBytes]) => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
-const lighthouseConfig = await fetchRetry(new URL("../../content/lighthouse.json?v=2", import.meta.url))
-  .then((response) => (response.ok ? response.json() : null))
-  .catch(() => null);
+  fetchRetry(new URL("../../content/lighthouse.json?v=2", import.meta.url))
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null),
+]);
+bootNote("Checking the catalog", 0.48);
+const catalogHex = await cores.run("hash", { parts: [new Uint8Array(atollBytes), new Uint8Array(catalogBytes)] })
+  .catch(() => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
+await yieldToUi();
 const lighthouseAt = lighthouseUrl(params, location.hostname, lighthouseConfig);
 // "lighthouse", "torrent" (public WebTorrent trackers, the default with no lighthouse) or "solo".
 const signalKind = signalMode(params, lighthouseAt);
@@ -2524,6 +2542,34 @@ function paint(sample, width = canvas.width, height = canvas.height) {
     canvas.dataset.renderer = "cpu";
     canvas.style.imageRendering = smoothUpscale ? "auto" : "pixelated";
   }
+  if (cores.count > 0 && !cpuBusy) {
+    cpuBusy = true;
+    const w = canvas.width;
+    const h = canvas.height;
+    const bands = Math.max(1, cores.count);
+    const rows = Math.ceil(h / bands);
+    const parts = [];
+    for (let band = 0; band < bands; band += 1) {
+      const y0 = band * rows;
+      const y1 = Math.min(h, y0 + rows);
+      if (y0 >= h) break;
+      parts.push(cores.run("band", { scene, width: w, height: h, y0, y1 }).then((slice) => ({ y0, slice })));
+    }
+    Promise.all(parts).then((done) => {
+      if (!context) return;
+      const pixels = new Uint8ClampedArray(w * h * 4);
+      for (const part of done) pixels.set(part.slice, part.y0 * w * 4);
+      if (slot === "line") {
+        const center = (Math.floor(h / 2) * w + Math.floor(w / 2)) * 4;
+        pixels[center] = 255;
+        pixels[center + 1] = 255;
+        pixels[center + 2] = 255;
+      }
+      context.putImageData(new ImageData(pixels, w, h), 0, 0);
+    }).catch(() => {}).finally(() => { cpuBusy = false; });
+    lastScene = scene;
+    return scene;
+  }
   const pixels = paintFrame(scene, canvas.width, canvas.height);
   if (slot === "line") {
     const center = (Math.floor(canvas.height / 2) * canvas.width + Math.floor(canvas.width / 2)) * 4;
@@ -3129,10 +3175,24 @@ async function seekOnce() {
 }
 
 const first = input();
-if (painter) fitCanvas(canvas, viewScale);
-paint(first);
-publish();
-canvas.dataset.ready = "1";
+let pictureUp = true;
+if (painter?.remote) {
+  painter.onProblem = (reason) => showGlError(reason);
+  bootNote("Waking the picture", 0.66);
+  pictureUp = await painter.ready;
+  if (!pictureUp) {
+    showGlError(painter.failReason() || "the picture thread did not start");
+    bootNote("The picture did not start. Reload the page.", 0.66);
+  } else painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
+} else if (painter) fitCanvas(canvas, viewScale);
+if (pictureUp) {
+  bootNote("Drawing the beach", 0.9);
+  await yieldToUi();
+  paint(first);
+  publish();
+  canvas.dataset.ready = "1";
+  bootDone();
+}
 // Horizontal field of view in radians, from the last painted camera.
 function viewFov() {
   const cam = lastScene?.camera;
@@ -3517,6 +3577,8 @@ if (params.get("still") !== "1") {
   let lastFrameMs = performance.now();
   const frame = (now, fromTimer = false) => {
     lastFrameMs = performance.now();
+    const frameStart = lastFrameMs;
+    let simSteps = 0;
     try {
     const dt = Math.min(fromTimer ? STALL_MAX_DT : FRAME_MAX_DT, (now - last) / 1000);
     bank += dt;
@@ -3595,6 +3657,8 @@ if (params.get("still") !== "1") {
     useEdge = false;
     buyEdge = false;
     while (bank >= 1 / 30) {
+      if (!shouldSimStep(simSteps, performance.now() - frameStart)) break;
+      simSteps += 1;
       try {
       stepDummy(dummy);
       riseQuarry(quarry, Date.now());
@@ -4299,7 +4363,8 @@ if (params.get("still") !== "1") {
     canvas.dataset.level = Number(finalScale || 0).toFixed(2);
     canvas.dataset.detail = "0";
     canvas.style.imageRendering = canvasRendering(smoothUpscale, trace.width, displayW);
-    if (painter) {
+    if (painter?.remote) painter.resize(displayW, displayH);
+    else if (painter) {
       if (canvas.width !== displayW) canvas.width = displayW;
       if (canvas.height !== displayH) canvas.height = displayH;
     } else {
@@ -4319,7 +4384,9 @@ if (params.get("still") !== "1") {
     const due = extra ? decision.paint : active ? now - lastTrace >= interval * 0.85 : decision.paint;
     // ?paintfps= (or the probe) caps drawing only; the sim and network keep full speed.
     const capped = paintCap > 0 && now - lastCapped < 1000 / paintCap - 2;
+    const roomy = shouldPaint(simSteps, performance.now() - frameStart);
     if (params.get("nopaint") !== "1" && due && !capped && !fromTimer) {
+      if (roomy) {
       lastCapped = now;
       const started = performance.now();
       paint(sample, trace.width, trace.height);
@@ -4335,6 +4402,7 @@ if (params.get("still") !== "1") {
       if (key !== lastTraceKey) blend = 0;
       else blend = 1;
       lastTraceKey = key;
+      }
     }
     const fade = Math.min(0.12, Math.max(0.03, interval / 1000));
     blend = Math.min(1, blend + dt / fade);
