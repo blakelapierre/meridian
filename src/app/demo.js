@@ -84,6 +84,15 @@ export const TOUR = [
 ];
 export const TOUR_KEY = "meridian-tour-2";
 
+// A normal walk or the solo demo asks when a save exists. Scripted frames keep going.
+export function characterChoice(params, { saved = false } = {}) {
+  const asked = params.get("who");
+  if (asked === "new" || asked === "keep") return asked;
+  if (!saved) return "new";
+  const scripted = params.get("bot") || params.get("follow") || params.get("ai") || params.get("look") || params.get("gate") === "1" || params.get("dig") === "1" || params.get("key") || params.get("id");
+  return scripted ? "keep" : "ask";
+}
+
 export function createTour(done = []) {
   return { index: TOUR.findIndex((step) => !done.includes(step.id)), confirm: "", confirmUntil: 0, skip: false };
 }

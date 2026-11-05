@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { crabParts, duneHeight, fauna, floraParts, goatParts, graze, groundLook, gullParts, herd, herdPrints, HILL, standHeight } from "../src/sim/life.js";
+import { biomeAt, crabParts, duneHeight, fauna, floraParts, goatParts, graze, groundLook, gullParts, herd, herdPrints, HILL, livingPlants, plantScale, plantStage, standHeight } from "../src/sim/life.js";
 
 test("hills reach about three body heights and a pit is still the floor", () => {
   let low = 99;
@@ -138,4 +138,28 @@ test("the gull has a wingspan, a beak, and a wingbeat", () => {
     return best.at[2] - frame.at[2];
   };
   assert.ok(Math.abs(tipLift(pose) - tipLift(later)) > 0.08);
+});
+
+test("the island has more than one ground, and a seed grows and lands away from its parent", () => {
+  const biomes = new Set();
+  for (let x = -80; x <= 80; x += 4) {
+    for (let y = -200; y <= -40; y += 4) biomes.add(biomeAt(x, y));
+  }
+  for (const name of ["beach", "scrub", "meadow", "marsh", "grove", "ridge"]) assert.equal(biomes.has(name), true, name);
+  assert.equal(plantStage(0), "seed");
+  assert.equal(plantStage(1000), "sprout");
+  assert.equal(plantStage(3000), "grown");
+  assert.equal(plantStage(4000), "seeding");
+  assert.ok(plantScale("seed") < plantScale("sprout") && plantScale("sprout") < plantScale("grown"));
+  const young = livingPlants(0).filter((plant) => plant.age < 1e8);
+  assert.ok(young.length > 0);
+  assert.ok(young.every((plant) => plant.stage === "seed" && plant.scale < 0.3));
+  const parents = livingPlants(0).filter((plant) => plant.age > 1e8);
+  assert.ok(young.every((plant) => parents.some((parent) => Math.hypot(plant.x - parent.x, plant.y - parent.y) > 2)));
+  const later = livingPlants(5000);
+  assert.equal(later.some((plant) => plant.stage === "seeding"), true);
+  assert.equal(later.some((plant) => plant.stage === "sprout"), true);
+  assert.ok(later.length <= 14);
+  const seeded = floraParts(0, 5000);
+  assert.ok(seeded.filter((part) => part.radius < 0.04).length >= 3);
 });

@@ -158,6 +158,24 @@ export function loadSheet(store, slot = "self") {
   }
 }
 
+export function dropCharacter(store, slot = "self") {
+  if (!store?.drop) return 0;
+  const keys = [`meridian-id-${slot}`, `meridian-sheet-${slot}`, `meridian-plate-${slot}`, `meridian-world-${slot}`];
+  let dropped = 0;
+  for (const key of keys) {
+    if (store.get?.(key) != null) dropped += 1;
+    store.drop(key);
+  }
+  return dropped;
+}
+
+export function characterLine(sheet) {
+  if (!sheet?.at) return "A saved key is on this device.";
+  const x = Math.round((sheet.at[0] || 0) / 100);
+  const y = Math.round((sheet.at[1] || 0) / 100);
+  return `Saved near ${x}, ${y} · metal ${sheet.metal || 0}`;
+}
+
 export function applyCharacter(sheet, { player, skills, yard, survey, notes } = {}) {
   if (!sheet) return false;
   if (player && sheet.at) {

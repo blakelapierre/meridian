@@ -6,7 +6,7 @@ import { FRAME_MAX_DT, STALL_MAX_DT, STALL_POLL_MS, stalledFor } from "./stall.j
 import { resetEverything } from "./reset.js?v=1";
 import { mountOnboard } from "./onboard.js?v=2";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
-import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, signalMode, torrentLine, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=6";
+import { createTour, characterChoice, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, signalMode, torrentLine, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=7";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js?v=4";
 import { createAmbient, planAmbient } from "../audio/ambient.js";
@@ -15,8 +15,8 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=73";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=96";
+import { buildScene } from "../render/scene.js?v=74";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=97";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -46,7 +46,7 @@ import {
 } from "../sim/rules.js";
 import { overheadCamera, unpickedClock } from "../sim/clocks.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
-import { dayWord, DAY_TICKS } from "../sim/sun.js";
+import { clockScale, dayWord, DAY_TICKS } from "../sim/sun.js?v=2";
 import { columnFloor, acceptCertifiedSlump, bitMode, certifySlump } from "../sim/crust.js";
 import { bitAim, crustFeet } from "../sim/bit.js?v=2";
 import { toolAim } from "../sim/aim.js";
@@ -117,6 +117,8 @@ import {
   browserStore,
   bytesHex,
   characterBody,
+  characterLine,
+  dropCharacter,
   encodeSheet,
   forgetKept,
   hexBytes,
@@ -142,7 +144,7 @@ import { createPilot, PILOT_GOALS, stepPilot, togglePilotGoal } from "../sim/pil
 import { stepBows } from "../sim/bow.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, herdPrints, standHeight } from "../sim/life.js?v=79";
+import { duneHeight, fauna, graze, groundLook, herdPrints, standHeight } from "../sim/life.js?v=80";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -330,6 +332,34 @@ if (freshBoot) {
   clean.searchParams.delete("fresh");
   history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
 }
+function askWho(line) {
+  const root = document.querySelector("#who");
+  if (!root) return Promise.resolve("keep");
+  const note = root.querySelector("[data-who-line]");
+  if (note) note.textContent = line || "";
+  root.hidden = false;
+  const boot = document.querySelector("#boot");
+  if (boot) boot.hidden = true;
+  root.querySelector("#who-keep")?.focus();
+  return new Promise((resolve) => {
+    const done = (who) => {
+      root.hidden = true;
+      if (boot) boot.hidden = false;
+      resolve(who);
+    };
+    root.querySelector("#who-keep")?.addEventListener("click", () => done("keep"), { once: true });
+    root.querySelector("#who-new")?.addEventListener("click", () => done("new"), { once: true });
+  });
+}
+if (keepSlot) {
+  const savedSheet = loadSheet(keptStore, keepSlot);
+  const saved = Boolean(loadIdentity(keptStore, keepSlot) || savedSheet);
+  const choice = characterChoice(params, { saved });
+  if (choice === "ask") {
+    bootNote("Who is walking", 0.55);
+    if ((await askWho(characterLine(savedSheet))) === "new") dropCharacter(keptStore, keepSlot);
+  } else if (choice === "new" && params.get("who") === "new") dropCharacter(keptStore, keepSlot);
+}
 let identity = importKey(params.get("key") || "") || (keepSlot && loadIdentity(keptStore, keepSlot)) || createIdentity();
 const bootPhrase = params.get("phrase") || "";
 if (bootPhrase && !params.get("key")) {
@@ -393,8 +423,11 @@ let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") ===
 let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
 // ?phase=<radians> sets the starting sun angle (0.87 is mid-morning, ~2.9 dusk, ~4.6 night) for repeatable screenshots.
+// ?clock= speeds the day, the weather, and plant growth. Walking stays at real time. 1 is the default.
 const phaseParam = Number(params.get("phase"));
+const dayRate = clockScale(params.get("clock"));
 let tick = ((Number.isFinite(phaseParam) && params.get("phase") !== null ? phaseParam : 0.87) / (Math.PI * 2)) * DAY_TICKS;
+const envTick = () => tick * dayRate;
 let trigger = false;
 let shotQueued = false;
 let cooldown = 0;
@@ -520,9 +553,9 @@ function stepAmbient() {
   const events = planAmbient(ambient, {
     now: tick / 30,
     listener: player.position,
-    light: dayWord(tick),
+    light: dayWord(tick, dayRate),
     actors: otherActors().map((other) => other.feet),
-    rain: rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick),
+    rain: rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick()),
   });
   for (const event of events) {
     const heard = hearSource(player.position, yaw, event.at, perception.senses.hearing, skills, event.category);
@@ -561,7 +594,7 @@ function stepAwareness() {
   if (nearPrint || nearDig || nearHoof) grantUse(skills, "tracking", { tick, gap: 60 });
   if (nearPrint) grantUse(skills, "trailing", { tick, gap: 80 });
   // Dark adaptation: trained by being out at night; it lifts the night picture a little.
-  const night = dayWord(tick) === "night";
+  const night = dayWord(tick, dayRate) === "night";
   if (night) grantUse(skills, "dark", { tick, gap: 240 });
   const lift = darkLift(skills.dark.value, night);
   const filter = lift > 0.01 ? `brightness(${(1 + lift).toFixed(2)})` : "";
@@ -1640,6 +1673,7 @@ function sceneFor(sample, width, height) {
     // A roll shows: the figure stays balled up until the roll runs out.
     crouch: !!sample.crouch || rollSpeed(roll, tick) > 0,
     tick,
+    sunTick: envTick(),
     atoll,
     crust: terrain.log.crust,
     pieces: yard.pieces,
@@ -2359,8 +2393,8 @@ function publish() {
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const fluxPiece = yard.pieces.find((piece) => piece.id === "fin");
-  const shade = fluxPiece && !fluxPiece.broken ? finCloud(fluxPiece.at, tick) : 0;
-  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0) * (1 - shade))}${shade >= 0.1 ? " cloud" : ""}` : "";
+  const shade = fluxPiece && !fluxPiece.broken ? finCloud(fluxPiece.at, envTick()) : 0;
+  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(envTick()) * finGain(fluxPiece.yaw || 0) * (1 - shade))}${shade >= 0.1 ? " cloud" : ""}` : "";
   const finNote = (yard.finMetal || 0) > 0 ? ` · fin ${yard.finMetal}` : "";
   const bound = yard.bound ? peerDeed({ cell: yard.bound, holder: pubkeyHex(identity.pubkey), radius: 6 }, yard.grace) : null;
   const boundNote = bound ? ` · bound${bound.grace ? " grace" : ""}` : "";
@@ -2368,9 +2402,9 @@ function publish() {
   const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${landingNote(skills, keys.has("ControlLeft") || keys.has("ControlRight"))}${legNote}${windNote}`;
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}/${spoilCap(skills.mining.value)}` : "";
   const brushNote = slot === "bit" && brush !== "dig" ? ` · ${brush}` : "";
-  const light = dayWord(tick);
-  const rainNow = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
-  const lightNote = ` · ${light}${rainWord(rainNow)}`;
+  const light = dayWord(tick, dayRate);
+  const rainNow = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
+  const lightNote = ` · ${light}${dayRate === 1 ? "" : ` ×${dayRate}`}${rainWord(rainNow)}`;
   listener.setLevel(light === "night" ? 0.45 : light === "dawn" || light === "dusk" ? 0.7 : 1);
   const muteNote = listener.muted ? " · muted" : "";
   const friendNote = selection?.kind === "player" && friends.has(selection.id)
@@ -2484,8 +2518,8 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   const room = PRINT_CAP - hooves.length;
   scene.prints = room > 0 ? [...prints.slice(-room), ...hooves] : hooves;
   scene.work = work;
-  scene.time = tick / 30;
-  scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
+  scene.time = envTick() / 30;
+  scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
   scene.gaze = gazeFor(
     scene.camera,
     eyeOf(sample),
@@ -2637,7 +2671,7 @@ function fire(sample) {
       const scaled = Math.round(applied.damage * penFactor(0, 1));
       grantUse(skills, "marksmanship", { tick });
       grantUse(skills, "focus", { tick, gap: 30 });
-      if (dayWord(tick) === "night") grantUse(skills, "marksmanship", { tick });
+      if (dayWord(tick, dayRate) === "night") grantUse(skills, "marksmanship", { tick });
       report = `${applied.hitbox} ${scaled} quorum`;
     } else report = "provisional";
   }
@@ -3703,7 +3737,7 @@ if (params.get("still") !== "1") {
       }
       for (let bolt = bolts.length - 1; bolt >= 0; bolt -= 1) {
         const wind = windAt(player.position[0], player.position[1]);
-        const blown = dayWord(tick) === "night" ? wind.map((part) => part * 1.5) : wind;
+        const blown = dayWord(tick, dayRate) === "night" ? wind.map((part) => part * 1.5) : wind;
         stepBolt(bolts[bolt], 1 / 30, 9.81, blown);
         if (smokeTicks > 0 && boltInSmoke(bolts[bolt], smokeAt)) {
           bolts.splice(bolt, 1);
@@ -3807,8 +3841,8 @@ if (params.get("still") !== "1") {
       if (tick > 0 && tick % 1800 === 0) {
         for (const piece of yard.pieces) {
           if (piece.id !== "fin") continue;
-          trackFin(piece, tick);
-          const gained = fluxMetal(tick, piece.yaw || 0, piece.broken, finCloud(piece.at, tick));
+          trackFin(piece, envTick());
+          const gained = fluxMetal(envTick(), piece.yaw || 0, piece.broken, finCloud(piece.at, envTick()));
           if (gained && finCredit(gained)) {
             yard.metal += gained;
             yard.finMetal = (yard.finMetal || 0) + gained;
@@ -3818,7 +3852,7 @@ if (params.get("still") !== "1") {
       if (tick % 30 === 0) {
         let rained = false;
         for (const pool of pools) {
-          const wet = rainPool(pool, tick, { deck: true });
+          const wet = rainPool(pool, envTick(), { deck: true });
           if (wet && wet.rain !== pool.rain) {
             pool.rain = wet.rain;
             rained = true;
@@ -3876,7 +3910,7 @@ if (params.get("still") !== "1") {
       reloadBeat = waited.reload;
       bleed(vitals, 1 / 30);
       if (bloodDrop(vitals)) report = "down";
-      if (player.position[1] < -190) hear("sea", seaGain(dayWord(tick)));
+      if (player.position[1] < -190) hear("sea", seaGain(dayWord(tick, dayRate)));
       stepAmbient();
       stepAwareness();
 

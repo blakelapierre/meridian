@@ -89,7 +89,14 @@
       #boot [data-boot-line] { margin: 8px 0 12px; color: #c9c0aa; min-height: 1.4em; }
       #boot .track { height: 8px; background: #2a3128; border-radius: 99px; overflow: hidden; }
       #boot [data-boot-bar] { display: block; height: 100%; width: 0; background: #d7c07a; }
-      html.touch #boot { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      #who { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; background: #10140f; color: #efe7d4; font: 16px/1.4 system-ui, sans-serif; }
+      #who[hidden] { display: none; }
+      #who section { width: min(22rem, calc(100vw - 32px)); }
+      #who b { display: block; font-size: 22px; letter-spacing: 0.04em; }
+      #who p { margin: 8px 0 16px; color: #c9c0aa; }
+      #who button { display: block; width: 100%; margin: 8px 0; min-height: 48px; border: 0; border-radius: 8px; background: #d7c07a; color: #1a160e; font: inherit; font-weight: 650; }
+      #who button.plain { background: #2a3128; color: #efe7d4; }
+      html.touch #boot, html.touch #who { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
       h1 { font-size: 1rem; margin: 0 0 8px; }
       p { margin: 0 0 8px; }
       html.touch, html.touch body { overflow: hidden; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -191,6 +198,14 @@
     </script>
   </head>
   <body>
+    <div id="who" hidden>
+      <section>
+        <b>Who is walking</b>
+        <p data-who-line></p>
+        <button id="who-keep" type="button">Continue this character</button>
+        <button id="who-new" class="plain" type="button">New character</button>
+      </section>
+    </div>
     <div id="boot" role="status" aria-live="polite" aria-busy="true">
       <section>
         <b>Meridian</b>
@@ -208,7 +223,7 @@
       <p>Press M to cycle the map: small, then full screen, then hidden. It starts small, at the lower left, and keeps a picture of the ground. The color is the ground your eyes are looking at, from your head, not the camera behind you: sand in the lows, grass on the slope, rock on the crest, and a pit where the floor is open. Lows are darker and crests are lighter. Topography sits under mapping in the skill list. It rises only while you survey, and it cannot pass mapping. Until it does, the chart has no contour lines. As it rises, the lines draw closer and the hill is sampled more finely. The line under the chart includes the height where you stand. Turn and look and that color stays when you look away. A later finding, such as a new pit, updates that spot. Stand near another player and the ground you have both mapped passes across. A stranger receives a little of it. Staying close raises friendliness, and then more of the picture passes, including pits and named places, limited by mapping, prospect, building, and appraisal. Grass, rock, and the hill shape travel with that ground, tinted so you can tell it was told. The line says the tier and who you are near, then <code>heard</code> when something new arrives. The arrow is you. The line under the chart is your world position and heading, with 000 due north. Click the picture to look. A click while looking fires. Esc gives the cursor back. With the cursor over the map, the wheel zooms the chart and holding the left button drags it. A plain click does not move it. A pan and zoom stay put while you walk; the crosshair button in the corner of the map, or a double-click, snaps it back to following you. A green ring is the current target. Esc hides the map.</p>
       <p>Walking leaves a pair of footprints on the ground. Every client draws them, whether or not they have the skill. Tracking only changes your own map. It rises slowly from those steps. At first the map shows only the last few steps. As tracking rises, the line grows longer. From tracking 8 the steps also stay on the chart picture. Trailing, under tracking, is what draws the other bodies on your map.</p>
       <p>Subskills sit under their parent in the skill list. Each one rises only from that practice, and none of them can pass the parent. Topography refines the contours. Prospect is what lets a pit be recorded. Bracing adds to a new wall. Focus extends the zoom. Measure makes the range finer. Trailing draws other bodies on your map. Landing softens a hard fall. Wind slows how fast a sprint spends stamina.</p>
-      <p>Hills rise to about three bodies, 5.4 m. The lows stay sand. Grass covers the middle of a slope, and rock covers the steep crests. A light haze sits in the hollows and thickens with distance. Clouds drift overhead. The old sand grid was the grain tile repeating every few meters; the grain now meets at its edges, and the broad color does not follow that tile. Scrub and one small tree sit on the ground. A crab and a skink wander and move away if you come close. A gull circles overhead. None of them are targets.</p>
+      <p>Hills rise to about three bodies, 5.4 m. The lows stay sand. Grass covers the middle of a slope, and rock covers the steep crests. A marsh sits inland, a grove holds the trees, and a ridge runs across the roll. Plants grow from seed and drop the next one. The day has a dawn, a noon, a dusk, and a night with a moon. <code>?clock=60</code> runs that day faster and leaves walking alone. A light haze sits in the hollows and thickens with distance. Clouds drift overhead. The old sand grid was the grain tile repeating every few meters; the grain now meets at its edges, and the broad color does not follow that tile. Scrub and one small tree sit on the ground, and their seeds take root nearby. A crab and a skink wander and move away if you come close. A gull circles overhead. None of them are targets.</p>
       <p>Click the picture to look. W and S walk. A turns left and D turns right. Z strafes left and C strafes right. Shift sprints. Tap Space for a short hop. Hold Space to rise higher, up to the jump skill. [ on the bit switches between dig and fill.</p>
       <p>The world is traced into offscreen buffers, then copied to the canvas every refresh. What is near is one ray per pixel of that picture, so bodies and the ground by your feet stay sharp at the frame rate the picture can hold. Farther than 18 m is one ray for every four pixels across and down, scaled up behind the sharp layer. The sharp rays also gather on where you are looking, rather than the middle of the camera. Eyesight carries that patch farther and wider. Focus packs more of them onto the spot. Looking raises eyesight. A target, the eyes held still, or a zoom raises focus, and focus cannot pass eyesight. The line under the picture says how far that patch stays sharp. <code>info</code> is pixels times the frame rate you can see times speed squared times acceleration squared. The frame target follows an inverse-square of acceleration, so it leaves 12 fps gently and only nears the display refresh under a hard acceleration. A jump is vertical speed. While the camera was still, that acceleration cuts the picture to the display refresh on the same frame instead of waiting for the next slow trace. A squared or cubed step was jumpier, and folding velocity into that curve either missed the refresh at the start of a flick or blew up at rest. With no acceleration the spare time down to 12 fps raises the resolution. The frame rate does not go below 12 while the camera is moving, including up, or while something in view is moving: a person, an animal, a shot, smoke, or a pool. Only a still camera on a still scene may go slower, and that is when the picture climbs to the native size. If a moving scene cannot hold 12 fps, the picture shrinks until the next trace can. Picture size eases toward the new target, except for that acceleration cut. The other frames stay near one picture a second until this view is cheap.</p>
       <p>Press 3 until the line says <code>hammer</code>. The amber square is the hammer sight. Press 3 again for the bit. The cyan cross is the bit sight. A bright sight means the target is in reach and it lights up. A dim sight means it is too far, and nothing lights.</p>
@@ -266,7 +281,7 @@
       <ul id="pilot-goals"></ul>
     </section>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=178"></script>
+    <script type="module" src="../../src/app/main.js?v=179"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {

@@ -10,7 +10,7 @@ The animals use the wall clock, so a slow extra view does not make them crawl. C
 
 ## This pass
 
-The herd walks. The prints are on the sand, not only a mark on the chart.
+The island has a beach, scrub, a meadow, a marsh, a grove, and a ridge. The chart still says sand, grass, or rock. The established plants stay. Each one that is not the dry tuft drops a seed on living ground. A seed sprouts, grows, and then lets the next seed go. Only the latest two of those are drawn.
 
 ## Proves
 

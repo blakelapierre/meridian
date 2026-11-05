@@ -8,6 +8,8 @@ import {
   acceptSheet,
   applyCharacter,
   characterBody,
+  characterLine,
+  dropCharacter,
   encodeSheet,
   keepSheet,
   loadIdentity,
@@ -57,6 +59,11 @@ test("a character and their key come back from the store", () => {
   assert.equal(yard.metal, 9);
   assert.equal(notes[0].line, "The sand took a hole.");
   assert.equal(survey.ground.size, 1);
+  assert.match(characterLine(sheet), /metal 9/);
+  saveIdentity(store, identity, "self");
+  assert.equal(dropCharacter(store, "self") >= 2, true);
+  assert.equal(loadIdentity(store, "self"), null);
+  assert.equal(loadSheet(store, "self"), null);
   const frame = encodeSheet(identity, body);
   const accepted = acceptSheet(frame);
   assert.equal(accepted.ok, true);

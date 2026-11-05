@@ -1,4 +1,4 @@
-import { createGpuPainter } from "../render/gpu.js?v=96";
+import { createGpuPainter } from "../render/gpu.js?v=97";
 
 let painter = null;
 let canvas = null;

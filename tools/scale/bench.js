@@ -43,7 +43,7 @@ const probe = (client) => {
 };
 
 function clientUrl(i) {
-  const q = new URLSearchParams({ ns: `scale${i}`, bot: String(1000 + i * 7919), paintfps: i === primary ? "0" : "1", touch: "0" });
+  const q = new URLSearchParams({ ns: `scale${i}`, bot: String(1000 + i * 7919), paintfps: i === primary ? "0" : "1", touch: "0", fresh: "1" });
   if (lighthouse) q.set("lighthouse", lighthouse);
   else q.set("lighthouse", "off");
   return `../view/index.html?${q}`;

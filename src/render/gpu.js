@@ -323,7 +323,12 @@ float duneHeight(vec2 p) {
   float roll = 0.5 * sin(p.x * 0.15) + 0.5 * cos(p.y * 0.13);
   float wash = 0.5 * sin((p.x + p.y) * 0.17 + 1.3) + 0.5;
   float n = clamp(0.55 * roll + 0.45 * wash, 0.0, 1.0);
-  return n * n * 5.4;
+  float broad = 0.5 + 0.5 * sin(p.x * 0.021 + 0.6) * cos(p.y * 0.018);
+  float h = n * n * 5.4 * (0.78 + 0.22 * broad);
+  float marsh = exp(-((p.x - 36.0) * (p.x - 36.0) + (p.y + 96.0) * (p.y + 96.0)) / 2200.0);
+  h *= 1.0 - marsh * 0.55;
+  float ridge = exp(-((p.x + 24.0) * (p.x + 24.0)) / 520.0) * max(cos(p.y * 0.02), 0.0);
+  return clamp(h + ridge * 1.6, 0.0, 5.4);
 }
 
 vec3 duneNormal(vec2 p) {
@@ -357,6 +362,11 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
   vec3 sandC = tiled(${SAND_TILE}, p * 0.16, 0.16, vec3(0.55, 0.48, 0.32));
   vec3 grassC = tiled(${GRASS_TILE}, p * 0.14, 0.14, vec3(0.22, 0.4, 0.16));
   vec3 rockC = tiled(${ROCK_TILE}, p * 0.12, 0.12, vec3(0.4, 0.38, 0.34));
+  float marsh = exp(-((p.x - 36.0) * (p.x - 36.0) + (p.y + 96.0) * (p.y + 96.0)) / 2200.0);
+  float grove = exp(-((p.x + 16.0) * (p.x + 16.0) + (p.y + 128.0) * (p.y + 128.0)) / 2600.0);
+  grassC = mix(grassC, vec3(0.16, 0.32, 0.14), smoothstep(0.35, 0.7, grove));
+  sandC = mix(sandC, vec3(0.32, 0.34, 0.22), smoothstep(0.4, 0.75, marsh));
+  grassC = mix(grassC, vec3(0.18, 0.3, 0.16), smoothstep(0.4, 0.75, marsh));
   sandC *= 0.88 + valueNoise(p * 0.23) * 0.22;
   grassC *= 0.86 + valueNoise(p * 0.31 + 4.0) * 0.26;
   rockC *= 0.84 + valueNoise(p * 0.19 + 9.0) * 0.28;
@@ -936,16 +946,27 @@ bool blocked(vec3 from, vec3 rd) {
 
 vec3 skyColor(vec3 rd) {
   vec3 sun = normalize(uSun);
-  float day = smoothstep(-0.02, 0.25, sun.z);
+  float elev = sun.z;
+  float day = smoothstep(-0.02, 0.28, elev);
+  float night = 1.0 - smoothstep(-0.2, 0.05, elev);
+  float low = smoothstep(-0.08, 0.0, elev) * (1.0 - smoothstep(0.12, 0.42, elev));
   float up = clamp(rd.z * 0.85 + 0.2, 0.0, 1.0);
-  vec3 sky = mix(vec3(0.62, 0.68, 0.74), vec3(0.30, 0.50, 0.84), up);
-  sky = mix(sky * 0.12, sky, day);
+  vec3 noon = mix(vec3(0.62, 0.68, 0.74), vec3(0.30, 0.50, 0.84), up);
+  vec3 warm = mix(vec3(0.92, 0.46, 0.22), vec3(0.42, 0.28, 0.48), up);
+  vec3 dark = mix(vec3(0.03, 0.035, 0.07), vec3(0.008, 0.012, 0.03), up);
+  vec3 sky = mix(mix(noon, warm, low), dark, night);
+  vec3 cell = floor(rd * 48.0);
+  float star = step(0.92, fract(sin(dot(cell, vec3(127.1, 311.7, 74.7))) * 43758.5453));
+  sky += vec3(0.85, 0.9, 1.0) * star * night * step(0.15, rd.z);
+  vec3 moon = normalize(vec3(-sun.xy, max(0.2, -elev)));
+  float moonDisc = smoothstep(0.9992, 0.99955, dot(rd, moon)) * night;
+  sky += vec3(0.86, 0.88, 0.95) * moonDisc * 2.2;
   float d = dot(rd, sun);
   float disc = smoothstep(0.99915, 0.99955, d);
   float glow = pow(max(d, 0.0), 220.0);
   vec3 color = sky + vec3(1.0, 0.94, 0.72) * (disc * 3.0 + glow * 0.7) * day;
   float puff = cloudShade(rd);
-  vec3 cloud = mix(vec3(0.45, 0.48, 0.52), vec3(0.96, 0.97, 0.95), day);
+  vec3 cloud = mix(vec3(0.16, 0.18, 0.24), vec3(0.96, 0.97, 0.95), day);
   return mix(color, cloud, puff);
 }
 

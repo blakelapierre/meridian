@@ -2,9 +2,9 @@ import { Crust } from "../sim/crust.js";
 import { pieceBoxes } from "../sim/build.js";
 import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=57";
 import { lookDirection } from "../sim/hands.js";
-import { sunDirection } from "../sim/sun.js";
+import { sunDirection } from "../sim/sun.js?v=2";
 import { dummyTexture } from "./texture.js";
-import { duneHeight, fauna, floraParts } from "../sim/life.js?v=79";
+import { duneHeight, fauna, floraParts } from "../sim/life.js?v=80";
 import { PEOPLE } from "../sim/people.js?v=2";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
@@ -77,9 +77,9 @@ function drawnPart(part, body, id = "") {
   };
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null, down = [] }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick = null, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null, down = [] }) {
   const eye = eyeHeight(crouch);
-  const sun = sunDirection(tick);
+  const sun = sunDirection(sunTick == null ? tick : sunTick);
   const objects = [];
   if (crust !== false) {
     objects.push({ type: "crust", field: crust || new Crust(atoll.worldSeed, atoll.cellId) });
@@ -125,7 +125,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     });
   }
   if (!sparse) {
-    for (const part of floraParts(tick * 1000 / 30)) objects.push(drawnPart(part, "flora"));
+    for (const part of floraParts(tick * 1000 / 30, sunTick == null ? tick : sunTick)) objects.push(drawnPart(part, "flora"));
   }
   for (const animal of fauna(Date.now(), feet, { parts: !sparse })) {
     if (animal.id && down.includes(animal.id)) continue;
