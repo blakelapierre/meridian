@@ -117,7 +117,6 @@ import {
   browserStore,
   bytesHex,
   characterBody,
-  characterLine,
   dropCharacter,
   encodeSheet,
   forgetKept,
@@ -166,6 +165,63 @@ import { createCores } from "./cores.js";
 import { openPicture } from "./picture.js";
 
 const canvas = document.querySelector("canvas");
+const params = new URLSearchParams(location.search);
+const digDemo = params.get("dig") === "1";
+const followId = params.get("follow");
+const agendaName = params.get("ai");
+const peer = Boolean(params.get("id"));
+let holdKeep = false;
+const freshBoot = params.get("fresh") === "1";
+const bootBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-boot");
+if (bootBus) {
+  bootBus.onmessage = (event) => {
+    if (event.data?.role !== "fresh" || freshBoot) return;
+    holdKeep = true;
+    location.reload();
+  };
+}
+const keepSlot = followId || params.get("look") || params.get("gate") || digDemo || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
+const keptStore = browserStore();
+if (freshBoot) {
+  forgetKept(keptStore);
+  if (bootBus) bootBus.postMessage({ role: "fresh" });
+  const clean = new URL(location.href);
+  clean.searchParams.delete("fresh");
+  history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
+}
+function askWho(line) {
+  const root = document.querySelector("#who");
+  if (!root) return Promise.resolve("keep");
+  const note = root.querySelector("[data-who-line]");
+  if (note) note.textContent = line || "";
+  root.hidden = false;
+  const boot = document.querySelector("#boot");
+  if (boot) boot.hidden = true;
+  root.querySelector("#who-keep")?.focus();
+  return new Promise((resolve) => {
+    const done = (who) => {
+      root.hidden = true;
+      if (boot) boot.hidden = false;
+      resolve(who);
+    };
+    root.querySelector("#who-keep")?.addEventListener("click", () => done("keep"), { once: true });
+    root.querySelector("#who-new")?.addEventListener("click", () => done("new"), { once: true });
+  });
+}
+// Picture, save, and the lighthouse stay stopped until this returns. Only Continue reads the old character.
+let resumeCharacter = false;
+if (keepSlot) {
+  const names = keptStore.keys?.() || [];
+  const saved = names.includes(`meridian-id-${keepSlot}`) || names.includes(`meridian-sheet-${keepSlot}`);
+  const choice = characterChoice(params, { saved });
+  if (choice === "ask") {
+    bootNote("Who is walking", 0.55);
+    const who = await askWho("A character is saved on this device.");
+    resumeCharacter = who === "keep";
+    if (!resumeCharacter) dropCharacter(keptStore, keepSlot);
+  } else if (choice === "keep") resumeCharacter = true;
+  else if (params.get("who") === "new") dropCharacter(keptStore, keepSlot);
+}
 bootNote("Loading Meridian", 0.08);
 const opened = openPicture(canvas, { search: location.search });
 let painter = opened.painter || createGpuPainter(canvas);
@@ -223,7 +279,6 @@ canvas.addEventListener("webglcontextlost", (event) => {
 });
 const width = canvas.width;
 const height = canvas.height;
-const params = new URLSearchParams(location.search);
 const NOTIFY_ON = params.get("notify") !== "0";
 const playerState = createPlayerState();
 const peerStates = new Map();
@@ -235,24 +290,11 @@ const resCap = Math.max(0, Math.min(1, Number(params.get("res")) || 0));
 try { smoothUpscale = smoothingFrom(location.search, window.localStorage); } catch { smoothUpscale = smoothingFrom(location.search, null); }
 painter?.setSmoothing?.(smoothUpscale);
 canvas.dataset.aa = smoothUpscale ? "1" : "0";
-let holdKeep = false;
-const freshBoot = params.get("fresh") === "1";
-const bootBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-boot");
-if (bootBus) {
-  bootBus.onmessage = (event) => {
-    if (event.data?.role !== "fresh" || freshBoot) return;
-    holdKeep = true;
-    location.reload();
-  };
-}
 const quiet = params.get("quiet") === "1";
 if (params.get("debug") === "1") document.documentElement.classList.add("debug");
 const demo = demoMode(params, location.hostname);
 document.documentElement.classList.toggle("demo", demo);
 const touchy = wantsTouch(window);
-const digDemo = params.get("dig") === "1";
-const followId = params.get("follow");
-const agendaName = params.get("ai");
 const extra = quiet || Boolean(followId) || Boolean(agendaName);
 const paceBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-pace");
 let primaryHolding = false;
@@ -263,7 +305,6 @@ if (extra && paceBus) {
 }
 const agent = agendaName && AGENDAS[agendaName] ? createAgent(agendaName) : null;
 const keys = new Set();
-const peer = Boolean(params.get("id"));
 
 // Content fetches retry: several same-origin frames booting at once (the scale bench) can
 // see a transient "Failed to fetch" in headless Chrome, which used to kill the whole page.
@@ -323,51 +364,14 @@ const world = createPlayerWorld(player);
 attachPlanet(world);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
-const keepSlot = followId || params.get("look") || params.get("gate") || digDemo || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
-const keptStore = browserStore();
-if (freshBoot) {
-  forgetKept(keptStore);
-  if (bootBus) bootBus.postMessage({ role: "fresh" });
-  const clean = new URL(location.href);
-  clean.searchParams.delete("fresh");
-  history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
-}
-function askWho(line) {
-  const root = document.querySelector("#who");
-  if (!root) return Promise.resolve("keep");
-  const note = root.querySelector("[data-who-line]");
-  if (note) note.textContent = line || "";
-  root.hidden = false;
-  const boot = document.querySelector("#boot");
-  if (boot) boot.hidden = true;
-  root.querySelector("#who-keep")?.focus();
-  return new Promise((resolve) => {
-    const done = (who) => {
-      root.hidden = true;
-      if (boot) boot.hidden = false;
-      resolve(who);
-    };
-    root.querySelector("#who-keep")?.addEventListener("click", () => done("keep"), { once: true });
-    root.querySelector("#who-new")?.addEventListener("click", () => done("new"), { once: true });
-  });
-}
-if (keepSlot) {
-  const savedSheet = loadSheet(keptStore, keepSlot);
-  const saved = Boolean(loadIdentity(keptStore, keepSlot) || savedSheet);
-  const choice = characterChoice(params, { saved });
-  if (choice === "ask") {
-    bootNote("Who is walking", 0.55);
-    if ((await askWho(characterLine(savedSheet))) === "new") dropCharacter(keptStore, keepSlot);
-  } else if (choice === "new" && params.get("who") === "new") dropCharacter(keptStore, keepSlot);
-}
-let identity = importKey(params.get("key") || "") || (keepSlot && loadIdentity(keptStore, keepSlot)) || createIdentity();
+let identity = importKey(params.get("key") || "") || (resumeCharacter && loadIdentity(keptStore, keepSlot)) || createIdentity();
 const bootPhrase = params.get("phrase") || "";
 if (bootPhrase && !params.get("key")) {
   const restored = restoreKey(unpackBook(keptStore.get("meridian-book")), bootPhrase) || importPhrase(bootPhrase);
   if (restored) identity = { secret: restored.secret, pubkey: restored.pubkey };
 }
 if (keepSlot && !params.get("key")) saveIdentity(keptStore, identity, keepSlot);
-identity.book = unpackBook(keptStore.get("meridian-book"));
+identity.book = resumeCharacter ? unpackBook(keptStore.get("meridian-book")) : null;
 const culture = firstCrate(params.get("culture") || "holds");
 const pools = createPools();
 const bonds = new Map();
@@ -787,7 +791,7 @@ const skills = createSkills();
 wireAbilityUi();
 // ?debug=1 exposes a small handle for headless playtests (skills and the ability UI only).
 if (params.get("debug") === "1") globalThis.meridianDebug = { skills, toggleLog, setCues, paintSkills: () => paintSkills(), checkAbilities, marks: () => tierMarks, wear: () => wear, player: () => [...player.position], yaw: () => yaw };
-const kept = keepSlot ? loadSheet(keptStore, keepSlot) : null;
+const kept = resumeCharacter ? loadSheet(keptStore, keepSlot) : null;
 let sheetSeq = kept?.seq || 0;
 if (kept && keepSlot) {
   const pose = applyCharacter(kept, { player, skills, yard, survey, notes });
@@ -797,14 +801,14 @@ if (kept && keepSlot) {
     stamp(plate, cell.point[0], cell.point[1], GEO_COLOR[cell.kind] || GEO_COLOR.sand, 1.6);
   }
 }
-if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
+if (resumeCharacter) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 let linkNote = "";
 const askedSolo = ["off", "none"].includes(params.get("lighthouse") || params.get("signal") || "");
 // No lighthouse configured (and solo not asked for): say the multiplayer server is offline.
 let lighthouseState = signalOn || askedSolo ? "off" : "offline";
 let torrentRoom = null;
 const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0, motionIn: 0 };
-const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
+const keptWorld = resumeCharacter ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const wear = keptWorld?.wear ? unpackWear(keptWorld.wear) : createWear();
 const wearFeet = new Map();
 let wearView = null;
@@ -1099,7 +1103,7 @@ addEventListener("keydown", (event) => {
       report = carryPhrase(identity);
     } else {
       if (event.shiftKey) {
-        if (!identity.book) identity.book = {};
+        if (!identity.book) identity.book = unpackBook(keptStore.get("meridian-book")) || {};
         rememberKey(identity.book, identity);
         keptStore.set("meridian-book", packBook(identity.book));
       }
