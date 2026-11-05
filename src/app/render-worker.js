@@ -1,4 +1,4 @@
-import { createGpuPainter } from "../render/gpu.js?v=97";
+import { createGpuPainter } from "../render/gpu.js?v=98";
 
 let painter = null;
 let canvas = null;
@@ -40,8 +40,14 @@ self.onmessage = (event) => {
     if (canvas.width !== msg.width) canvas.width = msg.width;
     if (canvas.height !== msg.height) canvas.height = msg.height;
   } else if (msg.type === "paint") {
-    const ok = painter.paint(msg.scene, msg.width, msg.height);
-    if (!ok) self.postMessage({ type: "error", reason: "draw" });
+    const started = performance.now();
+    try {
+      const ok = painter.paint(msg.scene, msg.width, msg.height);
+      if (!ok) self.postMessage({ type: "error", reason: "draw" });
+      else self.postMessage({ type: "drew", ms: performance.now() - started });
+    } catch (error) {
+      self.postMessage({ type: "error", reason: String(error && error.message || error) });
+    }
   } else if (msg.type === "present") {
     painter.present?.(msg.blend);
   } else if (msg.type === "smooth") {

@@ -16,11 +16,11 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene } from "../render/scene.js?v=74";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=97";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=98";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createMotionGovernor, createPicturePace, minFpsFrom, MINFPS_KEY, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=90";
+import { cameraAccel, cameraSpeed, createPacer, createMotionGovernor, createPicturePace, minFpsFrom, MINFPS_KEY, createTraceBudget, STILL_FRAME_MS, guardTrace, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=91";
 import {
   authority,
   bandage,
@@ -248,6 +248,12 @@ let paintStill = false;
 const traceBudget = createTraceBudget();
 let pendingTrace = null;
 let idleGap = 0;
+// The picture thread draws off the main thread. One trace at a time, and the next
+// one stays near the size whose cost we have actually measured.
+let pictureBusy = false;
+let gpuDrawMs = 0;
+let shownTraceW = 0;
+let shownTraceH = 0;
 const poseSeenAt = new Map();
 if (painter && !painter.remote) {
   fitCanvas(canvas, viewScale);
@@ -2564,6 +2570,11 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
   if (painter) {
     const drew = painter.paint(scene, width, height);
+    if (painter.remote && drew) {
+      pictureBusy = true;
+      shownTraceW = width;
+      shownTraceH = height;
+    }
     if (!drew) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
     lastScene = scene;
     return scene;
@@ -3215,7 +3226,20 @@ async function seekOnce() {
 const first = input();
 let pictureUp = true;
 if (painter?.remote) {
-  painter.onProblem = (reason) => showGlError(reason);
+  painter.onProblem = (reason) => {
+    pictureBusy = false;
+    showGlError(reason);
+  };
+  painter.onDrew = (ms) => {
+    pictureBusy = false;
+    if (!(ms > 0)) return;
+    gpuDrawMs = ms;
+    lastPaintMs = ms;
+    if (pendingTrace?.wait) {
+      pendingTrace.paintMs = ms;
+      pendingTrace.wait = false;
+    }
+  };
   bootNote("Waking the picture", 0.66);
   pictureUp = await painter.ready;
   if (!pictureUp) {
@@ -3226,7 +3250,7 @@ if (painter?.remote) {
 if (pictureUp) {
   bootNote("Drawing the beach", 0.9);
   await yieldToUi();
-  paint(first);
+  paint(first, painter?.remote ? 160 : canvas.width, painter?.remote ? 90 : canvas.height);
   publish();
   canvas.dataset.ready = "1";
   bootDone();
@@ -4380,15 +4404,24 @@ if (params.get("still") !== "1") {
     const finalScale = resCap > 0 ? Math.min(pacedScale, resCap) : pacedScale;
     if (!extra) lastShownScale = finalScale;
     if (!extra && settled) stillShownScale = Math.max(finalScale, 0.15);
-    const trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
+    let trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
+    if (painter?.remote) {
+      trace = guardTrace(trace.width, trace.height, {
+        measured: gpuDrawMs > 0,
+        drawMs: gpuDrawMs,
+        budgetMs: frameBudget,
+        prevW: shownTraceW,
+        prevH: shownTraceH,
+      });
+    }
     // Trace cost is the extra frame time a trace adds over a present-only frame; it lands in the next gap.
     if (!extra && decision.gap > 0) {
-      if (pendingTrace) {
+      if (pendingTrace && !pendingTrace.wait) {
         const traceCost = Math.max(pendingTrace.paintMs, decision.gap - idleGap, 1);
         canvas.dataset.traceCost = String(Math.round(traceCost));
         traceBudget.note(pendingTrace.pixels, traceCost, pendingTrace.budget);
         pendingTrace = null;
-      } else if (decision.gap < 1000) {
+      } else if (!pendingTrace && decision.gap < 1000) {
         idleGap = idleGap ? idleGap * 0.9 + decision.gap * 0.1 : decision.gap;
       }
     }
@@ -4424,14 +4457,17 @@ if (params.get("still") !== "1") {
     const capped = paintCap > 0 && now - lastCapped < 1000 / paintCap - 2;
     const roomy = shouldPaint(simSteps, performance.now() - frameStart);
     if (params.get("nopaint") !== "1" && due && !capped && !fromTimer) {
-      if (roomy) {
+      if (roomy && !pictureBusy) {
       lastCapped = now;
       const started = performance.now();
       paint(sample, trace.width, trace.height);
       const paintMs = performance.now() - started;
       if (!extra) {
-        lastPaintMs = paintMs;
-        pendingTrace = { pixels: trace.width * trace.height * fraction, paintMs, budget: frameBudget };
+        if (painter?.remote) pendingTrace = { pixels: trace.width * trace.height * fraction, paintMs: 0, budget: frameBudget, wait: true };
+        else {
+          lastPaintMs = paintMs;
+          pendingTrace = { pixels: trace.width * trace.height * fraction, paintMs, budget: frameBudget };
+        }
       }
       pacer.note(paintMs, active, still);
       lastTrace = now;

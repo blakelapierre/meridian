@@ -31,9 +31,12 @@ test("a saved walk asks, a scripted frame does not, and a new start is explicit"
   assert.match(main, /resumeCharacter \? loadWorld/);
   assert.match(main, /if \(resumeCharacter\) unpackPlate/);
   assert.match(main, /dropCharacter\(keptStore, keepSlot\)/);
+  assert.match(main, /guardTrace\(/);
+  assert.match(main, /painter\.onDrew/);
+  assert.match(main, /!pictureBusy/);
   const gate = main.indexOf("await askWho(");
   const picture = main.indexOf("openPicture(");
-  const paint = main.indexOf("paint(first)");
+  const paint = main.indexOf("paint(first,");
   const room = main.indexOf("seekArchives();");
   const ident = main.indexOf("loadIdentity(");
   assert.ok(gate > 0 && picture > gate && paint > gate && room > gate && ident > gate, "the picture, the save, and the lighthouse wait for the choice");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { STILL_BUDGET_MS, stillScale, cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, inFront, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, traceInterval, tuneRays, viewStill, visualThroughput, watchScene } from "../src/render/pace.js";
+import { STILL_BUDGET_MS, stillScale, cameraAccel, cameraSpeed, coverLevel, createPacer, createPicturePace, easePixels, fitPixels, guardTrace, inFront, motionLimit, nativePixels, nextScale, noteRayRate, paceWord, pictureSize, playPixels, shouldPaint, sizeAt, stepOctave, traceInterval, tuneRays, viewStill, visualThroughput, watchScene } from "../src/render/pace.js";
 
 test("an inactive window paints once a second and the focused one paints every frame", () => {
   assert.equal(shouldPaint(true, 0), true);
@@ -246,4 +246,19 @@ test("exposure is 1 at noon and rises toward night", async () => {
   assert.ok(exposureFor([1, 0, 0.05]) > 1);
   assert.ok(Math.abs(exposureFor([0, 0, -1]) - 2.4) < 1e-9);
   assert.ok(exposureFor([0, 0, -1]) > exposureFor([1, 0, 0.1]));
+});
+
+test("a remote trace starts small and cannot jump to the whole window", () => {
+  const boot = guardTrace(1920, 1080, { measured: false });
+  assert.ok(Math.max(boot.width, boot.height) <= 480);
+  assert.ok(boot.width * boot.height < 1920 * 1080 / 4);
+  const grew = guardTrace(1920, 1080, { measured: true, drawMs: 20, budgetMs: 83, prevW: 160, prevH: 90 });
+  assert.ok(grew.width <= 160 * 1.35 + 1);
+  assert.ok(grew.height <= 90 * 1.35 + 1);
+  const shrunk = guardTrace(1920, 1080, { measured: true, drawMs: 400, budgetMs: 80, prevW: 480, prevH: 270 });
+  assert.ok(shrunk.width < 480);
+  assert.ok(shrunk.height < 270);
+  const held = guardTrace(200, 100, { measured: true, drawMs: 10, budgetMs: 83, prevW: 480, prevH: 270 });
+  assert.equal(held.width, 200);
+  assert.equal(held.height, 100);
 });

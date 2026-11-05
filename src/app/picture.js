@@ -8,7 +8,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   }
   let thread;
   try {
-    thread = new WorkerImpl(new URL("./render-worker.js?v=1", import.meta.url), { type: "module" });
+    thread = new WorkerImpl(new URL("./render-worker.js?v=2", import.meta.url), { type: "module" });
   } catch {
     return { painter: null, remote: false };
   }
@@ -26,6 +26,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
     remote: true,
     ready,
     onProblem: null,
+    onDrew: null,
     failReason: () => reason,
     resize(width, height) { thread.postMessage({ type: "size", width, height }); },
     paint(scene, width, height) {
@@ -49,6 +50,8 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
       reason = msg.reason || "picture";
       painter.onProblem?.(reason);
       if (!settled) { settled = true; clearTimeout(timer); finish(false); }
+    } else if (msg.type === "drew") {
+      painter.onDrew?.(msg.ms);
     }
   };
   thread.onerror = () => {

@@ -111,3 +111,20 @@ test("forgetting the keep wipes every meridian save and leaves the rest", () => 
   assert.equal(store.get("meridian-world-self"), null);
   assert.equal(store.get("other"), "stay");
 });
+
+test("dropping a character does not read the saved payloads", () => {
+  const data = {
+    "meridian-id-self": "k",
+    "meridian-sheet-self": "{}",
+    "meridian-plate-self": "p",
+    "meridian-world-self": "world-payload",
+  };
+  const store = {
+    keys: () => Object.keys(data),
+    get() { throw new Error("read"); },
+    drop(key) { delete data[key]; },
+  };
+  assert.equal(dropCharacter(store, "self"), 4);
+  assert.equal(data["meridian-world-self"], undefined);
+  assert.equal(data["meridian-id-self"], undefined);
+});

@@ -161,9 +161,13 @@ export function loadSheet(store, slot = "self") {
 export function dropCharacter(store, slot = "self") {
   if (!store?.drop) return 0;
   const keys = [`meridian-id-${slot}`, `meridian-sheet-${slot}`, `meridian-plate-${slot}`, `meridian-world-${slot}`];
+  // Count from the key list. Reading a world save here pulls the whole payload into
+  // memory on the same turn the picture starts, which is enough to kill the tab.
+  const known = typeof store.keys === "function" ? new Set(store.keys()) : null;
   let dropped = 0;
   for (const key of keys) {
-    if (store.get?.(key) != null) dropped += 1;
+    const present = known ? known.has(key) : store.get?.(key) != null;
+    if (present) dropped += 1;
     store.drop(key);
   }
   return dropped;

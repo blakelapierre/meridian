@@ -1805,8 +1805,12 @@ void main() {
   };
   return {
     paint(scene, width, height) {
-      const tw = Math.max(2, width | 0 || canvas.width);
-      const th = Math.max(2, height | 0 || canvas.height);
+      const askedW = width | 0;
+      const askedH = height | 0;
+      // A missing size used to fall through to the window-sized canvas. Tracing that
+      // whole window on the first frame stalls the GPU and the tab dies.
+      const tw = Math.max(2, askedW > 0 ? askedW : Math.min(canvas.width || 160, 480));
+      const th = Math.max(2, askedH > 0 ? askedH : Math.min(canvas.height || 90, 270));
       const single = () => {
         viewSize = null;
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
