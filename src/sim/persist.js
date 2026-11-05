@@ -105,13 +105,14 @@ export function characterBody({
   notes = [],
   ground = [],
   seq = 1,
+  helpers = null,
 } = {}) {
   const trained = {};
   for (const [name, skill] of Object.entries(skills)) {
     const value = typeof skill === "number" ? skill : skill?.value || 0;
     trained[name] = round(value, 10);
   }
-  return {
+  const body = {
     seq: Math.max(1, Math.floor(seq)),
     at: [round(at?.[0], 100), round(at?.[1], 100), round(at?.[2], 100)],
     yaw: round(yaw, 1000),
@@ -129,6 +130,8 @@ export function characterBody({
       String(cell.kind || "sand"),
     ]),
   };
+  if (Array.isArray(helpers) && helpers.length) body.helpers = helpers;
+  return body;
 }
 
 export function encodeSheet(identity, body) {

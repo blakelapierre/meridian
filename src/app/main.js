@@ -4,7 +4,7 @@ import { BOT_KEYS, createWander, stepWander } from "./bot.js?v=1";
 import { chatMessage, createChatLog, noteChat, readChat } from "../net/chat.js?v=1";
 import { FRAME_MAX_DT, STALL_MAX_DT, STALL_POLL_MS, stalledFor } from "./stall.js?v=1";
 import { resetEverything } from "./reset.js?v=1";
-import { mountOnboard } from "./onboard.js?v=2";
+import { mountOnboard } from "./onboard.js?v=3";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
 import { createTour, characterChoice, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, signalMode, torrentLine, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=7";
 import { hearStep, seaGain } from "../audio/cues.js";
@@ -15,7 +15,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene, pictureCamera } from "../render/scene.js?v=75";
+import { buildScene, pictureCamera } from "../render/scene.js?v=76";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=98";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
@@ -140,6 +140,7 @@ import { afterShot, boltHit, boltInSmoke, firePull, meleeHit, missDir, penFactor
 import { harmMessage, blowMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
 import { applyBlow, beastBite, classifyStrike, lineBlow, riseQuarry, strikeQuarry } from "../sim/fight.js?v=1";
 import { createPilot, PILOT_GOALS, stepPilot, togglePilotGoal } from "../sim/pilot.js?v=1";
+import { craftHelper, cycleHelperTask, dismissHelper, helperLine, nearestHelper, packHelpers, stepHelper, unpackHelpers } from "../sim/helper.js?v=1";
 import { stepBows } from "../sim/bow.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
@@ -399,6 +400,7 @@ const pilot = createPilot((() => {
   try { return JSON.parse(localStorage.getItem("meridian-pilot") || "null"); } catch { return null; }
 })());
 const yard = createYard(atoll.placements.footing);
+let crew = [];
 yard.metal = culture.metal;
 yard.stone = culture.stone;
 yard.fiber = 2;
@@ -807,6 +809,7 @@ if (kept && keepSlot) {
   for (const cell of survey.ground.values()) {
     stamp(plate, cell.point[0], cell.point[1], GEO_COLOR[cell.kind] || GEO_COLOR.sand, 1.6);
   }
+  if (kept.helpers) crew = unpackHelpers(kept.helpers);
 }
 if (resumeCharacter) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 let linkNote = "";
@@ -1006,6 +1009,7 @@ function pushSheet() {
     notes,
     ground: [...survey.ground.values()],
     seq: sheetSeq,
+    helpers: packHelpers(crew),
   });
   saveSheet(keptStore, body, keepSlot);
   savePlate(keptStore, plate, keepSlot);
@@ -1249,6 +1253,28 @@ addEventListener("keydown", (event) => {
     report = "key";
   }
   if (event.code === "KeyK" && !event.repeat) listener.toggle();
+  if (event.code === "Comma" && !event.repeat) {
+    if (event.shiftKey) {
+      const near = nearestHelper(crew, player.position[0], player.position[1]);
+      if (!near) report = "none";
+      else {
+        dismissHelper(yard, near);
+        crew = crew.filter((helper) => helper !== near);
+        report = "dismissed";
+      }
+    } else {
+      const made = craftHelper(yard, skills, {
+        x: player.position[0] + Math.cos(yaw) * 1.5,
+        y: player.position[1] - Math.sin(yaw) * 1.5,
+        tick,
+      }, crew);
+      report = made.ok ? "helper" : made.reason;
+    }
+  }
+  if (event.code === "Period" && !event.repeat) {
+    const near = nearestHelper(crew, player.position[0], player.position[1]);
+    report = near ? cycleHelperTask(near) : "none";
+  }
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
@@ -1707,6 +1733,7 @@ function sceneFor(sample, width, height) {
     gait: bodyGait,
     worn: wornFor(slot),
     down: fallenIds(),
+    helpers: crew,
   });
 }
 
@@ -1938,10 +1965,13 @@ function drawChart() {
       ...person,
       label: friends.has(person.id) ? `${person.id} ${friendTier(friends.get(person.id))}` : person.id,
     })),
-    movers: fauna(Date.now(), player.position, { parts: false }).map((animal, index) => ({
-      id: `${animal.kind}:${index}`,
-      at: animal.at,
-    })),
+    movers: [
+      ...fauna(Date.now(), player.position, { parts: false }).map((animal, index) => ({
+        id: `${animal.kind}:${index}`,
+        at: animal.at,
+      })),
+      ...crew.map((helper) => ({ id: helper.id, at: [helper.x, helper.y, 0] })),
+    ],
     sense: perception,
     ground: [...survey.ground.values()],
     places: [...survey.places.values()],
@@ -2021,6 +2051,11 @@ function identify(sample) {
 function actOn(sample) {
   if (!selection) {
     report = "no target";
+    return;
+  }
+  if (selection.kind === "helper" && selection.id) {
+    const helper = crew.find((one) => one.id === selection.id);
+    report = helper ? cycleHelperTask(helper) : "none";
     return;
   }
   if (selection.kind === "person") {
@@ -2479,7 +2514,9 @@ function publish() {
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
   const pilotNote = pilot.on && pilotGoal ? ` · pilot ${pilotGoal}` : "";
-  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote}${pilotNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${orderNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${finNote}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const nearHelper = crew.length ? nearestHelper(crew, player.position[0], player.position[1]) : null;
+  const helperNote = nearHelper ? ` · helper ${helperLine(nearHelper)}${crew.length > 1 ? ` · ${crew.length}` : ""}` : "";
+  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote}${pilotNote}${helperNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${orderNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${finNote}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   paintNet();
   paintHint();
   paintTarget();
@@ -2591,6 +2628,7 @@ function stageFor(sample, width, height, scene) {
     gaze: scene.gaze,
     fovea: scene.fovea,
     inEyes: zoom.blend >= 1 || (view === "first" && zoom.blend === 0),
+    helpers: crew,
   };
 }
 
@@ -2906,6 +2944,7 @@ function onOps(bytes, from) {
     if (bytesHex(accepted.pubkey) !== bytesHex(identity.pubkey)) return;
     if ((accepted.seq || 0) <= sheetSeq) return;
     const pose = applyCharacter(accepted.body, { player, skills, yard, survey, notes });
+    if (accepted.body.helpers) crew = unpackHelpers(accepted.body.helpers);
     tierMarks = tierSnapshot(skills);
     yaw = pose.yaw;
     pitch = pose.pitch;
@@ -3011,6 +3050,7 @@ function onOps(bytes, from) {
     pieces: yard.pieces,
     width,
     height,
+    helpers: crew,
   });
   const accepted = acceptShot(bytes, scene.objects);
   if (!accepted.ok || accepted.hitbox === "miss" || seenShots.has(accepted.nonce)) {
@@ -3868,6 +3908,38 @@ if (params.get("still") !== "1") {
       simSteps += 1;
       try {
       stepDummy(dummy);
+      if (crew.length) {
+        const foot = yard.pieces.find((piece) => piece.id === "footing");
+        const home = foot ? [foot.at[0] * 0.5, foot.at[1] * 0.5] : [player.position[0], player.position[1]];
+        const loose = [];
+        if (crew.some((helper) => helper.task === "haul" && !(helper.carry > 0))) {
+          for (const body of looseBodies(world)) {
+            if (Math.hypot(body.velocity[0], body.velocity[1], body.velocity[2]) > 0.25) continue;
+            loose.push({
+              x: body.position[0],
+              y: body.position[1],
+              take() {
+                const index = world.universe.indexOf(body);
+                if (index < 0) return false;
+                world.universe.splice(index, 1);
+                return true;
+              },
+            });
+          }
+        }
+        for (const helper of crew) {
+          const done = stepHelper(helper, {
+            tick,
+            player: [player.position[0], player.position[1]],
+            home,
+            loose,
+          });
+          if (done.deposited) {
+            yard.stone = (yard.stone || 0) + done.deposited;
+            report = "hauled";
+          }
+        }
+      }
       riseQuarry(quarry, Date.now());
       if (vitals.down <= 0) {
         for (const animal of fauna(Date.now(), player.position, { parts: false })) {

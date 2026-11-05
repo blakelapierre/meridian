@@ -10,9 +10,13 @@ While you drag someone, they are drawn just ahead of you. Their client is sent o
 
 Friendliness is not only a number. Each person keeps a record of what passed between you: lore they told you, and drags they refused. A refused drag also costs 5, never below 0. The line reads `acquaintance 14 · told 2 · refused 1`.
 
+## This pass (helper)
+
+Comma builds a helper beside you once building is at least 4. It spends 8 metal, 4 stone, and 1 fiber, and the making raises building. A higher building skill seeds a less clumsy helper. Period cycles the nearest one through follow, dig, haul, survey, and hold. U does the same to the helper you have identified. Digging raises its mining and is faster as that rises, until it is holding three stone. Hauling carries that stone, or a settled loose stone, back to the footing and raises hauling. Surveying walks a square and raises mapping and a little building. Follow and hold do not train. Shift+Comma dismisses the nearest and returns half the metal and stone. Three is the cap. The picture thread draws them from the stage. The sheet brings them back.
+
 ## Proves
 
-`test/slice.test.js` covers the refusal. `test/batch12.test.js` covers the record. `test/pilot.test.js` covers the goals you leave on.
+`test/slice.test.js` covers the refusal. `test/batch12.test.js` covers the record. `test/pilot.test.js` covers the goals you leave on. `test/helper.test.js` covers the cost, the tasks, and the helper's own skills.
 
 ## This pass (record)
 

@@ -6,6 +6,7 @@ import { sunDirection } from "../sim/sun.js?v=2";
 import { dummyTexture } from "./texture.js";
 import { duneHeight, fauna, floraParts } from "../sim/life.js?v=80";
 import { PEOPLE } from "../sim/people.js?v=2";
+import { helperParts } from "../sim/helper.js?v=1";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const OTHER = [0.55, 0.42, 0.22, 1];
@@ -100,7 +101,7 @@ export function pictureCamera({ feet, yaw, pitch, crouch = false, tick = 0, sunT
   };
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick = null, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null, down = [] }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick = null, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null, down = [], helpers = [] }) {
   const objects = [];
   if (crust !== false) {
     objects.push({ type: "crust", field: crust || new Crust(atoll.worldSeed, atoll.cellId) });
@@ -225,6 +226,11 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick
       name: "Stone",
       tile: "rock",
     });
+  }
+  for (const helper of helpers) {
+    if (helper?.x == null || helper?.y == null) continue;
+    const z = duneHeight(helper.x, helper.y);
+    for (const part of helperParts(helper, z)) objects.push(part);
   }
   if (view === "third" && self) {
     const figure = playerParts(feet, yaw + (lean || 0), crouch, { self: true, gait, stride: crouch ? Math.min(stride, 0.2) : stride, worn });
