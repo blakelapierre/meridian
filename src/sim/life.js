@@ -25,20 +25,50 @@ export function grazeAnimal(patch, at = [12, -150, 0]) {
   };
 }
 
-// A herd is several of the same animal. They do not walk.
+// A herd is several of the same animal. A dead patch stays where it fell.
+// A living one walks a slow loop and leaves the prints behind it.
+export function herdFoot(index, nowMs, anchor = [12, -150]) {
+  const phase = nowMs / 1000 * 0.16 + index * ((Math.PI * 2) / 3);
+  const radiusX = 3.6 + index * 0.45;
+  const radiusY = 2.3 + index * 0.3;
+  const x = anchor[0] + Math.cos(phase) * radiusX;
+  const y = anchor[1] + Math.sin(phase) * radiusY;
+  return {
+    x,
+    y,
+    yaw: Math.atan2(-Math.sin(phase) * radiusX, Math.cos(phase) * radiusY),
+    gait: phase * 8,
+  };
+}
+
+export function herdPrints(nowMs, count = 3, anchor = [12, -150]) {
+  const out = [];
+  for (let i = 0; i < count; i += 1) {
+    for (let s = 1; s <= 8; s += 1) {
+      const step = herdFoot(i, nowMs - s * 700, anchor);
+      out.push({ x: step.x, y: step.y, yaw: step.yaw, scale: 0.45, who: `goat:${i}` });
+    }
+  }
+  return out;
+}
+
 export function herd(patch, at = [12, -150, 0], count = 3, parts = true, nowMs = 0) {
   const one = grazeAnimal(patch, at);
   if (!one) return [];
   const animals = [];
-  const ground = at[2] || 0;
+  const dead = Boolean(patch?.dead);
+  const anchor = [at[0], at[1]];
   for (let i = 0; i < count; i += 1) {
-    const foot = [one.at[0] + (i - (count - 1) / 2) * 1.05, one.at[1] + (i - 1) * 0.2, ground];
-    const yaw = 0.15 + i * 0.5;
+    const step = dead
+      ? { x: anchor[0] + (i - (count - 1) / 2) * 1.05, y: anchor[1] + (i - 1) * 0.2, yaw: 0.15 + i * 0.5, gait: 0 }
+      : herdFoot(i, nowMs, anchor);
+    const foot = [step.x, step.y, duneHeight(step.x, step.y)];
     animals.push({
       ...one,
+      id: `goat:${i}`,
       at: foot,
       herd: count,
-      ...(parts ? { parts: goatParts(foot, yaw, Boolean(patch?.dead), nowMs) } : {}),
+      ...(parts ? { parts: goatParts(foot, step.yaw, dead, nowMs, step.gait) } : {}),
     });
   }
   return animals;
@@ -160,15 +190,21 @@ export function skinkParts(at, yaw = 0, nowMs = 0) {
   return parts;
 }
 
-export function goatParts(at, yaw = 0, dead = false, nowMs = 0) {
+export function goatParts(at, yaw = 0, dead = false, nowMs = 0, gait = 0) {
   const parts = [];
   const hide = dead ? [0.3, 0.24, 0.18, 1] : GOAT;
   const z = (up) => (dead ? up * 0.45 : up);
   const breathe = dead ? 0 : Math.sin(nowMs / 520) * 0.012;
+  const pace = dead ? 0 : gait;
   const add = (lf, lr, up, radius, color, tile = "hide") => orient(parts, at, yaw, lf, lr, z(up), radius, color, tile);
   for (const side of [1, -1]) {
-    limb(parts, at, yaw, [0.12, side * 0.07, z(0.34)], [0.14, side * 0.08, z(0.03)], 0.03, hide);
-    limb(parts, at, yaw, [-0.12, side * 0.07, z(0.34)], [-0.14, side * 0.08, z(0.03)], 0.03, hide);
+    for (const fore of [1, -1]) {
+      const phase = pace + (side * fore > 0 ? 0 : Math.PI);
+      const swing = Math.sin(phase) * 0.07;
+      const lift = Math.max(0, Math.cos(phase)) * 0.045;
+      const along = 0.13 * fore;
+      limb(parts, at, yaw, [along, side * 0.07, z(0.34)], [along + swing, side * 0.08, z(0.03 + lift)], 0.03, hide);
+    }
   }
   limb(parts, at, yaw, [0.12, 0, z(0.4 + breathe)], [-0.16, 0, z(0.38 + breathe)], 0.09, hide);
   add(0.2, 0, 0.52, 0.04, hide);
@@ -336,11 +372,11 @@ export function fauna(nowMs, from, { parts = true } = {}) {
   const skinkYaw = Math.atan2(Math.cos(t * 0.5) * 2.1 * 0.5, Math.cos(t * 0.17) * 1.5 * 0.17);
   const skink = [skinkAt[0], skinkAt[1], duneHeight(skinkAt[0], skinkAt[1]) + 0.02];
   const gull = parts ? gullParts(nowMs) : gullPose(nowMs);
-  const grazed = herd(graze({ stock: 1 }), [12, -150, duneHeight(12, -150)], 3, parts, nowMs);
+  const grazed = herd({ stock: 1, track: true, dead: false }, [12, -150, duneHeight(12, -150)], 3, parts, nowMs);
   return [
-    { kind: "crab", at: crab, radius: 0.12, color: SHELL, ...(parts ? { parts: crabParts(crab, crabYaw, nowMs) } : {}) },
-    { kind: "skink", at: skink, radius: 0.05, color: SCALE, ...(parts ? { parts: skinkParts(skink, skinkYaw, nowMs) } : {}) },
-    { kind: "gull", at: gull.at, radius: 0.1, color: WHITE, ...(parts ? { parts: gull.parts } : {}) },
+    { id: "crab", kind: "crab", at: crab, radius: 0.12, color: SHELL, ...(parts ? { parts: crabParts(crab, crabYaw, nowMs) } : {}) },
+    { id: "skink", kind: "skink", at: skink, radius: 0.05, color: SCALE, ...(parts ? { parts: skinkParts(skink, skinkYaw, nowMs) } : {}) },
+    { id: "gull", kind: "gull", at: gull.at, radius: 0.1, color: WHITE, ...(parts ? { parts: gull.parts } : {}) },
     ...grazed,
   ];
 }

@@ -122,6 +122,13 @@ export function trySalvage(yard, cell) {
     yard.spoil = Math.max(0, (yard.spoil || 0) - 3);
     return { ok: true, metal: yard.metal, fallen: 0 };
   }
+  const carcass = yard.pieces.findIndex((piece) => piece.id === "carcass" && sameCell(piece.at, cell));
+  if (carcass >= 0) {
+    const metal = yard.pieces[carcass].metal || 1;
+    yard.pieces.splice(carcass, 1);
+    yard.metal += metal;
+    return { ok: true, metal: yard.metal, fallen: 0 };
+  }
   const wreck = yard.pieces.findIndex((piece) => piece.id === "wreck" && sameCell(piece.at, cell));
   if (wreck < 0) return { ok: false, reason: "none" };
   yard.pieces.splice(wreck, 1);
@@ -435,6 +442,18 @@ export function pieceBoxes(pieces) {
         color: piece.id === "mission" ? [0.75, 0.2, 0.15, 1] : piece.id === "trainer" ? [0.35, 0.32, 0.48, 1] : WOOD,
         reflectivity: 0.08,
         piece: piece.id,
+      };
+    }
+    if (piece.id === "carcass") {
+      return {
+        type: "box",
+        min: [x - 0.34, y - 0.16, 0],
+        max: [x + 0.34, y + 0.16, 0.18],
+        color: [0.36, 0.22, 0.14, 1],
+        reflectivity: 0.06,
+        piece: piece.id,
+        id: piece.id,
+        name: "Carcass",
       };
     }
     if (piece.id === "wreck") {

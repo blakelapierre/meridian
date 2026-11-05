@@ -4,7 +4,7 @@ import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=57";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js";
 import { dummyTexture } from "./texture.js";
-import { duneHeight, fauna, floraParts } from "../sim/life.js?v=76";
+import { duneHeight, fauna, floraParts } from "../sim/life.js?v=78";
 import { PEOPLE } from "../sim/people.js?v=2";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
@@ -62,8 +62,9 @@ function coarse(parts, keep = 3) {
   return [...parts].sort((a, b) => (b.bulk ?? b.radius ?? 0) - (a.bulk ?? a.radius ?? 0)).slice(0, keep);
 }
 
-function drawnPart(part, body) {
-  if (part.type === "shape") return { ...part, body: part.body || body };
+function drawnPart(part, body, id = "") {
+  const named = part.id || id;
+  if (part.type === "shape") return { ...part, body: part.body || body, ...(named ? { id: named } : {}) };
   return {
     type: "sphere",
     origin: part.at || part.origin,
@@ -71,11 +72,12 @@ function drawnPart(part, body) {
     color: part.color,
     reflectivity: 0.03,
     body,
+    ...(named ? { id: named } : {}),
     ...(part.tile ? { tile: part.tile } : {}),
   };
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null }) {
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null, down = [] }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(tick);
   const objects = [];
@@ -126,12 +128,14 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     for (const part of floraParts(tick * 1000 / 30)) objects.push(drawnPart(part, "flora"));
   }
   for (const animal of fauna(Date.now(), feet, { parts: !sparse })) {
+    if (animal.id && down.includes(animal.id)) continue;
     const parts = !sparse && animal.parts?.length ? animal.parts : [animal];
-    for (const part of parts) objects.push(drawnPart(part, animal.kind));
+    for (const part of parts) objects.push(drawnPart(part, animal.kind, animal.id));
   }
   for (const person of PEOPLE) {
     const z = duneHeight(person.at[0], person.at[1]);
-    const figure = playerParts([person.at[0], person.at[1], z], person.yaw, false, {
+    const fallen = down.includes(person.id);
+    const figure = playerParts([person.at[0], person.at[1], z], person.yaw, fallen, {
       self: false,
       color: person.color,
       body: "person",
@@ -210,6 +214,8 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     const phase = other.walk ? (other.feet[0] + other.feet[1]) * 1.7 : tick * 0.07;
     const figure = playerParts(other.feet, other.yaw, !!other.crouch, {
       self: false,
+      body: "player",
+      id: other.id,
       color: other.color || OTHER,
       gait: phase,
       stride: other.crouch ? 0.12 : moving,

@@ -373,9 +373,10 @@ vec3 withPrints(vec3 rgb, vec2 p, int bounce) {
     vec2 d = p - s.xy;
     float c = cos(s.z);
     float sn = sin(s.z);
+    float hoof = s.w > 0.05 ? s.w : 1.0;
     vec2 local = vec2(d.x * c + d.y * sn, -d.x * sn + d.y * c);
-    float left = length((local - vec2(-0.08, 0.02)) * vec2(9.0, 14.0));
-    float right = length((local - vec2(0.08, -0.02)) * vec2(9.0, 14.0));
+    float left = length((local - vec2(-0.08, 0.02) * hoof) * vec2(9.0, 14.0) / hoof);
+    float right = length((local - vec2(0.08, -0.02) * hoof) * vec2(9.0, 14.0) / hoof);
     mark = max(mark, smoothstep(1.05, 0.2, min(left, right)));
   }
   return rgb * (1.0 - 0.62 * mark);
@@ -1665,6 +1666,7 @@ void main() {
         printData[i * 4] = step.x;
         printData[i * 4 + 1] = step.y;
         printData[i * 4 + 2] = step.yaw || 0;
+        printData[i * 4 + 3] = step.scale || 0;
       }
       const miss = scene.miss || [0.45, 0.62, 0.85, 1];
       const sun = scene.sun || [0, 0, 1];

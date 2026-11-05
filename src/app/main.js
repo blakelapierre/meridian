@@ -15,8 +15,8 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=69";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=94";
+import { buildScene } from "../render/scene.js?v=72";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=95";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -95,7 +95,7 @@ import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAft
 import { deedCost, deedMessage, DEEDS_KEY, fadeDeeds, friendLine, guarded, packDeeds, readDeedMessage, theirLine, unpackDeeds, learnLore, friendTier, nextFriend, noteDeed, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
-import { addPrint } from "../sim/prints.js";
+import { addPrint, PRINT_CAP } from "../sim/prints.js";
 import { paintChart } from "../render/chart.js?v=73";
 import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, sightPractice, stepFollow, zoomFov } from "../sim/sight.js?v=10";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
@@ -136,10 +136,11 @@ import { createPools, drainPool, fillCell, flowOnce, lowerPool, notePool, poolLi
 import { deedVolume, grantKey, lapseMessage, mayEdit, peerDeed, readLapse } from "../sim/deed.js";
 import { bondOpen, buyFromPurse, dragAsk, dragMessage, dragPace, hearBond, offerBond, payTithe, payTownship, readDragMessage, readDragRefuse, refuseDrag, spendPurse, spendTownship, stepDrag } from "../sim/fellowship.js";
 import { afterShot, boltHit, boltInSmoke, firePull, meleeHit, missDir, penFactor, spendMagazine, startBolt, stepBolt, stepShotWait } from "../sim/bolt.js";
-import { harmMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
+import { harmMessage, blowMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
+import { applyBlow, beastBite, classifyStrike, lineBlow, riseQuarry, strikeQuarry } from "../sim/fight.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=76";
+import { duneHeight, fauna, graze, groundLook, herdPrints, standHeight } from "../sim/life.js?v=78";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -330,6 +331,8 @@ const terrain = createTerrain({
   leader: params.get("offer") === "1" || !peer,
 });
 const dummy = createDummy();
+const quarry = {};
+let harmSeq = 1;
 const yard = createYard(atoll.placements.footing);
 yard.metal = culture.metal;
 yard.stone = culture.stone;
@@ -529,8 +532,9 @@ function stepAwareness() {
   // Exposure for the existing Tracking skill: other people's footprints and dig marks nearby.
   const [x, y] = player.position;
   const nearPrint = prints.some((print) => print.who !== "self" && Math.hypot(print.x - x, print.y - y) < 3);
+  const nearHoof = herdPrints(Date.now()).some((print) => Math.hypot(print.x - x, print.y - y) < 1.4);
   const nearDig = digSpots.some((spot) => Math.hypot(spot[0] - x, spot[1] - y) < 3);
-  if (nearPrint || nearDig) grantUse(skills, "tracking", { tick, gap: 60 });
+  if (nearPrint || nearDig || nearHoof) grantUse(skills, "tracking", { tick, gap: 60 });
   if (nearPrint) grantUse(skills, "trailing", { tick, gap: 80 });
   // Dark adaptation: trained by being out at night; it lifts the night picture a little.
   const night = dayWord(tick) === "night";
@@ -1094,13 +1098,15 @@ addEventListener("keydown", (event) => {
     report = placed.ok ? "floor" : placed.reason;
   }
   if (event.code === "KeyF" && !event.repeat && slot !== "hammer") {
-    const pad = atoll.placements.dummy;
-    const dist = Math.hypot(player.position[0] - pad.x / 100, player.position[1] - pad.y / 100);
-    const hit = meleeHit(dist);
-    if (hit && dummy.health > 0) {
-      applyDummyHit(dummy, hit.hitbox);
+    const swung = nearestSwing();
+    if (!swung) report = "far";
+    else if (swung.kind === "dummy" && dummy.health > 0) {
+      applyDummyHit(dummy, swung.hit.hitbox);
       report = "melee";
-    } else report = "far";
+    } else if (swung.kind === "dummy") report = "down";
+    else {
+      landStrike(swung.kind === "player" ? { kind: "player", id: swung.id, hitbox: "chest" } : swung.strike, swung.hit.damage);
+    }
   }
   if (event.code === "KeyJ" && !event.repeat && slot === "hammer") {
     const mark = refreshAim(input());
@@ -1291,7 +1297,7 @@ function turnWheel(direction) {
 function useRightClick() {
   if (followId || slot !== "hammer") return;
   const mark = refreshAim(input());
-  if (!mark.inRange || (mark.kind !== "wall" && mark.kind !== "crate" && mark.kind !== "wreck")) {
+  if (!mark.inRange || (mark.kind !== "wall" && mark.kind !== "crate" && mark.kind !== "wreck" && mark.kind !== "carcass")) {
     if (agent) agent.salvage = false;
     report = "far";
     return;
@@ -1364,6 +1370,80 @@ function sendStance() {
   const text = stanceMessage(crouch);
   for (const link of links) if (!link.notify && link.ctrl?.readyState === "open") try { link.ctrl.send(text); } catch { /* next refresh */ }
 }
+
+function fallenIds() {
+  const now = Date.now();
+  return Object.entries(quarry)
+    .filter(([, row]) => row.wreck && !(row.back && now >= row.back))
+    .map(([id]) => id);
+}
+
+function sendBlow(target, amount) {
+  harmSeq += 1;
+  const message = blowMessage(meId, target, amount, harmSeq);
+  noteHarm(harmLog, meId, "blow", harmSeq);
+  for (const link of links) {
+    if (link.ctrl?.readyState !== "open") continue;
+    try { link.ctrl.send(message); } catch { /* the blow is still on its way */ }
+  }
+}
+
+function landStrike(strike, amount) {
+  if (!strike || strike.kind === "dummy") return;
+  const dealt = Math.round(amount);
+  if (!(dealt > 0)) return;
+  if (strike.kind === "player") {
+    sendBlow(strike.id, dealt);
+    friends.set(strike.id, -1);
+    bonds.delete(strike.id);
+    report = `${strike.hitbox} ${dealt}`;
+    hear("shot", 0.7);
+    return;
+  }
+  const row = strikeQuarry(quarry, strike.id, dealt, Date.now());
+  if (!row?.fresh) {
+    report = row ? "down" : "miss";
+    return;
+  }
+  if (row.wreck && row.spec.metal > 0 && !quarry[strike.id].dropped) {
+    const animal = fauna(Date.now(), player.position, { parts: false }).find((one) => one.id === strike.id);
+    const at = animal?.at || [player.position[0], player.position[1], 0];
+    const cell = [Math.round(at[0] / 0.5), Math.round(at[1] / 0.5)];
+    if (!yard.pieces.some((piece) => piece.id === "carcass" && piece.at[0] === cell[0] && piece.at[1] === cell[1])) {
+      yard.pieces.push({ id: "carcass", at: cell, anchors: false, metal: row.spec.metal });
+    }
+    quarry[strike.id].dropped = true;
+    report = "wreck";
+    hear("hurt");
+    return;
+  }
+  report = row.wreck ? "down" : `${strike.id} ${Math.ceil(row.health)}`;
+  hear("shot", 0.45);
+}
+
+function nearestSwing() {
+  const here = player.position;
+  let best = null;
+  const consider = (id, kind, point, strike) => {
+    const dist = Math.hypot(here[0] - point[0], here[1] - point[1]);
+    const hit = meleeHit(dist);
+    if (!hit || (best && dist >= best.dist)) return;
+    best = { id, kind, dist, hit, strike };
+  };
+  const pad = atoll.placements.dummy;
+  consider("dummy", "dummy", [pad.x / 100, pad.y / 100], null);
+  for (const other of otherActors()) consider(other.id, "player", other.feet, { kind: "player", id: other.id, hitbox: "chest" });
+  for (const person of PEOPLE) {
+    if (fallenIds().includes(person.id)) continue;
+    consider(person.id, "person", person.at, { kind: "person", id: person.id, hitbox: "chest" });
+  }
+  for (const animal of fauna(Date.now(), here, { parts: false })) {
+    if (!animal.id || fallenIds().includes(animal.id)) continue;
+    consider(animal.id, "beast", animal.at, { kind: "beast", id: animal.id, hitbox: "body" });
+  }
+  return best;
+}
+
 function drawnOthers() {
   const list = otherActors().map((actor) => (stances.get(actor.id)?.crouch ? { ...actor, crouch: true } : actor));
   if (!dragging || selection?.kind !== "player") return list;
@@ -1507,6 +1587,7 @@ function sceneFor(sample, width, height) {
     stride: Math.min(1, Math.hypot(player.velocity?.[0] || 0, player.velocity?.[1] || 0) / 2.2),
     gait: bodyGait,
     worn: wornFor(slot),
+    down: fallenIds(),
   });
 }
 
@@ -2324,7 +2405,9 @@ let lastScene = null;
 function paint(sample, width = canvas.width, height = canvas.height) {
   const scene = sceneFor(sample, width, height);
   scene.wear = wearScene();
-  scene.prints = prints;
+  const hooves = herdPrints(Date.now()).slice(-PRINT_CAP);
+  const room = PRINT_CAP - hooves.length;
+  scene.prints = room > 0 ? [...prints.slice(-room), ...hooves] : hooves;
   scene.work = work;
   scene.time = tick / 30;
   scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
@@ -2427,11 +2510,12 @@ function fire(sample) {
     seed: tick,
     objects: scene.objects.filter((object) => !object.self),
   });
+  const strike = classifyStrike(shot.hit);
   const nonce = Math.floor(tick);
   seenShots.add(nonce);
-  if (!shot.hitbox) {
+  if (!shot.hitbox && !strike) {
     report = "miss";
-  } else {
+  } else if (shot.hitbox) {
     const voters = 1 + links.filter((link) => {
       const pose = poses.get(link.to);
       return pose && sameCell(cellId(player.position[1]), cellId(pose.y));
@@ -2454,6 +2538,7 @@ function fire(sample) {
       report = `${applied.hitbox} ${scaled} quorum`;
     } else report = "provisional";
   }
+  if (strike && strike.kind !== "dummy") landStrike(strike, lineBlow(strike.hitbox));
   const frame = encodeShot(identity, {
     nonce,
     origin: eye,
@@ -2469,11 +2554,11 @@ function fire(sample) {
     friends.set(selection.id, -1);
     bonds.delete(selection.id);
   }
-  if (!shot.hitbox) {
+  if (!shot.hitbox && !(strike && strike.kind !== "dummy")) {
     const pull = firePull(yard.pieces.find((piece) => piece.id === "mission")?.fires || []);
     bolts.push(startBolt(eye, missDir(shot.dir, pull)));
   }
-  if (shot.hitbox) tourFacts.hits += 1;
+  if (shot.hitbox || (strike && strike.kind !== "dummy")) tourFacts.hits += 1;
   else if (tourStep(tour)?.id === "shoot") {
     const d = atoll.placements.dummy;
     const to = [d.x / 100 - eye[0], d.y / 100 - eye[1], 1.3 - eye[2]];
@@ -2481,7 +2566,7 @@ function fire(sample) {
     const dot = (to[0] * shot.dir[0] + to[1] * shot.dir[1] + to[2] * shot.dir[2]) / len;
     if (dot > Math.cos(8 * Math.PI / 180)) tourFacts.nearShots += 1;
   }
-  flashShot(shot.hitbox ? `hit ${shot.hitbox}` : "miss");
+  flashShot(shot.hitbox ? `hit ${shot.hitbox}` : strike && strike.kind !== "dummy" ? `hit ${strike.hitbox}` : "miss");
   const look = lookDirection(sample.yaw, sample.pitch);
   const facing = look[0] * shot.dir[0] + look[1] * shot.dir[1] + look[2] * shot.dir[2];
   hear("shot", (shot.hitbox ? 1 : 0.35) * crackInside(Math.hypot(player.position[0] - atoll.placements.dummy.x / 100, player.position[1] - atoll.placements.dummy.y / 100)) * frontGain(facing), Math.max(-1, Math.min(1, shot.dir[0])));
@@ -2793,6 +2878,14 @@ async function openLink(to, offer, role) {
     }
     const harm = readHarmMessage(text);
     if (harm) {
+      if (harm.what === "blow" && harm.target === meId && harm.amount > 0) {
+        const seen = harmLog.some((row) => row.what === "blow" && row.sig === harm.sig && harm.sig);
+        if (!seen) {
+          const applied = applyBlow(vitals, harm.amount);
+          report = applied.dead ? "down" : `hit ${harm.amount}`;
+          if (applied.dealt) hear("hurt");
+        }
+      }
       noteHarm(harmLog, harm.who, harm.what, harm.sig);
       return;
     }
@@ -3399,6 +3492,20 @@ if (params.get("still") !== "1") {
     while (bank >= 1 / 30) {
       try {
       stepDummy(dummy);
+      riseQuarry(quarry, Date.now());
+      if (vitals.down <= 0) {
+        for (const animal of fauna(Date.now(), player.position, { parts: false })) {
+          if (!animal.id || quarry[animal.id]?.wreck) continue;
+          const dist = Math.hypot(animal.at[0] - player.position[0], animal.at[1] - player.position[1]);
+          const bite = beastBite(animal.id, dist) / 30;
+          if (!(bite > 0)) continue;
+          const applied = applyBlow(vitals, bite);
+          if (applied.dead) {
+            report = "down";
+            hear("hurt");
+          } else if (applied.dealt && tick % 15 === 0) report = `${animal.id} bites`;
+        }
+      }
       const wreckAt = [atoll.placements.dummy.x / 100, atoll.placements.dummy.y / 100, 0.9];
       const wreckCell = [Math.round(wreckAt[0] / 0.5), Math.round(wreckAt[1] / 0.5)];
       if (dummy.health === 0) {
@@ -3435,13 +3542,24 @@ if (params.get("still") !== "1") {
           bolts[bolt].velocity[1] += (mission.at[1] * 0.5 - bolts[bolt].position[1]) * pull;
         }
         const hit = boltHit(bolts[bolt], wreckAt);
-        if (hit && dummy.health > 0) applyDummyHit(dummy, "chest");
+        let struck = hit && dummy.health > 0;
+        if (struck) applyDummyHit(dummy, "chest");
+        if (!struck) {
+          for (const animal of fauna(Date.now(), player.position, { parts: false })) {
+            if (!animal.id || quarry[animal.id]?.wreck) continue;
+            const body = [animal.at[0], animal.at[1], animal.at[2] + 0.3];
+            if (!boltHit(bolts[bolt], body, 0.45)) continue;
+            landStrike({ kind: "beast", id: animal.id, hitbox: "body" }, lineBlow("chest"));
+            struck = true;
+            break;
+          }
+        }
         const flying = bolts[bolt];
-        if (!hit && (flying.bounces || 0) < 1 && flying.position[2] < 0 && flying.velocity[2] < 0 && Math.abs(flying.velocity[0]) > Math.abs(flying.velocity[2])) {
+        if (!hit && !struck && (flying.bounces || 0) < 1 && flying.position[2] < 0 && flying.velocity[2] < 0 && Math.abs(flying.velocity[0]) > Math.abs(flying.velocity[2])) {
           flying.position[2] = 0;
           flying.velocity[2] *= -0.35;
           flying.bounces = 1;
-        } else if (hit || flying.age > 2 || flying.position[2] < -1) bolts.splice(bolt, 1);
+        } else if (hit || struck || flying.age > 2 || flying.position[2] < -1) bolts.splice(bolt, 1);
       }
       terrain.setCell(cellId(player.position[1]));
       const walked = cellId(player.position[1]) === "atoll-1";

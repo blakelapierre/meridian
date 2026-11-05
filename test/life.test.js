@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { crabParts, duneHeight, fauna, floraParts, groundLook, gullParts, HILL, standHeight } from "../src/sim/life.js";
+import { crabParts, duneHeight, fauna, floraParts, goatParts, graze, groundLook, gullParts, herd, herdPrints, HILL, standHeight } from "../src/sim/life.js";
 
 test("hills reach about three body heights and a pit is still the floor", () => {
   let low = 99;
@@ -62,6 +62,33 @@ test("the crab steps away and the plants sit on the roll", () => {
     treeTop = Math.max(treeTop, plant.at[2] + plant.radius);
   }
   assert.ok(treeTop > 2, treeTop);
+});
+
+test("the herd walks a loop and leaves prints on the sand", () => {
+  const early = fauna(0, [80, 80]).filter((animal) => animal.kind === "graze");
+  const later = fauna(20000, [80, 80]).filter((animal) => animal.kind === "graze");
+  assert.equal(early.length, 3);
+  const moved = Math.hypot(later[0].at[0] - early[0].at[0], later[0].at[1] - early[0].at[1]);
+  assert.ok(moved > 1.5, moved);
+  const body = later[0].parts.find((part) => part.kind === "capsule" && part.r > 0.08);
+  assert.ok(body.a[2] - later[0].at[2] > 0.35, body.a[2]);
+  const down = herd(graze({ stock: 1 }), [4, -140, 0], 3, false, 0);
+  const still = herd(graze({ stock: 1 }), [4, -140, 0], 3, false, 20000);
+  assert.equal(still[0].at[0], down[0].at[0]);
+  assert.equal(still[0].at[1], down[0].at[1]);
+  const prints = herdPrints(20000);
+  assert.equal(prints.length, 24);
+  assert.ok(prints.every((print) => print.scale < 0.6));
+  const goat = later[0].at;
+  const behind = prints.some((print) => {
+    const span = Math.hypot(print.x - goat[0], print.y - goat[1]);
+    return span > 0.3 && span < 8;
+  });
+  assert.equal(behind, true);
+  const planted = goatParts([0, 0, 0], 0, false, 0, 0);
+  const stepping = goatParts([0, 0, 0], 0, false, 0, 1.2);
+  const hoof = (parts) => parts.find((part) => part.kind === "capsule" && part.r < 0.04);
+  assert.ok(Math.abs(hoof(planted).b[2] - hoof(stepping).b[2]) > 0.01);
 });
 
 test("skipping meshes still places the same animals", () => {
