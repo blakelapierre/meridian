@@ -2,7 +2,7 @@
 
 ## In the build
 
-Other clients are bodies. Tab cycles them, and it also cycles Pell, Hask, and Nim, who stand in Southmere and do not walk. They are drawn as the same figure as a player, cloth in their own color. U speaks to one of them if you are within 3 m. The target plate names whatever you have selected. Esc, Backspace, or Clear drops it. Standing inside sense range raises friendliness by 1 a second, up to 100. What you trade depends on that score and on mapping, mining, building, and appraisal on both sides. The AI clients are the same view, driven only through player keys.
+Other clients are bodies. Tab cycles them, and it also cycles Pell, Hask, and Nim, who stand in Southmere and do not walk. They are drawn as the same figure as a player, cloth in their own color. U speaks to one of them if you are within 3 m. The target plate names whatever you have selected. Esc, Backspace, or Clear drops it. Standing inside sense range raises friendliness by 1 a second, up to 100. What you trade depends on that score and on mapping, mining, building, and appraisal on both sides. The AI clients are the same view, driven only through player keys. Your own body can take a pilot too. Pilot, in the corner, lists six goals in the order a new body should meet the beach: survey, dig, raise, drill, hunt, speak. You leave on the ones you want. Run hands the body to them, one after another. Walking takes it back.
 
 While you drag someone, they are drawn just ahead of you. Their client is sent one drag step on the control channel and takes it. They cannot refuse.
 
@@ -12,7 +12,7 @@ Friendliness is not only a number. Each person keeps a record of what passed bet
 
 ## Proves
 
-`test/slice.test.js` covers the refusal. `test/batch12.test.js` covers the record.
+`test/slice.test.js` covers the refusal. `test/batch12.test.js` covers the record. `test/pilot.test.js` covers the goals you leave on.
 
 ## This pass (record)
 

@@ -119,25 +119,37 @@
       #shotfx.on.miss { color: #ccc; }
       #shotfx.on.reload { color: #fc8; }
       #shotfx.on[class*="hit"] { color: #f66; }
-      /* Phones: the map and its line go top-right under the fps, clear of the stick and the status box. */
-      html.touch #chart { left: auto; right: max(10px, env(safe-area-inset-right)); top: 34px; bottom: auto; width: 120px; }
-      html.touch #map { width: 120px; height: 120px; }
+      /* Phones: the map sits top-right. The fps, the notes, and the hint stay off it. */
+      html.touch #chart { left: auto; right: max(8px, env(safe-area-inset-right)); top: max(22px, calc(8px + env(safe-area-inset-top))); bottom: auto; width: 96px; }
+      html.touch #map { width: 96px; height: 96px; }
       html.touch #fix { font-size: 9px; }
       html.touch aside { max-width: min(46vw, 22rem); font-size: 11px; padding: 4px 8px; background: rgba(0,0,0,.4); }
       html.touch.mapped aside { max-height: calc(100vh - 24px); }
-      html.touch #notes { top: 162px; max-width: 9rem; font-size: 10px; }
-      html.touch #hint { top: 8px; font-size: 12px; max-width: calc(100vw - 360px); min-width: 12rem; }
-      html.touch #fps { font-size: 11px; top: 10px; }
+      html.touch #fps { font-size: 11px; top: max(6px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); right: auto; }
+      html.touch #notes { top: auto; bottom: calc(250px + env(safe-area-inset-bottom)); left: max(8px, env(safe-area-inset-left)); right: auto; max-width: 42vw; text-align: left; font-size: 10px; }
+      html.touch #hint { left: max(8px, env(safe-area-inset-left)); top: calc(124px + env(safe-area-inset-top)); transform: none; min-width: 0; max-width: min(16rem, calc(100vw - 120px - env(safe-area-inset-right))); text-align: left; font-size: 12px; }
+      html.touch #picked { top: auto; bottom: calc(220px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); z-index: 20; padding: 8px 10px; }
+      html.touch #picked b { font-size: 16px; }
+      html.touch #mpnote { left: max(8px, env(safe-area-inset-left)); right: auto; bottom: calc(188px + env(safe-area-inset-bottom)); max-width: 46vw; }
       html:not(.touch) #fps { top: calc(54px + env(safe-area-inset-top)); }
-      /* Phone portrait: the tour line sits under the demo links, left of the map, instead of over both. */
-      @media (orientation: portrait) { html.touch #hint { left: 12px; top: 98px; transform: none; min-width: 0; max-width: calc(100vw - 180px); text-align: left; } }
       #glerr { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; max-width: 90vw; padding: 8px 12px; background: #400; color: #fdd; font: 13px/1.4 system-ui, sans-serif; border: 1px solid #a44; }
       #mpnote { position: fixed; right: 12px; bottom: 12px; z-index: 7; padding: 4px 8px; background: rgba(0,0,0,.6); color: #fc9; font: 12px/1.4 system-ui, sans-serif; pointer-events: none; }
       #corner { position: fixed; top: 10px; right: 10px; z-index: 12; display: flex; gap: 6px; }
       #corner button, #fullscreen { min-width: 36px; height: 36px; padding: 0 8px; border: 1px solid #567; background: rgba(0,0,0,.6); color: #cde; font: 14px system-ui, sans-serif; border-radius: 6px; }
+      #pilot { position: fixed; top: 54px; right: 10px; z-index: 32; width: min(280px, calc(100vw - 20px)); margin: 0; padding: 10px 12px 12px; background: rgba(8, 10, 14, 0.92); color: #e8e0d0; border: 1px solid #456; border-radius: 8px; font: 14px/1.35 system-ui, sans-serif; }
+      #pilot[hidden] { display: none; }
+      #pilot header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+      #pilot header b { flex: 1; }
+      #pilot p { margin: 0 0 8px; color: #9ab; }
+      #pilot-goals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+      #pilot-goals button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; padding: 6px 8px; border: 1px solid #345; border-radius: 6px; background: #141820; color: inherit; font: inherit; }
+      #pilot-goals button[aria-pressed="true"] { border-color: #8c6; background: #1c2820; }
+      #pilot-goals span { color: #9ab; font-size: 12px; }
+      #pilot header button, #pilot-close { min-width: 36px; height: 28px; padding: 0 8px; border: 1px solid #567; background: #10141a; color: #cde; border-radius: 6px; }
       #fullscreen.on { color: #9f9; }
       #corner { top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); z-index: 31; }
-      html.touch #corner { top: calc(200px + env(safe-area-inset-top)); }
+      html.touch #corner { top: calc(64px + env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); right: auto; z-index: 32; touch-action: manipulation; }
+      html.touch #pilot { top: calc(112px + env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); right: auto; width: min(280px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 280px)); overflow: auto; }
       /* Phones: the card sits left of the map column so it never covers ?, Reset or fullscreen. */
       html.touch #onboard { left: max(10px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); transform: none; width: min(26rem, calc(100vw - 160px - env(safe-area-inset-left) - env(safe-area-inset-right))); max-height: calc(100vh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); font-size: 12px; padding: 10px 12px; }
       html.touch #onboard li b { min-width: 0; display: block; }
@@ -233,9 +245,14 @@
     <pre id="net" aria-label="Network panel">alone</pre>
     <div id="glerr" role="alert" hidden></div>
     <div id="mpnote" role="status" hidden></div>
-    <div id="corner"><button id="reset" type="button" aria-label="Reset: forget saved data and start a new session" title="Reset / new session: forget saved data and start over">Reset</button></div>
+    <div id="corner"><button id="pilot-open" type="button">Pilot</button><button id="reset" type="button" aria-label="Reset: forget saved data and start a new session" title="Reset / new session: forget saved data and start over">Reset</button></div>
+    <section id="pilot" hidden aria-label="Local pilot">
+      <header><b>Pilot</b><button id="pilot-run" type="button">Run</button><button id="pilot-close" type="button" aria-label="Close">×</button></header>
+      <p>It uses your hands, in the order you leave on. Walk to take them back. Hammer, then H, plants a crossbow.</p>
+      <ul id="pilot-goals"></ul>
+    </section>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=174"></script>
+    <script type="module" src="../../src/app/main.js?v=176"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {

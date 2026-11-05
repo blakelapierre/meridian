@@ -15,7 +15,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=72";
+import { buildScene } from "../render/scene.js?v=73";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=95";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
@@ -50,7 +50,7 @@ import { dayWord, DAY_TICKS } from "../sim/sun.js";
 import { columnFloor, acceptCertifiedSlump, bitMode, certifySlump } from "../sim/crust.js";
 import { bitAim, crustFeet } from "../sim/bit.js?v=2";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceBow, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -138,9 +138,11 @@ import { bondOpen, buyFromPurse, dragAsk, dragMessage, dragPace, hearBond, offer
 import { afterShot, boltHit, boltInSmoke, firePull, meleeHit, missDir, penFactor, spendMagazine, startBolt, stepBolt, stepShotWait } from "../sim/bolt.js";
 import { harmMessage, blowMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
 import { applyBlow, beastBite, classifyStrike, lineBlow, riseQuarry, strikeQuarry } from "../sim/fight.js?v=1";
+import { createPilot, PILOT_GOALS, stepPilot, togglePilotGoal } from "../sim/pilot.js?v=1";
+import { stepBows } from "../sim/bow.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, herdPrints, standHeight } from "../sim/life.js?v=78";
+import { duneHeight, fauna, graze, groundLook, herdPrints, standHeight } from "../sim/life.js?v=79";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -333,6 +335,10 @@ const terrain = createTerrain({
 const dummy = createDummy();
 const quarry = {};
 let harmSeq = 1;
+let pilotGoal = "";
+const pilot = createPilot((() => {
+  try { return JSON.parse(localStorage.getItem("meridian-pilot") || "null"); } catch { return null; }
+})());
 const yard = createYard(atoll.placements.footing);
 yard.metal = culture.metal;
 yard.stone = culture.stone;
@@ -970,7 +976,15 @@ const shotFrames = [];
 
 addEventListener("keydown", (event) => {
   keys.add(event.code);
-  if (event.code === "KeyW" || event.code === "KeyA" || event.code === "KeyS" || event.code === "KeyD" || event.code === "KeyZ" || event.code === "KeyC") seated = false;
+  if (event.code === "KeyW" || event.code === "KeyA" || event.code === "KeyS" || event.code === "KeyD" || event.code === "KeyZ" || event.code === "KeyC") {
+    seated = false;
+    if (pilot.on && !event.repeat) {
+      pilot.on = false;
+      pilotGoal = "";
+      report = "pilot off";
+      paintPilot();
+    }
+  }
   if (event.code === "Tab" || event.code === "Backquote") event.preventDefault();
   if (event.repeat) return;
   playerPress(event.code);
@@ -1163,6 +1177,11 @@ addEventListener("keydown", (event) => {
     yard.pieces.push({ id: "slip", at, anchors: true, text: notes[notes.length - 1].line, by: "self" });
     report = "slip";
   }
+  if (event.code === "KeyH" && !event.repeat && slot === "hammer" && !(selection?.kind === "player" && yard.bound)) {
+    const mark = refreshAim(input());
+    const placed = tryPlaceBow(yard, mark.cell);
+    report = placed.ok ? "bow" : placed.reason;
+  }
   if (event.code === "KeyH" && !event.repeat && selection?.kind === "player" && yard.bound) {
     grantKey(deedKeys, selection.id);
     report = "key";
@@ -1345,6 +1364,43 @@ function eyeOf(sample) {
     player.position[1],
     player.position[2] + (sample?.crouch ? 1.1 : 1.65),
   ];
+}
+
+function bowTargets() {
+  const list = [];
+  if (dummy.health > 0) {
+    const pad = atoll.placements.dummy;
+    list.push({ id: "dummy", x: pad.x / 100, y: pad.y / 100, z: 0.9 });
+  }
+  for (const animal of fauna(Date.now(), player.position, { parts: false })) {
+    if (!animal.id || quarry[animal.id]?.wreck) continue;
+    list.push({ id: animal.id, x: animal.at[0], y: animal.at[1], z: (animal.at[2] || 0) + 0.4 });
+  }
+  for (const other of otherActors()) list.push({ id: other.id, x: other.feet[0], y: other.feet[1], z: other.feet[2] + 1 });
+  return list;
+}
+
+function paintPilot() {
+  const open = document.querySelector("#pilot-open");
+  const run = document.querySelector("#pilot-run");
+  const list = document.querySelector("#pilot-goals");
+  if (open) open.textContent = pilot.on ? `Pilot: ${pilotGoal || "on"}` : "Pilot";
+  if (run) run.textContent = pilot.on ? "Stop" : "Run";
+  if (!list) return;
+  list.replaceChildren(...PILOT_GOALS.map((goal) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.goal = goal.id;
+    button.setAttribute("aria-pressed", pilot.picked.includes(goal.id) ? "true" : "false");
+    button.innerHTML = `<b>${goal.title}</b><span>${goal.line}</span>`;
+    item.append(button);
+    return item;
+  }));
+}
+
+function savePilot() {
+  try { localStorage.setItem("meridian-pilot", JSON.stringify(pilot.picked)); } catch { /* the choice still stands this visit */ }
 }
 
 function otherActors() {
@@ -2352,7 +2408,8 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${orderNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${finNote}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const pilotNote = pilot.on && pilotGoal ? ` · pilot ${pilotGoal}` : "";
+  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote}${pilotNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${orderNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${finNote}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   paintNet();
   paintHint();
   paintTarget();
@@ -3167,6 +3224,29 @@ if (agent) {
   if (note) note.textContent = `${AGENDAS[agendaName].title}: ${AGENDAS[agendaName].agenda}`;
   canvas.dataset.ai = agendaName;
 }
+document.querySelector("#pilot-goals")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button?.dataset.goal) return;
+  togglePilotGoal(pilot, button.dataset.goal);
+  savePilot();
+  paintPilot();
+});
+document.querySelector("#pilot-open")?.addEventListener("click", () => {
+  const panel = document.querySelector("#pilot");
+  if (panel) panel.hidden = !panel.hidden;
+});
+document.querySelector("#pilot-close")?.addEventListener("click", () => {
+  const panel = document.querySelector("#pilot");
+  if (panel) panel.hidden = true;
+});
+document.querySelector("#pilot-run")?.addEventListener("click", () => {
+  if (!pilot.picked.length) return;
+  pilot.on = !pilot.on;
+  if (!pilot.on) pilotGoal = "";
+  report = pilot.on ? "pilot" : "pilot off";
+  paintPilot();
+});
+paintPilot();
 canvas.dataset.pace = "vsync";
 showChart();
 
@@ -3449,6 +3529,31 @@ if (params.get("still") !== "1") {
         tick,
         wall: yard.pieces.some((piece) => piece.id === "wall"),
       }));
+    } else if (pilot.on && !followId) {
+      const foot = yard.pieces.find((piece) => piece.id === "footing");
+      const openCell = foot ? [foot.at[0] + 1, foot.at[1]] : null;
+      const openTaken = openCell && yard.pieces.some((piece) => piece.at[0] === openCell[0] && piece.at[1] === openCell[1] && piece.id !== "floor");
+      const command = stepPilot(pilot, {
+        x: player.position[0],
+        y: player.position[1],
+        yaw,
+        tick,
+        metal: yard.metal,
+        open: openCell && !openTaken ? [openCell[0] * 0.5, openCell[1] * 0.5] : null,
+        dummy: [atoll.placements.dummy.x / 100, atoll.placements.dummy.y / 100],
+        dummyUp: dummy.health > 0,
+        beasts: fauna(Date.now(), player.position, { parts: false })
+          .filter((animal) => animal.id && !quarry[animal.id]?.wreck)
+          .map((animal) => ({ id: animal.id, x: animal.at[0], y: animal.at[1] })),
+        people: PEOPLE.filter((person) => !quarry[person.id]?.wreck).map((person) => ({ id: person.id, x: person.at[0], y: person.at[1] })),
+      });
+      if (command) {
+        applyAgenda(command);
+        if (command.goal && command.goal !== pilotGoal) {
+          pilotGoal = command.goal;
+          paintPilot();
+        }
+      }
     }
     if (bot && botOn && !followId && !agent) {
       const held = stepWander(bot, { x: player.position[0], y: player.position[1], yaw }, dt);
@@ -3527,6 +3632,11 @@ if (params.get("still") !== "1") {
         const wreck = yard.pieces.findIndex((piece) => piece.id === "wreck");
         if (wreck >= 0) yard.pieces.splice(wreck, 1);
       }
+      for (const shot of stepBows(yard.pieces, bowTargets())) {
+        const loosed = startBolt(shot.origin, shot.dir, 34);
+        loosed.bite = shot.bite;
+        bolts.push(loosed);
+      }
       for (let bolt = bolts.length - 1; bolt >= 0; bolt -= 1) {
         const wind = windAt(player.position[0], player.position[1]);
         const blown = dayWord(tick) === "night" ? wind.map((part) => part * 1.5) : wind;
@@ -3542,14 +3652,28 @@ if (params.get("still") !== "1") {
           bolts[bolt].velocity[1] += (mission.at[1] * 0.5 - bolts[bolt].position[1]) * pull;
         }
         const hit = boltHit(bolts[bolt], wreckAt);
+        const bite = bolts[bolt].bite || 0;
         let struck = hit && dummy.health > 0;
-        if (struck) applyDummyHit(dummy, "chest");
+        if (struck && bite) {
+          dummy.health = Math.max(0, dummy.health - bite);
+          dummy.quiet = 0;
+        } else if (struck) applyDummyHit(dummy, "chest");
         if (!struck) {
           for (const animal of fauna(Date.now(), player.position, { parts: false })) {
             if (!animal.id || quarry[animal.id]?.wreck) continue;
             const body = [animal.at[0], animal.at[1], animal.at[2] + 0.3];
             if (!boltHit(bolts[bolt], body, 0.45)) continue;
-            landStrike({ kind: "beast", id: animal.id, hitbox: "body" }, lineBlow("chest"));
+            landStrike({ kind: "beast", id: animal.id, hitbox: "body" }, bite || lineBlow("chest"));
+            struck = true;
+            break;
+          }
+        }
+        if (!struck && bite) {
+          for (const other of otherActors()) {
+            const body = [other.feet[0], other.feet[1], other.feet[2] + 1];
+            if (!boltHit(bolts[bolt], body, 0.55)) continue;
+            sendBlow(other.id, bite);
+            report = `bow ${bite}`;
             struck = true;
             break;
           }

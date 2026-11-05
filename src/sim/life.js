@@ -41,11 +41,15 @@ export function herdFoot(index, nowMs, anchor = [12, -150]) {
   };
 }
 
+// A hoof plants on a fixed clock. The mark stays on that spot until the trail rolls off.
+const HOOF_MS = 700;
+
 export function herdPrints(nowMs, count = 3, anchor = [12, -150]) {
   const out = [];
+  const latest = Math.floor(nowMs / HOOF_MS) * HOOF_MS;
   for (let i = 0; i < count; i += 1) {
-    for (let s = 1; s <= 8; s += 1) {
-      const step = herdFoot(i, nowMs - s * 700, anchor);
+    for (let s = 0; s < 8; s += 1) {
+      const step = herdFoot(i, latest - s * HOOF_MS, anchor);
       out.push({ x: step.x, y: step.y, yaw: step.yaw, scale: 0.45, who: `goat:${i}` });
     }
   }

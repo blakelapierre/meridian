@@ -85,6 +85,12 @@ test("the herd walks a loop and leaves prints on the sand", () => {
     return span > 0.3 && span < 8;
   });
   assert.equal(behind, true);
+  const stuck = herdPrints(20000).map((print) => [print.x, print.y]);
+  const laterPrint = herdPrints(20200).map((print) => [print.x, print.y]);
+  assert.deepEqual(laterPrint, stuck);
+  const rolled = herdPrints(20300);
+  assert.equal(rolled.some((print) => print.x === stuck[0][0] && print.y === stuck[0][1]), true);
+  assert.equal(rolled.some((print) => print.x === stuck[7][0] && print.y === stuck[7][1]), false);
   const planted = goatParts([0, 0, 0], 0, false, 0, 0);
   const stepping = goatParts([0, 0, 0], 0, false, 0, 1.2);
   const hoof = (parts) => parts.find((part) => part.kind === "capsule" && part.r < 0.04);
