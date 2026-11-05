@@ -15,7 +15,7 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=74";
+import { buildScene, pictureCamera } from "../render/scene.js?v=75";
 import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=98";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
@@ -50,7 +50,7 @@ import { clockScale, dayWord, DAY_TICKS } from "../sim/sun.js?v=2";
 import { columnFloor, acceptCertifiedSlump, bitMode, certifySlump } from "../sim/crust.js";
 import { bitAim, crustFeet } from "../sim/bit.js?v=2";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceBow, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceBoxes, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceBow, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -251,6 +251,7 @@ let idleGap = 0;
 // The picture thread draws off the main thread. One trace at a time, and the next
 // one stays near the size whose cost we have actually measured.
 let pictureBusy = false;
+let firstLook = null;
 let gpuDrawMs = 0;
 let shownTraceW = 0;
 let shownTraceH = 0;
@@ -1723,8 +1724,15 @@ function refreshAim(sample = {}) {
   if (slot === "bit") {
     return toolAim("bit", eye, dir, [{ type: "crust", field: terrain.log.crust }], yard.pieces);
   }
-  const objects = sceneFor(sample, 16, 9).objects.filter((object) => !object.self);
-  return toolAim(slot, eye, dir, objects, yard.pieces);
+  const objects = [{ type: "crust", field: terrain.log.crust }, ...pieceBoxes(yard.pieces)];
+  const pad = atoll.placements.dummy;
+  objects.push({
+    type: "sphere",
+    origin: [pad.x / 100, pad.y / 100, 0.9],
+    radius: 0.35,
+    body: "dummy",
+  });
+  return toolAim("hammer", eye, dir, objects, yard.pieces);
 }
 
 function adoptTarget(subject) {
@@ -2521,7 +2529,135 @@ function markTarget(scene) {
 }
 
 let lastScene = null;
+
+function releaseLook() {
+  if (!firstLook) return;
+  const go = firstLook;
+  firstLook = null;
+  go();
+}
+
+function applyLook(look) {
+  if (!look?.color) return;
+  const [r, g, b] = look.color;
+  canvas.dataset.center = `${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)}`;
+  const inEyes = zoom.blend >= 1 || (view === "first" && zoom.blend === 0);
+  const reading = inEyes ? rangeRead(look.rangeT, skills.ranging.value + skills.measure.value * 0.5, optics) : null;
+  rangeText = reading?.text || "";
+  if (reading?.meters != null) grantUse(skills, "ranging", { tick, gap: 45 });
+}
+
+function stageFor(sample, width, height, scene) {
+  const aim = cameraAim(sample);
+  return {
+    feet: [player.position[0], player.position[1], player.position[2]],
+    yaw: sample.yaw ?? yaw,
+    pitch: sample.pitch ?? pitch,
+    crouch: !!sample.crouch || rollSpeed(roll, tick) > 0,
+    tick,
+    sunTick: envTick(),
+    seed: atoll.worldSeed,
+    cell: atoll.cellId,
+    crust: [...terrain.log.crust.overrides],
+    pieces: yard.pieces,
+    width,
+    height,
+    view: followId ? "third" : view,
+    self: !followId && zoom.blend < 0.65 && view !== "first",
+    others: drawnOthers(),
+    cameraOrigin: cameraPos ? cameraPos.slice() : null,
+    cameraDir: cameraLook ? cameraLook.slice() : null,
+    fov: aim.fov,
+    lean,
+    smoke: smokeTicks > 0 ? [...(smokeAt || player.position)] : null,
+    swarm: swarmAt ? swarmAt.slice() : swarmPoint(player.position[0], player.position[1], digs),
+    pools,
+    bolts: bolts.map((bolt) => ({ position: bolt.position.slice() })),
+    loose: looseBodies(world).map((body) => ({
+      position: body.position,
+      size: body.size,
+      color: body.color,
+    })),
+    sparse: Boolean(bot),
+    stride: Math.min(1, Math.hypot(player.velocity?.[0] || 0, player.velocity?.[1] || 0) / 2.2),
+    gait: bodyGait,
+    worn: wornFor(slot),
+    down: fallenIds(),
+    wear: scene.wear,
+    prints: scene.prints,
+    work,
+    time: scene.time,
+    rain: scene.rain,
+    gaze: scene.gaze,
+    fovea: scene.fovea,
+    inEyes: zoom.blend >= 1 || (view === "first" && zoom.blend === 0),
+  };
+}
+
+// The page keeps input and the HUD. The picture thread builds the island and reads the center ray.
+function paintRemote(sample, width, height) {
+  const aim = cameraAim(sample);
+  const shot = pictureCamera({
+    feet: player.position,
+    yaw: sample.yaw ?? yaw,
+    pitch: sample.pitch ?? pitch,
+    crouch: !!sample.crouch || rollSpeed(roll, tick) > 0,
+    tick,
+    sunTick: envTick(),
+    width,
+    height,
+    view: followId ? "third" : view,
+    cameraOrigin: cameraPos,
+    cameraDir: cameraLook,
+    fov: aim.fov,
+  });
+  const scene = { sun: shot.sun, miss: shot.miss, camera: shot.camera, objects: [] };
+  scene.wear = wearScene();
+  const hooves = herdPrints(Date.now()).slice(-PRINT_CAP);
+  const room = PRINT_CAP - hooves.length;
+  scene.prints = room > 0 ? [...prints.slice(-room), ...hooves] : hooves;
+  scene.work = work;
+  scene.time = envTick() / 30;
+  scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
+  scene.gaze = gazeFor(
+    scene.camera,
+    eyeOf(sample),
+    lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch),
+    skills.eyesight.value,
+    skills.focus.value,
+  );
+  if (scene.gaze) canvas.dataset.gaze = String(Math.round(scene.gaze.reach));
+  perception = withFocus(perceptionFrom({
+    eyesight: skills.eyesight.value,
+    focus: skills.focus.value,
+    hearing: skills.hearing.value,
+    localization: skills.localization.value,
+    dark: skills.dark.value,
+  }), {
+    x: scene.gaze ? scene.gaze.x : 0.5,
+    y: scene.gaze ? scene.gaze.y : 0.5,
+    dir: lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch),
+  });
+  scene.fovea = { ...foveaUniforms(perception), still: paintStill };
+  canvas.dataset.fovea = `${Math.round(perception.senses.sight.fovea * 180 / Math.PI)}deg/${perception.senses.sight.period}f`;
+  markTarget(scene);
+  markGoal(scene);
+  paintCues(scene);
+  if (performance.now() - abilityCheckAt > 500) { abilityCheckAt = performance.now(); checkAbilities(); }
+  paintNotices();
+  showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
+  const drew = painter.paintStage(stageFor(sample, width, height, scene), width, height);
+  if (drew) {
+    pictureBusy = true;
+    shownTraceW = width;
+    shownTraceH = height;
+  } else canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
+  lastScene = scene;
+  return scene;
+}
+
 function paint(sample, width = canvas.width, height = canvas.height) {
+  if (painter?.remote) return paintRemote(sample, width, height);
   const scene = sceneFor(sample, width, height);
   scene.wear = wearScene();
   const hooves = herdPrints(Date.now()).slice(-PRINT_CAP);
@@ -3229,9 +3365,12 @@ if (painter?.remote) {
   painter.onProblem = (reason) => {
     pictureBusy = false;
     showGlError(reason);
+    releaseLook();
   };
-  painter.onDrew = (ms) => {
+  painter.onDrew = (ms, look) => {
     pictureBusy = false;
+    if (look) applyLook(look);
+    releaseLook();
     if (!(ms > 0)) return;
     gpuDrawMs = ms;
     lastPaintMs = ms;
@@ -3250,7 +3389,13 @@ if (painter?.remote) {
 if (pictureUp) {
   bootNote("Drawing the beach", 0.9);
   await yieldToUi();
-  paint(first, painter?.remote ? 160 : canvas.width, painter?.remote ? 90 : canvas.height);
+  if (painter?.remote) {
+    await new Promise((resolve) => {
+      firstLook = resolve;
+      paint(first, 160, 90);
+      setTimeout(resolve, 4000);
+    });
+  } else paint(first, canvas.width, canvas.height);
   publish();
   canvas.dataset.ready = "1";
   bootDone();
@@ -4496,18 +4641,24 @@ if (params.get("still") !== "1") {
     if (!fromTimer) requestAnimationFrame(frame);
   };
   setInterval(() => { if (stalledFor(lastFrameMs, performance.now())) frame(performance.now(), true); }, STALL_POLL_MS);
-  if (keepSlot && keptWorld) {
-    for (const [key, sample] of keptWorld.crust || []) terrain.log.crust.overrides.set(key, sample);
-    for (const text of keptWorld.frames) {
-      try {
-        onOps(hexBytes(text));
-      } catch {
-        // A stored frame that no longer decodes is skipped.
-      }
-    }
-  }
   addEventListener("pagehide", () => {
     if (keepSlot && !holdKeep) pushSheet();
   });
-  requestAnimationFrame(frame);
+  const walk = async () => {
+    if (keepSlot && keptWorld) {
+      const crust = keptWorld.crust || [];
+      for (let i = 0; i < crust.length; i += 1) {
+        const [key, sample] = crust[i];
+        terrain.log.crust.overrides.set(key, sample);
+        if ((i & 31) === 31) await yieldToUi();
+      }
+      const frames = keptWorld.frames || [];
+      for (let i = 0; i < frames.length; i += 1) {
+        try { onOps(hexBytes(frames[i])); } catch { /* A stored frame that no longer decodes is skipped. */ }
+        if ((i & 3) === 3) await yieldToUi();
+      }
+    }
+    requestAnimationFrame(frame);
+  };
+  walk();
 }

@@ -77,9 +77,30 @@ function drawnPart(part, body, id = "") {
   };
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick = null, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null, down = [] }) {
+export function pictureCamera({ feet, yaw, pitch, crouch = false, tick = 0, sunTick = null, width = 1, height = 1, view = "first", cameraOrigin = null, cameraDir = null, fov = 70 }) {
   const eye = eyeHeight(crouch);
   const sun = sunDirection(sunTick == null ? tick : sunTick);
+  const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
+  const dir = cameraDir || lookDirection(yaw, pitch);
+  const origin = cameraOrigin
+    ? cameraOrigin.slice()
+    : view === "third"
+      ? chaseOrigin(feet, yaw, pitch, crouch)
+      : [feet[0], feet[1], feet[2] + eye];
+  return {
+    sun,
+    miss: [0.42 * day, 0.58 * day, 0.82 * day, 1],
+    camera: {
+      origin,
+      dir,
+      fov,
+      aspect: width / height,
+      planeDistance: 1,
+    },
+  };
+}
+
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick = null, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null, down = [] }) {
   const objects = [];
   if (crust !== false) {
     objects.push({ type: "crust", field: crust || new Crust(atoll.worldSeed, atoll.cellId) });
@@ -223,23 +244,8 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick
     });
     for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
   }
-  const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
-  const dir = cameraDir || lookDirection(yaw, pitch);
-  const origin = cameraOrigin
-    ? cameraOrigin.slice()
-    : view === "third"
-      ? chaseOrigin(feet, yaw, pitch, crouch)
-      : [feet[0], feet[1], feet[2] + eye];
   return {
-    sun,
-    miss: [0.42 * day, 0.58 * day, 0.82 * day, 1],
+    ...pictureCamera({ feet, yaw, pitch, crouch, tick, sunTick, width, height, view, cameraOrigin, cameraDir, fov }),
     objects: orderForCamera(objects, feet),
-    camera: {
-      origin,
-      dir,
-      fov,
-      aspect: width / height,
-      planeDistance: 1,
-    },
   };
 }

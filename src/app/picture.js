@@ -8,7 +8,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   }
   let thread;
   try {
-    thread = new WorkerImpl(new URL("./render-worker.js?v=2", import.meta.url), { type: "module" });
+    thread = new WorkerImpl(new URL("./render-worker.js?v=3", import.meta.url), { type: "module" });
   } catch {
     return { painter: null, remote: false };
   }
@@ -39,6 +39,16 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
         return false;
       }
     },
+    paintStage(stage, width, height) {
+      try {
+        thread.postMessage({ type: "stage", stage, width, height });
+        return true;
+      } catch (error) {
+        reason = String(error && error.message || error);
+        painter.onProblem?.(reason);
+        return false;
+      }
+    },
     present(blend) { thread.postMessage({ type: "present", blend }); },
     setSmoothing(on) { thread.postMessage({ type: "smooth", on }); },
   };
@@ -48,10 +58,11 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
       if (!settled) { settled = true; clearTimeout(timer); finish(true); }
     } else if (msg.type === "error") {
       reason = msg.reason || "picture";
+      if (msg.look) painter.onDrew?.(0, msg.look);
       painter.onProblem?.(reason);
       if (!settled) { settled = true; clearTimeout(timer); finish(false); }
     } else if (msg.type === "drew") {
-      painter.onDrew?.(msg.ms);
+      painter.onDrew?.(msg.ms, msg.look);
     }
   };
   thread.onerror = () => {
