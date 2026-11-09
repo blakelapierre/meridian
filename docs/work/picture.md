@@ -153,3 +153,48 @@ so the GLSL is valid. An empty log from ANGLE means the GPU driver's own compile
   page thread before using the CPU picture.
 - `tools/gpu-limits.mjs` scenarios: `malicore`, `malibare`, `maliall` (fragment shaders over a size
   fail with an empty log), and `lostcompile` (a big compile loses the context, which comes back 1 s later).
+
+## Batch 30: the effects as passes (Mali)
+
+On Blake's Mali-G715, core built (about 3 s) and lite failed after 12.5 s with an empty log. The
+limit is how complex one program is, not its length: in SwiftShader, `volcSurface` inside the trace
+added about 5.8 s of compile time, `withFog` 2.8 s and `caveShade` 1.6 s, and the bounce count barely
+mattered. So the heavy shading leaves the trace and runs as small post passes.
+
+- **Minified sources.** Every tier goes through `minifyGlsl` (no comments, indentation or blank
+  lines). The line structure is kept, so error line numbers still point at real lines. Lite and full
+  go from about 73k to 59.5k characters.
+- **Geo trace (boot tier below lite).** Core, but it keeps the cave and castle geometry
+  (`GEO_STUBS`). With `uRaw` set, it writes linear color + depth to an RGBA16F target and a G-buffer
+  to an RGBA32F target: first hit t, surface kind (+0.5 when n.z < 0), n.x, n.y.
+- **Passes** (`SPLIT_PASSES`, `passShader()`). Each pass is the full trace source with main()
+  replaced, the functions it doesn't reach dropped, and the result minified. Each one reads the
+  previous color and the G-buffer at its own pixel and keeps the trace's foveated discard. The last
+  pass writes the accumulation target, so history blending and present are unchanged.
+
+| program | chars (minified) | SwiftShader draw-time compile |
+|---|---|---|
+| geo trace (boot) | 46.3k | ~6.2 s |
+| core trace | 45.1k | ~7.9 s |
+| lite trace | 59.5k | ~9.7 s |
+| lava: magma flows | 10.7k | 0.12 s |
+| under: cave lights, gems, ice | 30.7k | 1.0 s |
+| air: fog, smoke and ash | 15.3k | 0.15 s |
+| shimmer: heat shimmer | 9.9k | 0.1 s |
+
+- **Background build.** On a tier below lite, `upgrade()` builds the passes one at a time with a
+  400 ms rest between them. Each pass switches on as it links, and the corner note reads
+  "effects k/5 on · building …" until it reaches "full effects on (5/5 passes)". A failed pass is
+  skipped ("some passes failed"), and the picture keeps the rest. The geo trace counts as the first
+  effect (caves and castle). The split needs EXT_color_buffer_float and 18 or more texture units;
+  `?debug=1` shows `split passes:` and the reason when it can't run.
+- **Remembered tier.** The page keeps `{gpu, tier}` in localStorage (`meridian.gpuTier`), so the
+  next boot on the same GPU skips the tiers that failed (on the Mali: no 12 s lite attempt). Any
+  `?gl=` ignores it, and booting on lite or full clears it.
+- **The crowd variant** (the sphere tree) is built only when a scene has more than `GPU_TREE_AT`
+  spheres on tiers below lite.
+- `?gl=split` forces this path on any GPU. `tools/gpu-limits.mjs malisplit` rejects fragment
+  shaders over 50k characters and busy-waits 1 ms per 15 characters in each compile.
+- The ladder is now full → lite → geo → core → bare.
+- Known gap: if lite builds but the whole full trace then fails, the picture stays lite. The split
+  only starts from the geo tier and below.

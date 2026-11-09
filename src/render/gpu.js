@@ -117,19 +117,32 @@ export const BARE_STUBS = {
   sphereAlbedo: "return fallback;",
   tiled: "return fallback;",
 };
+// The "geo" trace (the split picture's trace): core, but with the castle and cave geometry, so the
+// under pass can shade them. Their shading stays out of the trace.
+export const GEO_STUBS = Object.fromEntries(Object.entries(CORE_STUBS).filter(([name]) => !["underDist", "underKind", "eyeInCave"].includes(name)));
 export function coreShader(src, bare = false) {
-  const stubs = bare ? BARE_STUBS : CORE_STUBS;
+  const variant = bare === true ? "bare" : bare || "core";
+  const stubs = variant === "bare" ? BARE_STUBS : variant === "geo" ? GEO_STUBS : CORE_STUBS;
+  const thin = variant === "bare";
+  let out = stubFunctions(src, stubs);
+  out = out
+    .replace("for (int bounce = 0; bounce < 5; bounce++)", `for (int bounce = 0; bounce < ${thin ? 1 : 2}; bounce++)`)
+    .replace("float mirror = bounce == 4 ? 0.0", `float mirror = bounce == ${thin ? 0 : 1} ? 0.0`)
+    .replace("int lastBounce = edgeT > 0.5 ? 1 : 4;", `int lastBounce = ${thin ? 0 : 1};`)
+    .replace("for (int i = 0; i < 280; i++) {\n    if (float(i) >= budget", `for (int i = 0; i < ${thin ? 64 : 120}; i++) {\n    if (float(i) >= budget`);
+  return dropOrphans(out);
+}
+export function stubFunctions(src, stubs) {
   let out = src;
   for (const fn of glslFunctions(src).reverse()) {
     if (stubs[fn.name]) out = `${out.slice(0, fn.bodyStart)}{\n  ${stubs[fn.name]}\n}${out.slice(fn.end)}`;
   }
-  out = out
-    .replace("for (int bounce = 0; bounce < 5; bounce++)", `for (int bounce = 0; bounce < ${bare ? 1 : 2}; bounce++)`)
-    .replace("float mirror = bounce == 4 ? 0.0", `float mirror = bounce == ${bare ? 0 : 1} ? 0.0`)
-    .replace("int lastBounce = edgeT > 0.5 ? 1 : 4;", `int lastBounce = ${bare ? 0 : 1};`)
-    .replace("for (int i = 0; i < 280; i++) {\n    if (float(i) >= budget", `for (int i = 0; i < ${bare ? 64 : 120}; i++) {\n    if (float(i) >= budget`);
-  // Drop what nothing calls any more (repeat: removing one can orphan another).
-  for (let pass = 0; pass < 6; pass += 1) {
+  return out;
+}
+// Drop functions nothing calls (repeat: removing one can orphan another).
+export function dropOrphans(src) {
+  let out = src;
+  for (let pass = 0; pass < 8; pass += 1) {
     const fns = glslFunctions(out).filter((fn) => fn.name !== "main");
     let removed = false;
     for (const fn of fns.reverse()) {
@@ -142,6 +155,136 @@ export function coreShader(src, bare = false) {
     if (!removed) break;
   }
   return out;
+}
+// Smaller source for the driver: no // comments, no indentation, no blank lines. Line structure is
+// kept (preprocessor lines and error line numbers stay sane); nothing inside a line is rewritten.
+export function minifyGlsl(src) {
+  return src
+    .split("\n")
+    .map((line) => line.replace(/\/\/.*$/, "").trim().replace(/[ \t]{2,}/g, " "))
+    .filter(Boolean)
+    .join("\n");
+}
+
+// The split picture (Batch 30). A GPU whose compiler cannot take the whole trace in one program
+// (Mali-G715: lite, ~73k chars, fails after 12 s with no log; core, ~56k, builds in ~3 s) boots on
+// core and then builds the effects as separate small programs, one at a time, each swapped in as it
+// links. The geo trace writes linear color and the first hit (t, kind, normal) to two targets; each
+// pass reads them at its own pixel and writes the next color, and the last one finishes the picture.
+// Every pass keeps the trace's foveated discard, so it touches the same pixels the trace did.
+export const SPLIT_PASSES = [
+  { name: "geo", label: "caves and castle" },
+  { name: "lava", label: "magma flows" },
+  { name: "under", label: "cave lights, gems, ice" },
+  { name: "air", label: "fog, smoke and ash" },
+  { name: "shimmer", label: "heat shimmer" },
+];
+const PASS_HEAD = `
+uniform sampler2D uIn;
+uniform sampler2D uGbuf;
+uniform float uLast;
+// The trace's ray for this pixel (main() in the trace, before any heat shimmer).
+vec3 passRay() {
+  float halfAngle = tan(uFov * 0.008726646259971648) * uPlane;
+  float px = (vRay.x * 2.0 - 1.0) * uAspect * halfAngle;
+  float py = (1.0 - vRay.y * 2.0) * halfAngle;
+  return normalize(uRight * px + uUp * py + uForward * uPlane);
+}
+// The trace's foveated discard, so a pass touches exactly the pixels the trace drew this frame.
+void passKeep() {
+  if (uFull < 0.5) {
+    float ft = fovT(vRay);
+    vec2 pix = floor(gl_FragCoord.xy);
+    if (ign(pix + 5.588238 * mod(uFrame, 64.0)) >= fovDensity(ft)) discard;
+  }
+}
+vec3 passNormal(vec4 g) {
+  float z = sqrt(max(0.0, 1.0 - g.z * g.z - g.w * g.w));
+  return vec3(g.z, g.w, fract(g.y) > 0.25 ? -z : z);
+}
+void passOut(vec3 rgb, float depthCode) {
+  fragColor = uLast > 0.5 ? vec4(present(rgb), depthCode) : vec4(rgb, depthCode);
+}
+`;
+const PASS_MAIN = {
+  lava: `
+void main() {
+  passKeep();
+  ivec2 pix = ivec2(gl_FragCoord.xy);
+  vec4 c = texelFetch(uIn, pix, 0);
+  vec4 g = texelFetch(uGbuf, pix, 0);
+  if (int(floor(g.y)) == 1 && uVolcano > -0.5) {
+    vec3 p = uOrigin + passRay() * g.x;
+    if (inVolcBox(p.xy)) {
+      p.z = duneHeight(p.xy);
+      vec3 rgb = c.rgb;
+      float ref = 0.0;
+      vec3 glow = volcSurface(p, rgb, ref);
+      c.rgb = rgb + glow;
+    }
+  }
+  passOut(c.rgb, c.a);
+}`,
+  under: `
+void main() {
+  passKeep();
+  ivec2 pix = ivec2(gl_FragCoord.xy);
+  vec4 c = texelFetch(uIn, pix, 0);
+  vec4 g = texelFetch(uGbuf, pix, 0);
+  int kind = int(floor(g.y));
+  if (kind == 2 || kind == 3 || kind == 5) {
+    vec3 rd = passRay();
+    vec3 p = uOrigin + rd * g.x;
+    vec3 n = passNormal(g);
+    if (kind == 2) c.rgb = caveShade(p, n, rd);
+    else {
+      // The trace lit a grey (0.5) ice; scale to the frost and add what shows through the ice.
+      vec3 rgb = vec3(0.5);
+      vec3 glow = iceShade(p, n, rd, kind - 1, rgb);
+      c.rgb = c.rgb * (rgb / 0.5) + glow;
+    }
+  }
+  passOut(c.rgb, c.a);
+}`,
+  air: `
+void main() {
+  passKeep();
+  ivec2 pix = ivec2(gl_FragCoord.xy);
+  vec4 c = texelFetch(uIn, pix, 0);
+  vec4 g = texelFetch(uGbuf, pix, 0);
+  vec3 rd = passRay();
+  float t = g.x > 0.0 ? g.x : 4000.0;
+  vec3 rgb = withFog(uOrigin, rd, t, c.rgb);
+  rgb = withVolcanoAir(uOrigin, rd, t, rgb);
+  passOut(rgb, c.a);
+}`,
+  shimmer: `
+void main() {
+  passKeep();
+  ivec2 pix = ivec2(gl_FragCoord.xy);
+  vec4 c = texelFetch(uIn, pix, 0);
+  vec3 rd = passRay();
+  vec3 bent = heatShimmer(uOrigin, rd);
+  if (dot(bent - rd, bent - rd) > 1.0e-10) {
+    // Where the bent ray lands on the picture: the inverse of passRay.
+    float halfAngle = tan(uFov * 0.008726646259971648) * uPlane;
+    float s = uPlane / max(dot(bent, uForward), 1.0e-3);
+    float uu = (dot(bent, uRight) * s / (uAspect * halfAngle) + 1.0) * 0.5;
+    float vv = (1.0 - dot(bent, uUp) * s / halfAngle) * 0.5;
+    vec2 size = vec2(textureSize(uIn, 0));
+    ivec2 at = ivec2(clamp(vec2(uu, 1.0 - vv) * size, vec2(0.0), size - 1.0));
+    c.rgb = texelFetch(uIn, at, 0).rgb;
+  }
+  passOut(c.rgb, c.a);
+}`,
+};
+// One pass program's source, from the full trace source: the trace's main() is replaced, and
+// everything the pass does not reach is dropped.
+export function passShader(fullSrc, name) {
+  const main = glslFunctions(fullSrc).find((fn) => fn.name === "main");
+  if (!main || !PASS_MAIN[name]) return "";
+  const body = fullSrc.slice(0, main.start) + PASS_HEAD + PASS_MAIN[name] + fullSrc.slice(main.end);
+  return minifyGlsl(dropOrphans(body.replace("layout(location = 1) out vec4 gOut;", "")));
 }
 
 function fail(canvas, reason) {
@@ -383,7 +526,7 @@ export function createGpuPainter(canvas, options = {}) {
     const info = gl.getExtension("WEBGL_debug_renderer_info");
     canvas.dataset.gpuInfo = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).slice(0, 80);
   } catch {}
-  gl.getExtension("EXT_color_buffer_float");
+  const floatTargets = Boolean(gl.getExtension("EXT_color_buffer_float"));
   const vert = `#version 300 es
 in vec2 aPos;
 out vec2 vRay;
@@ -464,7 +607,11 @@ uniform int uLooseShapes;
 /*@tree*/
 uniform sampler2D uNodes;
 /*@tree*/
-out vec4 fragColor;
+// uRaw (the split picture, Batch 30): write linear color and the first hit (t, kind, normal) for the
+// effect passes instead of the finished picture.
+uniform float uRaw;
+layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 gOut;
 
 float gFoot = 0.0;
 // gFoot is meters covered by one pixel at the hit, so the atlas lod follows distance and grazing angle.
@@ -771,6 +918,8 @@ vec3 underNormal(vec3 p, float e) {
   return length(n) > 1.0e-6 ? normalize(n) : vec3(0.0, 0.0, 1.0);
 }
 int gUnderHit = 0;
+int gHitKind = 0;
+vec3 gHitN = vec3(0.0, 0.0, 1.0);
 
 bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   gStep = 0.0;
@@ -1994,6 +2143,7 @@ void main() {
     }
     vec3 bestGlow = vec3(0.0);
     bool caveLit = false;
+    if (bounce == 0) gHitKind = 0;
     if (found && sand && bestT == sandT) {
       if (underHit == 0) bestGlow = volcSurface(bestP, bestRgb, bestRef);
       else {
@@ -2027,6 +2177,12 @@ void main() {
     if (bounce == 0) firstT = min(bestT, workT);
     if (found) {
       if (dot(bestN, rd) > 0.0) bestN = -bestN;
+      // The first hit, for the effect passes: 1 ground, 2 cave rock, 3 castle ice, 4 castle snow,
+      // 5 spire ice, 6 anything else.
+      if (bounce == 0) {
+        gHitKind = sand && bestT == sandT ? (underHit == 0 ? 1 : underHit + 1) : 6;
+        gHitN = bestN;
+      }
       if (bounce == 0 && !caveLit) {
         bestRgb = sunLit(bestP, bestN, bestRgb);
         // Wet ground shines: a grazing-angle sky sheen where it rains, so puddled flats catch the light.
@@ -2110,6 +2266,11 @@ void main() {
   }
   // Alpha carries log depth (0 near, 1 at 4 km) for future reprojection.
   float depthCode = clamp(log2(1.0 + firstT) / 12.0, 0.0, 1.0);
+  if (uRaw > 0.5) {
+    fragColor = vec4(accum, depthCode);
+    gOut = vec4(firstT, float(gHitKind) + (gHitN.z < 0.0 ? 0.5 : 0.0), gHitN.x, gHitN.y);
+    return;
+  }
   fragColor = vec4(present(accum), depthCode);
 }`;
   const specialize = (source, tree) => source.replace(/\/\*@(tree|line)\*\/([\s\S]*?)\/\*@\1\*\//g, (_, tag, inner) => ((tag === "tree") === tree ? inner : ""));
@@ -2117,9 +2278,18 @@ void main() {
   // Tiers, heaviest first: full, lite (heavy effects compiled out), core (coreShader). Boot tries
   // the asked tier and then each lighter one; a lost context stops the ladder (the caller waits
   // for the context to come back and starts again on core).
-  const TIERS = ["full", "lite", "core", "bare"];
-  const sourceFor = (name) => (name === "core" || name === "bare" ? coreShader(fragFor(true), name === "bare") : fragFor(name !== "full"));
+  // geo (core plus the castle and cave geometry) sits between lite and core: it is the split
+  // picture's trace, so a GPU that boots on it only needs the small effect passes afterwards.
+  const TIERS = ["full", "lite", "geo", "core", "bare"];
+  const sourceFor = (name) => minifyGlsl(name === "geo" || name === "core" || name === "bare" ? coreShader(fragFor(true), name) : fragFor(name !== "full"));
   let tier = options.tier && TIERS.includes(options.tier) ? options.tier : lite ? "lite" : "full";
+  // The page remembers which tier this GPU ended on (options.hint): start there, and skip the
+  // compiles that failed last time (12 s of lite on a Mali-G715).
+  const hint = options.hint;
+  if (hint && hint.gpu && hint.gpu === canvas.dataset.gpuInfo && TIERS.indexOf(hint.tier) > TIERS.indexOf(tier)) {
+    tier = hint.tier;
+    canvas.dataset.gpuHinted = hint.tier;
+  }
   let fragBody = sourceFor(tier);
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
   if (!vs) return fail(canvas, `shader compile: ${compileProblem(compile.last, "vertex")}`, compile.last);
@@ -2164,12 +2334,13 @@ void main() {
   // timer) polls them and swaps each program in the moment it links. No frame waits on a compile.
   const parallel = gl.getExtension("KHR_parallel_shader_compile");
   let treeProgram = null;
+  let wantTree = false;
   let treeJob = null;
   let fullJob = null;
   let pointJob = null;
   // "failed": asked for full at boot, the compile failed and it fell back to lite.
   const askedTier = options.tier || (options.lite ? "lite" : "full");
-  const effects = { state: tier === "core" || tier === "bare" ? tier : !lite ? "full" : askedTier === "lite" ? "lite" : "failed", log: canvas.dataset.gpuFullError || "", startedAt: 0, ms: 0, parallel: Boolean(parallel), onChange: null };
+  const effects = { done: 0, total: 0, on: [], state: tier === "geo" || tier === "core" || tier === "bare" ? tier : !lite ? "full" : askedTier === "lite" ? "lite" : "failed", log: canvas.dataset.gpuFullError || "", startedAt: 0, ms: 0, parallel: Boolean(parallel), onChange: null };
   const setEffects = (state, log = effects.log) => {
     effects.state = state;
     effects.log = log;
@@ -2200,18 +2371,87 @@ void main() {
   // Start (or restart, after the full shader lands) the crowd variant of whatever shader is live.
   const warmTree = () => {
     if (treeJob && treeJob.state === "pending") return;
+    // On the small tiers another whole-trace compile is a long pause: build the crowd variant only
+    // once a scene actually has a crowd (draw() asks).
+    if (tier !== "lite" && tier !== "full" && !wantTree) return;
     treeJob = startProgram(gl, parallel, vs, specialize(fragBody, true));
   };
   // Swap in the full-effects shader, in the background. Returns false when there is nothing to do.
-  const upgrade = () => {
-    // Only from lite: a GPU that needed the core tier would not survive the full compile.
-    if (!lite || fullJob || tier !== "lite") return false;
+  // The split picture: on geo, core or bare, the effects come as small passes (SPLIT_PASSES).
+  const split = {
+    ok: floatTargets && caps.textureUnits >= 18 && options.split !== false,
+    queue: [],
+    job: null,
+    jobName: "",
+    nextAt: 0,
+    active: {},
+    failed: {},
+    A: null,
+    B: null,
+    G: null,
+    fboTrace: null,
+    fboA: null,
+    fboB: null,
+    locs: new Map(),
+  };
+  canvas.dataset.gpuSplit = split.ok ? "ok" : floatTargets ? "few units" : "no float targets";
+  const passOrder = ["lava", "under", "air", "shimmer"];
+  const splitCount = () => {
+    const names = SPLIT_PASSES.map((p) => p.name);
+    const on = names.filter((n) => (n === "geo" ? tier === "geo" : Boolean(split.active[n])));
+    return { done: on.length, total: names.length, on };
+  };
+  const splitNote = () => {
+    const c = splitCount();
+    effects.done = c.done;
+    effects.total = c.total;
+    effects.on = c.on;
+  };
+  const startSplit = () => {
+    if (!split.ok || split.queue.length || split.job || tier === "lite" || tier === "full") return false;
+    split.queue = passOrder.filter((n) => n !== "under" || tier === "geo");
+    split.nextAt = Date.now() + 200;
     effects.startedAt = Date.now();
-    fullJob = startProgram(gl, parallel, vs, specialize(fragFor(false), false));
+    splitNote();
+    setEffects("loading");
+    return true;
+  };
+  const tickSplit = () => {
+    if (split.job) {
+      const state = split.job.poll();
+      if (state === "pending") return;
+      const name = split.jobName;
+      if (state === "ok") split.active[name] = split.job.program;
+      else split.failed[name] = split.job.log || "failed";
+      split.job = null;
+      effects.building = "";
+      // Rest a moment between builds so the picture keeps moving (no parallel compile: each
+      // build pauses the picture for its compile time).
+      split.nextAt = Date.now() + 400;
+      splitNote();
+      if (!split.queue.length) {
+        const fails = Object.entries(split.failed).map(([n, log]) => `${n}: ${String(log).slice(0, 300)}`).join("\n");
+        if (fails) canvas.dataset.gpuFullError = fails.slice(0, 600);
+        setEffects(fails ? "partial" : "full", fails);
+      } else setEffects("loading");
+      return;
+    }
+    if (!split.queue.length || Date.now() < split.nextAt) return;
+    split.jobName = split.queue.shift();
+    effects.building = SPLIT_PASSES.find((p) => p.name === split.jobName)?.label || split.jobName;
+    setEffects("loading");
+    split.job = startProgram(gl, parallel, vs, passShader(specialize(fragFor(false), false), split.jobName));
+  };
+  const upgrade = () => {
+    if (tier !== "lite") return startSplit();
+    if (!lite || fullJob) return false;
+    effects.startedAt = Date.now();
+    fullJob = startProgram(gl, parallel, vs, minifyGlsl(specialize(fragFor(false), false)));
     setEffects("loading");
     return true;
   };
   const tick = () => {
+    tickSplit();
     if (fullJob && fullJob.state === "pending") {
       const state = fullJob.poll();
       if (state === "ok") {
@@ -2620,6 +2860,88 @@ void main() {
     return { tex, fbo: gl.createFramebuffer(), w: 0, h: 0 };
   };
   const accumSlot = makeTarget(gl.LINEAR);
+  const lastUniforms = new Map();
+  let lastFovea = null;
+  let rawTrace = false;
+  // Split-picture targets: A and B (linear color, ping-pong) and G (first hit), all trace-sized.
+  const fitFloat = (slot, tw, th, internal, type) => {
+    if (slot.w === tw && slot.h === th) return true;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, slot.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, tw, th, 0, gl.RGBA, type, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    slot.w = tw;
+    slot.h = th;
+    return true;
+  };
+  const fitSplit = (tw, th) => {
+    if (!split.A) {
+      split.A = makeTarget(gl.NEAREST);
+      split.B = makeTarget(gl.NEAREST);
+      split.G = makeTarget(gl.NEAREST);
+      split.fboTrace = split.A.fbo;
+      split.fboA = gl.createFramebuffer();
+      split.fboB = split.B.fbo;
+    }
+    const sized = split.A.w === tw && split.A.h === th && split.G.w === tw;
+    if (sized) return split.ready;
+    fitFloat(split.A, tw, th, gl.RGBA16F, gl.HALF_FLOAT);
+    fitFloat(split.B, tw, th, gl.RGBA16F, gl.HALF_FLOAT);
+    fitFloat(split.G, tw, th, gl.RGBA32F, gl.FLOAT);
+    const attach = (fbo, list) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      list.forEach((tex, i) => gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, tex, 0));
+      gl.drawBuffers(list.map((_, i) => gl.COLOR_ATTACHMENT0 + i));
+      return gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    };
+    split.ready = attach(split.fboTrace, [split.A.tex, split.G.tex]) && attach(split.fboA, [split.A.tex]) && attach(split.fboB, [split.B.tex]);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!split.ready) {
+      split.ok = false;
+      canvas.dataset.gpuSplit = "targets incomplete";
+    }
+    return split.ready;
+  };
+  // Run the live effect passes over the raw trace in A (+ G); the last one writes the accumulation target.
+  const runPasses = (names, tw, th, camera) => {
+    let from = split.A;
+    names.forEach((name, i) => {
+      const last = i === names.length - 1;
+      const prog = split.active[name];
+      const to = last ? accumSlot : from === split.A ? split.B : split.A;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, last ? accumSlot.fbo : to === split.A ? split.fboA : split.fboB);
+      gl.viewport(0, 0, tw, th);
+      gl.useProgram(prog);
+      let locs = split.locs.get(prog);
+      if (!locs) split.locs.set(prog, (locs = new Map()));
+      const loc = (n) => {
+        if (!locs.has(n)) locs.set(n, gl.getUniformLocation(prog, n));
+        return locs.get(n);
+      };
+      for (const [n, [fn, args]] of lastUniforms) {
+        const l = loc(n);
+        if (l) gl[fn](l, ...args);
+      }
+      if (lastFovea) setFovea(prog, ...lastFovea);
+      gl.activeTexture(gl.TEXTURE16);
+      gl.bindTexture(gl.TEXTURE_2D, from.tex);
+      gl.uniform1i(loc("uIn"), 16);
+      gl.activeTexture(gl.TEXTURE17);
+      gl.bindTexture(gl.TEXTURE_2D, split.G.tex);
+      gl.uniform1i(loc("uGbuf"), 17);
+      gl.uniform1f(loc("uLast"), last ? 1 : 0);
+      gl.uniform1f(loc("uRaw"), 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      from = to;
+    });
+    gl.activeTexture(gl.TEXTURE16);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE17);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  };
   let frame = 0;
   let stillFrames = 0;
   let forceFull = true;
@@ -2721,6 +3043,10 @@ void main() {
       }
       const miss = scene.miss || [0.45, 0.62, 0.85, 1];
       const sun = scene.sun || [0, 0, 1];
+      if (spheres > GPU_TREE_AT && !treeProgram) {
+        wantTree = true;
+        warmTree();
+      }
       const useTree = mode !== "points" && !!treeProgram && !!nodeTex && spheres > GPU_TREE_AT && packGpuNodes(sphereData, spheres);
       const prog = mode === "points" && pointProgram ? pointProgram : (useTree ? treeProgram : program);
       const u = (name) => gl.getUniformLocation(prog, name);
@@ -2752,30 +3078,37 @@ void main() {
         gl.generateMipmap(gl.TEXTURE_2D);
         atlasDirty = false;
       }
-      gl.uniform1i(u("uSphereTex"), 0);
-      gl.uniform1i(u("uSphereColor"), 1);
-      gl.uniform1i(u("uBoxMin"), 2);
-      gl.uniform1i(u("uBoxMax"), 3);
-      gl.uniform1i(u("uBoxColor"), 4);
-      gl.uniform1i(u("uDigTex"), 5);
-      gl.uniform1i(u("uPrintTex"), 8);
-      gl.uniform1i(u("uTexRects"), 6);
-      gl.uniform1i(u("uAtlas"), 7);
+      // Uniforms go through U so the split picture's passes can be given the same values.
+      lastUniforms.clear();
+      const U = (fn, name, ...args) => {
+        lastUniforms.set(name, [fn, args]);
+        const loc = u(name);
+        if (loc) gl[fn](loc, ...args);
+      };
+      U("uniform1i", "uSphereTex", 0);
+      U("uniform1i", "uSphereColor", 1);
+      U("uniform1i", "uBoxMin", 2);
+      U("uniform1i", "uBoxMax", 3);
+      U("uniform1i", "uBoxColor", 4);
+      U("uniform1i", "uDigTex", 5);
+      U("uniform1i", "uPrintTex", 8);
+      U("uniform1i", "uTexRects", 6);
+      U("uniform1i", "uAtlas", 7);
       gl.activeTexture(gl.TEXTURE14);
       gl.bindTexture(gl.TEXTURE_2D, shapeTex);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_SHAPES, 4, gl.RGBA, gl.FLOAT, shapeData);
-      gl.uniform1i(u("uShapes"), 14);
-      gl.uniform1i(u("uShapeCount"), shapes);
-      gl.uniform1i(u("uLooseShapes"), loose);
+      U("uniform1i", "uShapes", 14);
+      U("uniform1i", "uShapeCount", shapes);
+      U("uniform1i", "uLooseShapes", loose);
       gl.activeTexture(gl.TEXTURE12);
       gl.bindTexture(gl.TEXTURE_2D, shapeNodeTex);
       if (shapeNodes > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, shapeNodes, gl.RGBA, gl.FLOAT, shapeNodeData);
-      gl.uniform1i(u("uShapeNodes"), 12);
-      gl.uniform1i(u("uShapeNodeCount"), shapeNodes);
+      U("uniform1i", "uShapeNodes", 12);
+      U("uniform1i", "uShapeNodeCount", shapeNodes);
       gl.activeTexture(gl.TEXTURE9);
       gl.bindTexture(gl.TEXTURE_2D, shapeIndexTex);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_SHAPES, 1, gl.RGBA, gl.FLOAT, shapeIndexData);
-      gl.uniform1i(u("uShapeIndex"), 9);
+      U("uniform1i", "uShapeIndex", 9);
       if (useTree) {
         gl.activeTexture(gl.TEXTURE15);
         gl.bindTexture(gl.TEXTURE_2D, nodeTex);
@@ -2785,49 +3118,49 @@ void main() {
       }
       gl.activeTexture(gl.TEXTURE13);
       gl.bindTexture(gl.TEXTURE_2D, wearTex);
-      gl.uniform1i(u("uWearTex"), 13);
-      gl.uniform3f(u("uWear"), wear ? wear.origin[0] : 0, wear ? wear.origin[1] : 0, wear ? wear.cell : 0);
-      gl.uniform3f(u("uOrigin"), scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
-      gl.uniform3f(u("uForward"), basis.forward[0], basis.forward[1], basis.forward[2]);
-      gl.uniform3f(u("uRight"), basis.right[0], basis.right[1], basis.right[2]);
-      gl.uniform3f(u("uUp"), basis.up[0], basis.up[1], basis.up[2]);
-      gl.uniform3f(u("uSun"), sun[0], sun[1], sun[2]);
-      gl.uniform4f(u("uMiss"), miss[0], miss[1], miss[2], miss[3]);
-      gl.uniform1f(u("uFov"), scene.camera.fov);
-      gl.uniform1f(u("uAspect"), scene.camera.aspect);
-      gl.uniform1f(u("uPlane"), scene.camera.planeDistance);
+      U("uniform1i", "uWearTex", 13);
+      U("uniform3f", "uWear", wear ? wear.origin[0] : 0, wear ? wear.origin[1] : 0, wear ? wear.cell : 0);
+      U("uniform3f", "uOrigin", scene.camera.origin[0], scene.camera.origin[1], scene.camera.origin[2]);
+      U("uniform3f", "uForward", basis.forward[0], basis.forward[1], basis.forward[2]);
+      U("uniform3f", "uRight", basis.right[0], basis.right[1], basis.right[2]);
+      U("uniform3f", "uUp", basis.up[0], basis.up[1], basis.up[2]);
+      U("uniform3f", "uSun", sun[0], sun[1], sun[2]);
+      U("uniform4f", "uMiss", miss[0], miss[1], miss[2], miss[3]);
+      U("uniform1f", "uFov", scene.camera.fov);
+      U("uniform1f", "uAspect", scene.camera.aspect);
+      U("uniform1f", "uPlane", scene.camera.planeDistance);
       const rw = viewSize ? viewSize.w : canvas.width;
       const rh = viewSize ? viewSize.h : canvas.height;
-      gl.uniform2f(u("uRes"), rw, rh);
-      gl.uniform1i(u("uSpheres"), spheres);
-      gl.uniform1i(u("uBoxes"), boxes);
-      gl.uniform1i(u("uDigs"), digs);
-      gl.uniform1i(u("uPrints"), shown);
-      gl.uniform1f(u("uRain"), scene.rain || 0);
+      U("uniform2f", "uRes", rw, rh);
+      U("uniform1i", "uSpheres", spheres);
+      U("uniform1i", "uBoxes", boxes);
+      U("uniform1i", "uDigs", digs);
+      U("uniform1i", "uPrints", shown);
+      U("uniform1f", "uRain", scene.rain || 0);
       const work = scene.work;
-      gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
-      gl.uniform1f(u("uTime"), scene.time || 0);
-      gl.uniform1f(u("uFrame"), frame);
+      U("uniform4f", "uWork", work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
+      U("uniform1f", "uTime", scene.time || 0);
+      U("uniform1f", "uFrame", frame);
       // Unit 10 is shared with the blit pass, so the land grid is rebound every trace draw.
       gl.activeTexture(gl.TEXTURE10);
       gl.bindTexture(gl.TEXTURE_2D, landTex);
-      gl.uniform1i(u("uLand"), 10);
-      gl.uniform4f(u("uLandBox"), LAND_X0, LAND_Y0, landTex ? LAND_W : 0, landTex ? LAND_H : 0);
-      gl.uniform1ui(u("uPineSeed"), (landField.seedHash ^ 0x9172) >>> 0);
-      gl.uniform1f(u("uFog"), scene.fog ?? 1);
-      gl.uniform4fv(u("uFogBank[0]"), fogBank);
-      gl.uniform4f(u("uFogBox"), fogX0, fogY0, fogX1, fogY1);
-      gl.uniform1f(u("uFogTop"), fogTop);
+      U("uniform1i", "uLand", 10);
+      U("uniform4f", "uLandBox", LAND_X0, LAND_Y0, landTex ? LAND_W : 0, landTex ? LAND_H : 0);
+      U("uniform1ui", "uPineSeed", (landField.seedHash ^ 0x9172) >>> 0);
+      U("uniform1f", "uFog", scene.fog ?? 1);
+      U("uniform4fv", "uFogBank[0]", fogBank);
+      U("uniform4f", "uFogBox", fogX0, fogY0, fogX1, fogY1);
+      U("uniform1f", "uFogTop", fogTop);
       gl.activeTexture(gl.TEXTURE11);
       gl.bindTexture(gl.TEXTURE_2D, volcTex);
-      gl.uniform1i(u("uVolc"), 11);
-      gl.uniform4f(u("uVolcBox"), VOLC_X0, VOLC_Y0, volcTex ? VOLC_W : 0, volcTex ? VOLC_W : 0);
+      U("uniform1i", "uVolc", 11);
+      U("uniform4f", "uVolcBox", VOLC_X0, VOLC_Y0, volcTex ? VOLC_W : 0, volcTex ? VOLC_W : 0);
       const vol = scene.volcano || null;
-      gl.uniform1f(u("uVolcano"), vol ? vol.on : 0);
-      gl.uniform1f(u("uHeat"), vol ? vol.heat : 0);
+      U("uniform1f", "uVolcano", vol ? vol.on : 0);
+      U("uniform1f", "uHeat", vol ? vol.heat : 0);
       const caves = scene.caves || null;
-      gl.uniform1f(u("uCaves"), caves ? caves.on : 1);
-      gl.uniform1f(u("uInCave"), caves && caves.inCave ? 1 : 0);
+      U("uniform1f", "uCaves", caves ? caves.on : 1);
+      U("uniform1f", "uInCave", caves && caves.inCave ? 1 : 0);
       const bombs = vol && vol.on ? (vol.bombs || []).slice(0, MAX_BOMBS) : [];
       bombPos.fill(0);
       bombVel.fill(0);
@@ -2835,13 +3168,15 @@ void main() {
         bombPos.set([b.x, b.y, b.z, b.r], i * 4);
         bombVel.set([b.vx, b.vy, b.vz, Math.max(0, b.heat)], i * 4);
       });
-      gl.uniform1i(u("uBombCount"), bombs.length);
-      gl.uniform4fv(u("uBombs[0]"), bombPos);
-      gl.uniform4fv(u("uBombVel[0]"), bombVel);
-      setFovea(prog, fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, refine: 0 }, scene.camera, !fovea || forceFull);
-      gl.uniform1f(u("uExposure"), exposureFor(sun));
+      U("uniform1i", "uBombCount", bombs.length);
+      U("uniform4fv", "uBombs[0]", bombPos);
+      U("uniform4fv", "uBombVel[0]", bombVel);
+      lastFovea = [fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, refine: 0 }, scene.camera, !fovea || forceFull];
+      setFovea(prog, ...lastFovea);
+      U("uniform1f", "uRaw", rawTrace ? 1 : 0);
+      U("uniform1f", "uExposure", exposureFor(sun));
       const halfTan = Math.tan(((scene.camera.fov || 70) * Math.PI) / 360);
-      gl.uniform1f(u("uFoot"), (2 * halfTan) / Math.max(2, rh));
+      U("uniform1f", "uFoot", (2 * halfTan) / Math.max(2, rh));
       if (prog === pointProgram) {
         const n = Math.max(0, Math.min(count | 0, rayUVs.length / 2));
         const w = Math.max(1, canvas.width);
@@ -2867,9 +3202,10 @@ void main() {
     get lite() { return lite; },
     get tier() { return tier; },
     warm: warmTree,
+    split: () => ({ ok: split.ok, why: canvas.dataset.gpuSplit, active: Object.keys(split.active), failed: { ...split.failed }, building: split.jobName && split.job ? split.jobName : "" }),
     upgrade,
     tick,
-    effects: () => ({ state: effects.state, log: effects.log, ms: effects.ms, parallel: effects.parallel }),
+    effects: () => ({ state: effects.state, log: effects.log, ms: effects.ms, parallel: effects.parallel, done: effects.done, total: effects.total, on: effects.on.slice(), building: effects.building || "" }),
     onEffects(fn) { effects.onChange = fn; },
     paint(scene, width, height) {
       tick();
@@ -2903,10 +3239,15 @@ void main() {
       const fovea = { ...base, refine: stillFrames / Math.max(1, base.period), cellMax: cellCap(tw, base.block) };
       releaseHold();
       gl.disable(gl.BLEND);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, accumSlot.fbo);
+      const passes = split.ok ? passOrder.filter((n) => split.active[n]) : [];
+      const splitNow = passes.length > 0 && fitSplit(tw, th);
+      rawTrace = splitNow;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, splitNow ? split.fboTrace : accumSlot.fbo);
       viewSize = { w: tw, h: th };
       const forceFullFrame = forceFull;
       const drew = draw(scene, "full", 0, fovea);
+      rawTrace = false;
+      if (drew && splitNow) runPasses(passes, tw, th, scene.camera);
       forceFull = false;
       frame = (frame + 1) % 3600;
       if (!drew) {
