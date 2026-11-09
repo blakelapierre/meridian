@@ -27,8 +27,11 @@ function fakeWorker() {
 const fakeCanvas = () => ({ transferControlToOffscreen: () => ({ offscreen: true }) });
 
 test("every device boots lite and upgrades to full effects; ?gl= picks the path and the shader", () => {
-  assert.deepEqual(pictureMode("", PHONE), { where: "worker", lite: true, upgrade: true, mobile: true });
-  assert.deepEqual(pictureMode("", DESK), { where: "worker", lite: true, upgrade: true, mobile: false });
+  assert.deepEqual(pictureMode("", PHONE), { where: "worker", lite: true, tier: "lite", upgrade: true, mobile: true });
+  assert.deepEqual(pictureMode("", DESK), { where: "worker", lite: true, tier: "lite", upgrade: true, mobile: false });
+  assert.deepEqual([pictureMode("?gl=core", PHONE).tier, pictureMode("?gl=core", PHONE).upgrade], ["core", false], "?gl=core: smallest tracer, no upgrade");
+  assert.deepEqual([pictureMode("?gl=bare", PHONE).tier, pictureMode("?gl=bare", PHONE).upgrade], ["bare", false]);
+  assert.equal(pictureMode("?gl=full", PHONE).tier, "full");
   assert.equal(pictureMode("", DESK, true).mobile, true, "userAgentData.mobile counts");
   assert.deepEqual([pictureMode("?gl=full", PHONE).lite, pictureMode("?gl=full", PHONE).upgrade], [false, false], "?gl=full: full from the start");
   assert.deepEqual([pictureMode("?gl=lite", DESK).lite, pictureMode("?gl=lite", DESK).upgrade], [true, false], "?gl=lite: stay lite");
@@ -189,16 +192,16 @@ test("the page falls back to the CPU picture instead of a dead stop; the shader 
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.doesNotMatch(main, /The picture did not start\. Reload the page\./);
   assert.match(main, /if \(!pictureUp\) \{[\s\S]{0,300}fallBackToCpu\(reason, Date\.now\(\) - wakeStart\);\n    pictureUp = true;/);
-  assert.match(main, /const fresh = canvas\.cloneNode\(false\);[\s\S]{0,400}canvas\.replaceWith\(fresh\);\n  canvas = fresh;\n  bindCanvasLoss\(canvas\);\n  bindCanvasInput\(canvas\);/);
+  assert.match(main, /const fresh = canvas\.cloneNode\(false\);[\s\S]{0,400}canvas\.replaceWith\(fresh\);\n  canvas = fresh;[\s\S]{0,200}bindCanvasLoss\(canvas\);\n    bindCanvasInput\(canvas\);/);
   assert.match(main, /const GL_DEBUG = new URLSearchParams\(location\.search\)\.get\("debug"\) === "1";/);
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /const capsProblem = gpuCapsProblem\(caps\);\n  if \(capsProblem\) return fail\(canvas, capsProblem\);/);
-  assert.match(gpu, /if \(vs && !fs && !lite\) \{[\s\S]{0,300}lite = true;\n    fragBody = fragFor\(true\);/);
+  assert.match(gpu, /for \(let k = TIERS\.indexOf\(tier\); k < TIERS\.length; k \+= 1\) \{/, "the shader degrades tier by tier");
   assert.match(gpu, /const bool LITE = \$\{liteNow \? "true" : "false"\};/);
   assert.match(gpu, /if \(LITE \|\| uVolcano < 0\.5\) return color;/);
   assert.match(gpu, /warm: warmTree,/);
   const worker = readFileSync(new URL("../src/app/render-worker.js", import.meta.url), "utf8");
   assert.match(worker, /self\.postMessage\(\{ type: "stage"/);
-  assert.match(worker, /createGpuPainter\(canvas, \{ lite: Boolean\(msg\.lite\) \}\)/);
+  assert.match(worker, /createGpuPainter\(canvas, \{ lite: tier !== "full", tier \}\)/);
   assert.match(worker, /painter\.warm\?\.\(\)/);
 });

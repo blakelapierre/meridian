@@ -68,22 +68,122 @@ const RECT_SLOTS = 48;
 const rectData = new Float32Array(RECT_SLOTS * 4);
 const atlasData = new Uint8Array(ATLAS * ATLAS * 4);
 
+// GLSL function definitions at top level: name, where the signature starts, where the body opens
+// and where it closes. Brace counting is enough: the trace has no braces in comments or strings.
+export function glslFunctions(src) {
+  const out = [];
+  const re = /^(?:highp |mediump |lowp )?(?:void|bool|int|uint|float|vec[234]|ivec[234]|uvec[234]|mat[234]) (\w+)\(([^)]*)\)\s*\{/gm;
+  let m;
+  while ((m = re.exec(src))) {
+    let depth = 0;
+    let i = m.index + m[0].length - 1;
+    for (; i < src.length; i += 1) {
+      if (src[i] === "{") depth += 1;
+      else if (src[i] === "}") { depth -= 1; if (depth === 0) break; }
+    }
+    out.push({ name: m[1], start: m.index, bodyStart: m.index + m[0].length - 1, end: i + 1 });
+    re.lastIndex = i + 1;
+  }
+  return out;
+}
+
+// The "core" tier: the smallest trace that still draws the island, for GPUs whose compiler gives up
+// (or loses the context) on the lite shader: no volcano air, heat, fog banks, caves, castle ice or
+// land shadows, one reflection instead of four, a shorter march. Text is removed before the
+// driver sees it (stubbed bodies, then functions nothing calls), so its compiler has less to do.
+export const CORE_STUBS = {
+  heatShimmer: "return rd;",
+  withVolcanoAir: "return color;",
+  withFog: "return color;",
+  volcSurface: "return vec3(0.0);",
+  caveShade: "return vec3(0.0);",
+  iceShade: "return vec3(0.0);",
+  underDist: "return d;",
+  underKind: "return 0;",
+  landShadow: "return 1.0;",
+  eyeInCave: "return uInCave > 0.5;",
+};
+// The "bare" tier, last before the CPU picture: core without pines, shapes, land detail, prints,
+// textures or clouds, no reflection and a short march. Dunes, water, boxes, spheres and the sky.
+export const BARE_STUBS = {
+  ...CORE_STUBS,
+  pineTop: "info = vec3(0.0);\n  return -1.0e9;",
+  considerShapes: "return;",
+  landSurface: "return;",
+  cloudShadeAt: "return 1.0;",
+  withPrints: "return rgb;",
+  withWear: "return rgb;",
+  groundAlbedo: "return vec3(0.78, 0.68, 0.5);",
+  sphereAlbedo: "return fallback;",
+  tiled: "return fallback;",
+};
+export function coreShader(src, bare = false) {
+  const stubs = bare ? BARE_STUBS : CORE_STUBS;
+  let out = src;
+  for (const fn of glslFunctions(src).reverse()) {
+    if (stubs[fn.name]) out = `${out.slice(0, fn.bodyStart)}{\n  ${stubs[fn.name]}\n}${out.slice(fn.end)}`;
+  }
+  out = out
+    .replace("for (int bounce = 0; bounce < 5; bounce++)", `for (int bounce = 0; bounce < ${bare ? 1 : 2}; bounce++)`)
+    .replace("float mirror = bounce == 4 ? 0.0", `float mirror = bounce == ${bare ? 0 : 1} ? 0.0`)
+    .replace("int lastBounce = edgeT > 0.5 ? 1 : 4;", `int lastBounce = ${bare ? 0 : 1};`)
+    .replace("for (int i = 0; i < 280; i++) {\n    if (float(i) >= budget", `for (int i = 0; i < ${bare ? 64 : 120}; i++) {\n    if (float(i) >= budget`);
+  // Drop what nothing calls any more (repeat: removing one can orphan another).
+  for (let pass = 0; pass < 6; pass += 1) {
+    const fns = glslFunctions(out).filter((fn) => fn.name !== "main");
+    let removed = false;
+    for (const fn of fns.reverse()) {
+      const rest = out.slice(0, fn.start) + out.slice(fn.end);
+      if (!new RegExp(`\\b${fn.name}\\s*\\(`).test(rest)) {
+        out = rest;
+        removed = true;
+      }
+    }
+    if (!removed) break;
+  }
+  return out;
+}
+
 function fail(canvas, reason) {
   canvas.dataset.gpuError = reason;
   return null;
 }
 
+// Compile one stage, synchronously. On failure compile.last says what we know: the stage, the
+// source length, the time, the info log, whether the context was lost (an empty log with a lost
+// context is a GPU watchdog or out-of-memory, not a GLSL error) and gl.getError().
 function compile(gl, type, src) {
+  const started = Date.now();
+  const stage = type === gl.VERTEX_SHADER ? "vertex" : "fragment";
   const shader = gl.createShader(type);
+  if (!shader) {
+    compile.last = { stage, chars: src.length, ms: 0, log: "", lost: Boolean(gl.isContextLost?.()), error: safeError(gl) };
+    compile.lastLog = "";
+    return null;
+  }
   gl.shaderSource(shader, src);
   gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const log = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
+  const ok = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+  if (!ok) {
+    const log = gl.getShaderInfoLog(shader) || "";
+    compile.last = { stage, chars: src.length, ms: Date.now() - started, log, lost: Boolean(gl.isContextLost?.()), error: safeError(gl), status: ok };
+    try { gl.deleteShader(shader); } catch {}
     compile.lastLog = log;
     return null;
   }
   return shader;
+}
+function safeError(gl) {
+  try { const e = gl.getError(); return e ? `0x${e.toString(16)}` : ""; } catch { return ""; }
+}
+// One line for the panel: "fragment, lite, 72838 chars, 5410 ms, context lost, glError 0x507: <log>".
+export function compileProblem(last, tier) {
+  if (!last) return "no detail";
+  const bits = [last.stage, tier, `${last.chars} chars`, `${last.ms} ms`];
+  if (last.lost) bits.push("context lost");
+  if (last.error) bits.push(`glError ${last.error}`);
+  if (last.status === null) bits.push("status null");
+  return `${bits.join(", ")}: ${String(last.log || "").trim() || "no log"}`;
 }
 
 function texture(gl, width) {
@@ -2014,24 +2114,50 @@ void main() {
 }`;
   const specialize = (source, tree) => source.replace(/\/\*@(tree|line)\*\/([\s\S]*?)\/\*@\1\*\//g, (_, tag, inner) => ((tag === "tree") === tree ? inner : ""));
   const compileStart = Date.now();
-  let fragBody = fragFor(lite);
+  // Tiers, heaviest first: full, lite (heavy effects compiled out), core (coreShader). Boot tries
+  // the asked tier and then each lighter one; a lost context stops the ladder (the caller waits
+  // for the context to come back and starts again on core).
+  const TIERS = ["full", "lite", "core", "bare"];
+  const sourceFor = (name) => (name === "core" || name === "bare" ? coreShader(fragFor(true), name === "bare") : fragFor(name !== "full"));
+  let tier = options.tier && TIERS.includes(options.tier) ? options.tier : lite ? "lite" : "full";
+  let fragBody = sourceFor(tier);
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
-  let fs = vs ? compile(gl, gl.FRAGMENT_SHADER, specialize(fragBody, false)) : null;
-  if (vs && !fs && !lite) {
-    // Too much for this GPU's compiler: try again without the heavy effects.
-    canvas.dataset.gpuFullError = String(compile.lastLog || "shader").slice(0, 600);
-    lite = true;
-    fragBody = fragFor(true);
+  if (!vs) return fail(canvas, `shader compile: ${compileProblem(compile.last, "vertex")}`, compile.last);
+  let fs = null;
+  const tries = [];
+  for (let k = TIERS.indexOf(tier); k < TIERS.length; k += 1) {
+    tier = TIERS[k];
+    fragBody = sourceFor(tier);
     fs = compile(gl, gl.FRAGMENT_SHADER, specialize(fragBody, false));
+    if (fs) break;
+    tries.push(compileProblem(compile.last, tier));
+    if (tier === "full") canvas.dataset.gpuFullError = String(compile.last?.log || "shader").slice(0, 600);
+    if (compile.last?.lost) break;
   }
+  lite = tier !== "full";
+  canvas.dataset.gpuTier = tier;
   canvas.dataset.gpuLite = lite ? "1" : "0";
-  if (!vs || !fs) return fail(canvas, `shader compile: ${compile.lastLog || "no log"}`);
+  if (tries.length) canvas.dataset.gpuTries = tries.join("\n").slice(0, 1500);
+  if (!fs) {
+    if (compile.last?.lost) canvas.dataset.gpuLost = "1";
+    else {
+      // Does this GPU compile anything at all? A three-line shader tells a broken compiler from
+      // a trace that is simply too big for it.
+      const tiny = compile(gl, gl.FRAGMENT_SHADER, "#version 300 es\nprecision highp float;\nout vec4 c;\nvoid main() { c = vec4(1.0); }");
+      tries.push(tiny ? "probe: a tiny shader compiles (the trace is too much for this compiler)" : `probe: even a tiny shader fails (${compileProblem(compile.last, "tiny")})`);
+      if (tiny) gl.deleteShader(tiny);
+    }
+    return fail(canvas, `shader compile: ${tries.join(" | ") || "no log"}`);
+  }
   let program = gl.createProgram();
   gl.attachShader(program, vs);
   gl.attachShader(program, fs);
   gl.bindAttribLocation(program, 0, "aPos");
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return fail(canvas, `shader link: ${gl.getProgramInfoLog(program) || "no log"}`);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    if (gl.isContextLost?.()) canvas.dataset.gpuLost = "1";
+    return fail(canvas, `shader link (${tier}, ${gl.isContextLost?.() ? "context lost" : `glError ${safeError(gl) || "none"}`}): ${gl.getProgramInfoLog(program) || "no log"}`);
+  }
   canvas.dataset.gpuCompileMs = String(Date.now() - compileStart);
   // The tree variant (for crowds of spheres) and the full-effects shader build in the background,
   // after the first picture: upgrade() starts them, tick() (every paint, and the picture thread's
@@ -2042,7 +2168,8 @@ void main() {
   let fullJob = null;
   let pointJob = null;
   // "failed": asked for full at boot, the compile failed and it fell back to lite.
-  const effects = { state: !lite ? "full" : options.lite ? "lite" : "failed", log: canvas.dataset.gpuFullError || "", startedAt: 0, ms: 0, parallel: Boolean(parallel), onChange: null };
+  const askedTier = options.tier || (options.lite ? "lite" : "full");
+  const effects = { state: tier === "core" || tier === "bare" ? tier : !lite ? "full" : askedTier === "lite" ? "lite" : "failed", log: canvas.dataset.gpuFullError || "", startedAt: 0, ms: 0, parallel: Boolean(parallel), onChange: null };
   const setEffects = (state, log = effects.log) => {
     effects.state = state;
     effects.log = log;
@@ -2077,7 +2204,8 @@ void main() {
   };
   // Swap in the full-effects shader, in the background. Returns false when there is nothing to do.
   const upgrade = () => {
-    if (!lite || fullJob) return false;
+    // Only from lite: a GPU that needed the core tier would not survive the full compile.
+    if (!lite || fullJob || tier !== "lite") return false;
     effects.startedAt = Date.now();
     fullJob = startProgram(gl, parallel, vs, specialize(fragFor(false), false));
     setEffects("loading");
@@ -2091,6 +2219,8 @@ void main() {
         bindSamplers(program);
         fragBody = fragFor(false);
         lite = false;
+        tier = "full";
+        canvas.dataset.gpuTier = tier;
         if (pointVs) pointJob = startProgram(gl, parallel, pointVs, fullJob.fragment, "aRay");
         // The crowd variant follows: rebuild it from the full shader.
         if (treeJob) {
@@ -2099,7 +2229,8 @@ void main() {
         }
         setEffects("full");
       } else if (state === "fail") {
-        canvas.dataset.gpuFullError = fullJob.log.slice(0, 600);
+        const why = gl.isContextLost?.() ? `context lost while compiling the full shader${fullJob.log ? `: ${fullJob.log}` : ""}` : fullJob.log;
+        canvas.dataset.gpuFullError = why.slice(0, 600);
         setEffects("failed", fullJob.log);
       }
       return;
@@ -2734,6 +2865,7 @@ void main() {
   };
   return {
     get lite() { return lite; },
+    get tier() { return tier; },
     warm: warmTree,
     upgrade,
     tick,

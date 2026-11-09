@@ -8,13 +8,17 @@
 export function pictureMode(search = "", ua = "", mobileHint = null) {
   const gl = new URLSearchParams(search).get("gl") || "";
   const mobile = mobileHint === true || /Android|iPhone|iPad|iPod|Mobile/i.test(String(ua));
+  // ?gl=core: the smallest trace shader (no volcano air, caves, castle ice, one reflection).
+  const tier = gl === "full" ? "full" : gl === "core" ? "core" : gl === "bare" ? "bare" : "lite";
   return {
     where: gl === "cpu" ? "cpu" : gl === "main" ? "main" : "worker",
-    lite: gl !== "full",
-    upgrade: gl !== "full" && gl !== "lite",
+    lite: tier !== "full",
+    tier,
+    upgrade: tier === "lite" && gl !== "lite",
     mobile,
   };
 }
+
 // How long the picture thread may take to say it is ready. It reports its stage first, and a
 // phone may need most of a minute to compile; past this the page falls back to the CPU picture.
 export const PICTURE_DEADLINE_MS = 90000;
@@ -44,7 +48,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   if (typeof WorkerImpl !== "function" || !moduleWorkers(WorkerImpl)) return onPage("no module workers");
   let thread;
   try {
-    thread = new WorkerImpl(new URL("./render-worker.js?v=10", import.meta.url), { type: "module" });
+    thread = new WorkerImpl(new URL("./render-worker.js?v=11", import.meta.url), { type: "module" });
   } catch (error) {
     return onPage(`worker: ${error?.message || error}`);
   }
@@ -133,6 +137,6 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
     painter.onProblem?.(reason);
     if (!settled) { settled = true; clearTimeout(timer); finish(false); }
   };
-  thread.postMessage({ type: "init", canvas: offscreen, lite: mode.lite, upgrade: mode.upgrade }, [offscreen]);
+  thread.postMessage({ type: "init", canvas: offscreen, lite: mode.lite, tier: mode.tier, upgrade: mode.upgrade }, [offscreen]);
   return { painter, remote: true, thread, mode };
 }
