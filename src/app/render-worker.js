@@ -1,4 +1,4 @@
-import { createGpuPainter } from "../render/gpu.js?v=105";
+import { createGpuPainter } from "../render/gpu.js?v=106";
 import { sceneFromStage } from "../render/stage.js?v=6";
 import { cast, project } from "../engine/cast.js";
 
@@ -38,9 +38,9 @@ self.onmessage = async (event) => {
       const started = performance.now();
       // Without preventDefault on the loss, the browser never gives the context back.
       try { msg.canvas.addEventListener("webglcontextlost", (e) => e.preventDefault()); } catch {}
-      painter = createGpuPainter(canvas, { lite: tier !== "full", tier });
+      painter = createGpuPainter(canvas, { lite: tier !== "full", tier, hint: msg.hint || null });
       const d = canvas.dataset;
-      const factsNow = () => ({ info: d.gpuInfo || "", caps: d.gpuCaps || "", lite: d.gpuLite === "1", tier: d.gpuTier || "", compileMs: Number(d.gpuCompileMs) || 0, buildMs: Math.round(performance.now() - started), fullError: d.gpuFullError || "", tries: d.gpuTries || "", lost: d.gpuLost === "1" });
+      const factsNow = () => ({ split: d.gpuSplit || "", hinted: d.gpuHinted || "", info: d.gpuInfo || "", caps: d.gpuCaps || "", lite: d.gpuLite === "1", tier: d.gpuTier || "", compileMs: Number(d.gpuCompileMs) || 0, buildMs: Math.round(performance.now() - started), fullError: d.gpuFullError || "", tries: d.gpuTries || "", lost: d.gpuLost === "1" });
       if (!painter && d.gpuLost === "1") {
         // The compile lost the context (a GPU watchdog or out of memory: the log is empty). Wait for
         // the browser to give it back, then start again on the smallest tier.
@@ -65,7 +65,7 @@ self.onmessage = async (event) => {
       self.postMessage({ type: "ready", info: facts.info, facts });
       // After the first picture: the full-effects shader (if we booted lite) and then the crowd
       // variant build in the background; tick() swaps each in when it links.
-      const say = (state, info) => self.postMessage({ type: "effects", state, log: String(info?.log || "").slice(0, 600), ms: info?.ms || 0, parallel: Boolean(info?.parallel) });
+      const say = (state, info) => self.postMessage({ type: "effects", state, log: String(info?.log || "").slice(0, 600), ms: info?.ms || 0, parallel: Boolean(info?.parallel), done: info?.done || 0, total: info?.total || 0, on: Array.isArray(info?.on) ? info.on.slice() : [], building: info?.building || "" });
       painter.onEffects?.((state, info) => {
         say(state, info);
         if (state === "full" || state === "failed") setTimeout(() => { try { painter.warm?.(); } catch {} }, 200);

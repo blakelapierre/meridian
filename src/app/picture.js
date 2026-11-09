@@ -9,12 +9,13 @@ export function pictureMode(search = "", ua = "", mobileHint = null) {
   const gl = new URLSearchParams(search).get("gl") || "";
   const mobile = mobileHint === true || /Android|iPhone|iPad|iPod|Mobile/i.test(String(ua));
   // ?gl=core: the smallest trace shader (no volcano air, caves, castle ice, one reflection).
-  const tier = gl === "full" ? "full" : gl === "core" ? "core" : gl === "bare" ? "bare" : "lite";
+  // ?gl=split: boot on the geo trace and build the effects as passes (what a Mali-G715 does).
+  const tier = gl === "full" ? "full" : gl === "core" ? "core" : gl === "bare" ? "bare" : gl === "split" ? "geo" : "lite";
   return {
     where: gl === "cpu" ? "cpu" : gl === "main" ? "main" : "worker",
     lite: tier !== "full",
     tier,
-    upgrade: tier === "lite" && gl !== "lite",
+    upgrade: (tier === "lite" && gl !== "lite") || gl === "split",
     mobile,
   };
 }
@@ -38,8 +39,10 @@ export function moduleWorkers(WorkerImpl = globalThis.Worker) {
   return known;
 }
 
-export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worker, ua = globalThis.navigator?.userAgent || "", mobile = globalThis.navigator?.userAgentData?.mobile ?? null, deadlineMs = PICTURE_DEADLINE_MS } = {}) {
+export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worker, ua = globalThis.navigator?.userAgent || "", mobile = globalThis.navigator?.userAgentData?.mobile ?? null, deadlineMs = PICTURE_DEADLINE_MS, hint = null } = {}) {
   const mode = pictureMode(search, ua, mobile);
+  // The remembered tier for this GPU, unless the URL picks a shader.
+  if (hint && !new URLSearchParams(search).get("gl")) mode.hint = hint;
   // No picture thread possible (no OffscreenCanvas, no module workers, or it throws): trace on the
   // page thread instead. `mode` is always returned, since the page reads it.
   const onPage = (why) => ({ painter: null, remote: false, mode: { ...mode, where: "main", why } });
@@ -48,7 +51,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   if (typeof WorkerImpl !== "function" || !moduleWorkers(WorkerImpl)) return onPage("no module workers");
   let thread;
   try {
-    thread = new WorkerImpl(new URL("./render-worker.js?v=11", import.meta.url), { type: "module" });
+    thread = new WorkerImpl(new URL("./render-worker.js?v=12", import.meta.url), { type: "module" });
   } catch (error) {
     return onPage(`worker: ${error?.message || error}`);
   }
@@ -112,7 +115,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
     const msg = event.data || {};
     if (msg.facts) facts = msg.facts;
     if (msg.type === "effects") {
-      effects = { state: msg.state, log: msg.log || "", ms: msg.ms || 0, parallel: Boolean(msg.parallel) };
+      effects = { state: msg.state, log: msg.log || "", ms: msg.ms || 0, parallel: Boolean(msg.parallel), done: msg.done || 0, total: msg.total || 0, on: msg.on || [], building: msg.building || "" };
       painter.onEffects?.(effects);
       return;
     }
@@ -137,6 +140,6 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
     painter.onProblem?.(reason);
     if (!settled) { settled = true; clearTimeout(timer); finish(false); }
   };
-  thread.postMessage({ type: "init", canvas: offscreen, lite: mode.lite, tier: mode.tier, upgrade: mode.upgrade }, [offscreen]);
+  thread.postMessage({ type: "init", canvas: offscreen, lite: mode.lite, tier: mode.tier, upgrade: mode.upgrade, hint: mode.hint || null }, [offscreen]);
   return { painter, remote: true, thread, mode };
 }

@@ -28,6 +28,9 @@ patches.badmodule = "";
 // fragment shaders longer than the limit "fail" (lite is ~73k chars, core ~56k, bare ~38k).
 const sizeFail = (limit) => `(() => { const P = WebGL2RenderingContext.prototype; const big = new WeakSet(); const ss = P.shaderSource; P.shaderSource = function (s, t) { if (t.length > ${limit} && !t.includes("gl_Position")) big.add(s); else big.delete(s); return ss.call(this, s, t); }; const gp = P.getShaderParameter; P.getShaderParameter = function (s, k) { if (k === 0x8B81 && big.has(s)) return false; return gp.call(this, s, k); }; const gl = P.getShaderInfoLog; P.getShaderInfoLog = function (s) { return big.has(s) ? "" : gl.call(this, s); }; })();`;
 patches.malicore = sizeFail(60000);
+// Batch 30: shaders are minified now (lite ~60k, geo ~46k): reject over 50k, and make every
+// fragment compile take 1 ms per 15 chars (geo ~3 s, each pass under 2 s), like the phone.
+patches.malisplit = sizeFail(50000).replace("})();", "") + ` const cs = P.compileShader; const len = new WeakMap(); const ss2 = P.shaderSource; P.shaderSource = function (s, t) { len.set(s, t.length); return ss2.call(this, s, t); }; P.compileShader = function (s) { const t = Date.now(); const wait = (len.get(s) || 0) / 15; while (Date.now() - t < wait) {} return cs.call(this, s); }; })();`;
 patches.malibare = sizeFail(45000);
 patches.maliall = sizeFail(200);
 // The compile of a big fragment shader loses the context (a GPU watchdog); it comes back 1 s later.
@@ -78,6 +81,9 @@ try {
     const v = r.result?.result?.value || "";
     if (v !== last) { console.log(`${Math.round((Date.now() - t0) / 1000)}s`, v.slice(0, 1400)); last = v; }
   }
+  // The screenshot shows the picture alone (the panels hidden).
+  if (out) await send("Runtime.evaluate", { expression: `(() => { const st = document.createElement("style"); st.textContent = "body > *:not(canvas) { display: none !important; } #cues { display: none !important; }"; document.head.appendChild(st); })()` });
+  if (out) await new Promise((r) => setTimeout(r, 1500));
   if (out) { const shot = await send("Page.captureScreenshot", { format: "png" }); await writeFile(out, Buffer.from(shot.result.data, "base64")); }
   ws.close();
 } finally { child.kill("SIGKILL"); await site.close?.(); await rm(dir, { recursive: true, force: true }).catch(() => {}); }

@@ -16,7 +16,7 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene, pictureCamera } from "../render/scene.js?v=80";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=105";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=106";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -167,7 +167,7 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture, pictureMode } from "./picture.js?v=9";
+import { openPicture, pictureMode } from "./picture.js?v=10";
 
 // `let`: if the picture thread fails, the page swaps in a fresh canvas for the CPU picture.
 let canvas = document.querySelector("canvas");
@@ -234,10 +234,26 @@ globalThis.__meridianRunning = true;
 // ?simonly=1 (scale bench thumbnails past the live WebGL budget): no GPU context, no painting;
 // sim, bots and network run as usual. Browsers cap live WebGL contexts per tab (~16).
 const SIM_ONLY = new URLSearchParams(location.search).get("simonly") === "1";
-const opened = SIM_ONLY ? { painter: null, remote: false, mode: pictureMode("?gl=cpu") } : openPicture(canvas, { search: location.search });
+// Which shader tier this GPU ended on last time ({ gpu, tier }), so a phone skips the compiles that
+// failed before (Batch 30). Cleared when a bigger tier works; ?gl= ignores it.
+const GPU_TIER_KEY = "meridian.gpuTier";
+const tierHint = (() => {
+  try {
+    const v = JSON.parse(localStorage.getItem(GPU_TIER_KEY) || "null");
+    return v && v.gpu && v.tier ? v : null;
+  } catch { return null; }
+})();
+function rememberTier(gpu, tierNow) {
+  try {
+    if (!gpu || !tierNow || new URLSearchParams(location.search).get("gl")) return;
+    if (tierNow === "lite" || tierNow === "full") localStorage.removeItem(GPU_TIER_KEY);
+    else localStorage.setItem(GPU_TIER_KEY, JSON.stringify({ gpu, tier: tierNow }));
+  } catch {}
+}
+const opened = SIM_ONLY ? { painter: null, remote: false, mode: pictureMode("?gl=cpu") } : openPicture(canvas, { search: location.search, hint: tierHint });
 // ?debug=1 shows the whole graphics story (caps, compile time, the shader log) on the page.
 const GL_DEBUG = new URLSearchParams(location.search).get("debug") === "1";
-let painter = SIM_ONLY || opened.mode.where === "cpu" ? null : opened.painter || createGpuPainter(canvas, { lite: opened.mode.lite, tier: opened.mode.tier });
+let painter = SIM_ONLY || opened.mode.where === "cpu" ? null : opened.painter || createGpuPainter(canvas, { lite: opened.mode.lite, tier: opened.mode.tier, hint: new URLSearchParams(location.search).get("gl") ? null : tierHint });
 // What the failed GPU attempts said, kept across canvas swaps for the ?debug=1 panel.
 const glDiag = { ds: {}, facts: {} };
 let context = null;
@@ -318,10 +334,12 @@ function showGlInfo() {
 // says so, then says when it is on. It never blocks the picture or input.
 function effectsText(e) {
   if (!e || !e.state) return "";
-  if (e.state === "loading") return "full effects loading…";
-  if (e.state === "full") return `full effects on${e.ms ? ` (${(e.ms / 1000).toFixed(1)} s in the background)` : ""}`;
+  const count = e.total ? ` ${e.done}/${e.total}` : "";
+  if (e.state === "loading") return e.total ? `effects${count} on · building ${e.building || "the next one"}…` : "full effects loading…";
+  if (e.state === "full") return `full effects on${count ? ` (${e.done}/${e.total} passes)` : ""}${e.ms ? ` (${(e.ms / 1000).toFixed(1)} s in the background)` : ""}`;
+  if (e.state === "partial") return `effects${count} on (some passes failed: ?debug=1)`;
   if (e.state === "failed") return "full effects unavailable here: lite picture";
-  if (e.state === "core" || e.state === "bare") return `${e.state} shader: a lighter picture (this GPU could not build the bigger ones)`;
+  if (e.state === "geo" || e.state === "core" || e.state === "bare") return `${e.state} shader: a lighter picture (this GPU could not build the bigger ones)`;
   return "lite picture";
 }
 let fxTimer = 0;
@@ -351,7 +369,8 @@ function glFacts() {
     `effects ${effectsText(painter?.effects?.() || {}) || (d.gpuEffects || "")}`,
     f.info || d.gpuInfo ? `gpu ${f.info || d.gpuInfo}` : "",
     f.caps || d.gpuCaps ? `caps ${f.caps || d.gpuCaps}` : "",
-    f.tier || d.gpuTier ? `shader tier ${f.tier || d.gpuTier}` : "",
+    f.tier || d.gpuTier ? `shader tier ${f.tier || d.gpuTier}${f.hinted || d.gpuHinted ? " (remembered for this GPU)" : ""}` : "",
+    f.split || d.gpuSplit ? `split passes: ${f.split || d.gpuSplit}${(painter?.effects?.()?.on || []).length ? `; on: ${painter.effects().on.join(", ")}` : ""}` : "",
     f.compileMs ? `compile ${f.compileMs} ms` : "",
     f.lost || d.gpuLost === "1" ? "the GPU context was lost while compiling" : "",
     f.tries || d.gpuTries ? `tries:\n  ${String(f.tries || d.gpuTries).split("\n").join("\n  ")}` : "",
@@ -3579,11 +3598,13 @@ if (painter?.remote) {
   } else {
     painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
     painter.onEffects = showEffects;
+    rememberTier(painter.facts?.()?.info, painter.facts?.()?.tier);
     const now = painter.effects?.();
     if (now && now.state !== "lite" && now.state !== "full") showEffects(now);
     if (GL_DEBUG) showGlInfo();
   }
 } else if (painter) {
+  rememberTier(canvas.dataset.gpuInfo, painter.tier);
   if (GL_DEBUG) showGlInfo();
   fitCanvas(canvas, viewScale);
   // Once the first picture is up: the full-effects shader (when we booted lite), then the crowd
