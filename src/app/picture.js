@@ -1,15 +1,17 @@
 // The picture runs on its own thread when the browser can hand it an OffscreenCanvas.
 // The page keeps the buttons. ?gl=main forces the old on-page picture.
 
-// How to draw. ?gl=main: the traced picture on the page thread; ?gl=cpu: the CPU picture only;
-// ?gl=lite / ?gl=full: the small or the whole trace shader. Phones default to lite: the full
-// shader (volcano, caves, ice) is very large, and mobile GPU compilers are slow on it.
+// How to draw. ?gl=main: the traced picture on the page thread; ?gl=cpu: the CPU picture only.
+// The picture boots on the lite trace shader (quick to compile, most of all on phones) and the
+// full-effects shader builds in the background and swaps in when it links (`upgrade`).
+// ?gl=full: the full shader from the start; ?gl=lite: stay lite.
 export function pictureMode(search = "", ua = "", mobileHint = null) {
   const gl = new URLSearchParams(search).get("gl") || "";
   const mobile = mobileHint === true || /Android|iPhone|iPad|iPod|Mobile/i.test(String(ua));
   return {
     where: gl === "cpu" ? "cpu" : gl === "main" ? "main" : "worker",
-    lite: gl === "lite" ? true : gl === "full" ? false : mobile,
+    lite: gl !== "full",
+    upgrade: gl !== "full" && gl !== "lite",
     mobile,
   };
 }
@@ -24,7 +26,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   }
   let thread;
   try {
-    thread = new WorkerImpl(new URL("./render-worker.js?v=9", import.meta.url), { type: "module" });
+    thread = new WorkerImpl(new URL("./render-worker.js?v=10", import.meta.url), { type: "module" });
   } catch {
     return { painter: null, remote: false };
   }
@@ -39,6 +41,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   const ready = new Promise((resolve) => { finish = resolve; });
   let stage = "starting the picture thread";
   let facts = null;
+  let effects = { state: mode.lite ? "lite" : "full", log: "", ms: 0, parallel: false };
   const timer = setTimeout(() => {
     if (settled) return;
     settled = true;
@@ -52,8 +55,10 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
     onDrew: null,
     failReason: () => reason,
     stage: () => stage,
+    effects: () => effects,
     facts: () => facts,
     onStage: null,
+    onEffects: null,
     lite: mode.lite,
     // Stop the thread (after a failure, before the page takes the picture back).
     close() { try { thread.terminate?.(); } catch {} },
@@ -84,6 +89,11 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   thread.onmessage = (event) => {
     const msg = event.data || {};
     if (msg.facts) facts = msg.facts;
+    if (msg.type === "effects") {
+      effects = { state: msg.state, log: msg.log || "", ms: msg.ms || 0, parallel: Boolean(msg.parallel) };
+      painter.onEffects?.(effects);
+      return;
+    }
     if (msg.type === "stage") {
       stage = msg.stage || stage;
       painter.onStage?.(stage);
@@ -105,6 +115,6 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
     painter.onProblem?.(reason);
     if (!settled) { settled = true; clearTimeout(timer); finish(false); }
   };
-  thread.postMessage({ type: "init", canvas: offscreen, lite: mode.lite }, [offscreen]);
+  thread.postMessage({ type: "init", canvas: offscreen, lite: mode.lite, upgrade: mode.upgrade }, [offscreen]);
   return { painter, remote: true, thread, mode };
 }

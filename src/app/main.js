@@ -16,7 +16,7 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene, pictureCamera } from "../render/scene.js?v=80";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=103";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=104";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -167,7 +167,7 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture, pictureMode } from "./picture.js?v=6";
+import { openPicture, pictureMode } from "./picture.js?v=7";
 
 // `let`: if the picture thread fails, the page swaps in a fresh canvas for the CPU picture.
 let canvas = document.querySelector("canvas");
@@ -306,17 +306,45 @@ function showGlInfo() {
   node.textContent = `Graphics OK\n${glFacts()}`;
   setTimeout(() => { node.hidden = true; }, 20000);
 }
+// The full-effects shader builds in the background (see docs/work/picture.md): a small corner note
+// says so, then says when it is on. It never blocks the picture or input.
+function effectsText(e) {
+  if (!e || !e.state) return "";
+  if (e.state === "loading") return "full effects loading…";
+  if (e.state === "full") return `full effects on${e.ms ? ` (${(e.ms / 1000).toFixed(1)} s in the background)` : ""}`;
+  if (e.state === "failed") return "full effects unavailable here: lite picture";
+  return "lite picture";
+}
+let fxTimer = 0;
+function showEffects(e) {
+  const text = effectsText(e);
+  if (!text || typeof document === "undefined") return;
+  let node = document.querySelector("#fxnote");
+  if (!node) {
+    node = document.createElement("div");
+    node.id = "fxnote";
+    node.setAttribute("aria-live", "polite");
+    Object.assign(node.style, { position: "fixed", left: "8px", bottom: "8px", zIndex: "60", pointerEvents: "none", font: "12px system-ui, sans-serif", color: "#dfe8f0", background: "rgba(10,20,30,0.6)", padding: "3px 8px", borderRadius: "6px" });
+    document.body.appendChild(node);
+  }
+  node.textContent = e.state === "failed" && !GL_DEBUG ? `${text} (?debug=1 for why)` : text;
+  node.hidden = false;
+  clearTimeout(fxTimer);
+  if (e.state !== "loading") fxTimer = setTimeout(() => { node.hidden = true; }, e.state === "failed" ? 12000 : 4000);
+  if (GL_DEBUG) showGlInfo();
+}
 // What we know about the GPU, for ?debug=1 and the curtain.
 function glFacts() {
   const f = painter?.facts?.() || opened.painter?.facts?.() || {};
   const d = canvas.dataset;
   const parts = [
-    `mode ${opened.mode.where}${(f.lite ?? opened.mode.lite) || d.gpuLite === "1" ? " lite" : ""}${opened.mode.mobile ? " (phone)" : ""}`,
+    `mode ${opened.mode.where}${opened.mode.mobile ? " (phone)" : ""}`,
+    `effects ${effectsText(painter?.effects?.() || {}) || (d.gpuEffects || "")}`,
     f.info || d.gpuInfo ? `gpu ${f.info || d.gpuInfo}` : "",
     f.caps || d.gpuCaps ? `caps ${f.caps || d.gpuCaps}` : "",
     f.compileMs ? `compile ${f.compileMs} ms` : "",
     f.buildMs ? `build ${f.buildMs} ms` : "",
-    f.fullError || d.gpuFullError ? `full shader: ${(f.fullError || d.gpuFullError).slice(0, 400)}` : "",
+    f.fullError || d.gpuFullError || painter?.effects?.()?.log ? `full shader: ${(painter?.effects?.()?.log || f.fullError || d.gpuFullError).slice(0, 800)}` : "",
   ];
   return parts.filter(Boolean).join("\n");
 }
@@ -3525,13 +3553,26 @@ if (painter?.remote) {
     pictureUp = true;
   } else {
     painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
+    painter.onEffects = showEffects;
+    const now = painter.effects?.();
+    if (now && now.state !== "lite" && now.state !== "full") showEffects(now);
     if (GL_DEBUG) showGlInfo();
   }
 } else if (painter) {
   if (GL_DEBUG) showGlInfo();
   fitCanvas(canvas, viewScale);
-  // The crowd variant of the trace compiles once the first picture is up.
-  setTimeout(() => { try { painter?.warm?.(); } catch {} }, 3000);
+  // Once the first picture is up: the full-effects shader (when we booted lite), then the crowd
+  // variant, build in the background; every paint polls them and swaps each in when it links.
+  painter.onEffects?.((state, e) => {
+    showEffects(e);
+    if (state === "full" || state === "failed") setTimeout(() => { try { painter?.warm?.(); } catch {} }, 200);
+  });
+  setTimeout(() => {
+    try {
+      if (!(opened.mode.upgrade && painter?.upgrade?.())) painter?.warm?.();
+    } catch {}
+  }, 1000);
+  setInterval(() => { try { painter?.tick?.(); } catch {} }, 250);
 }
 // The canvas went to the picture thread and cannot be drawn here again, so a fresh one takes its
 // place (same attributes, same input), and the CPU picture draws on it.

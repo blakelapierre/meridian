@@ -78,3 +78,26 @@ scenarios:
 - `slow`: each compile takes 15 s.
 - `units8`: 8 texture units.
 - `bigfail`: the full shader fails to compile.
+
+## Full effects in the background (Batch 27, second pass)
+
+Every device now boots on the **lite** trace shader (quick to compile) and then builds the
+**full-effects** shader (heat shimmer, smoke/ash and cinders, cave lights, gem sparkle, ice
+refraction) in the background, swapping it in the moment it links — no reload, no curtain.
+
+- `startProgram()` in `src/render/gpu.js` builds a program without waiting on it. With
+  `KHR_parallel_shader_compile` the driver compiles on its own threads and `poll()` only reads
+  `COMPLETION_STATUS_KHR`, so frames keep drawing on the lite program. Without the extension the
+  compile happens on the first poll, after the first picture (in the picture thread, so the page
+  and input stay live; the picture itself pauses for the compile time once).
+- `painter.upgrade()` starts the full build; `painter.tick()` (every paint, plus a timer in the
+  picture thread) polls it, swaps the program and rebinds its samplers. The points program reuses the
+  compiled full fragment shader, and the crowd (tree) variant is rebuilt from the full shader the
+  same way after the swap.
+- If the full build fails, the picture stays lite and a small corner note says so; `?debug=1`
+  shows the compile log.
+- A small corner note says `full effects loading…`, then `full effects on (N s in the background)`;
+  `?debug=1` shows the same in the panel.
+- `?gl=full`: full shader from the start (old behaviour). `?gl=lite`: stay lite.
+- `tools/gpu-limits.mjs` scenarios: `parallel` (fake parallel compile that finishes 20 s after
+  link), `slowfull` (a 20 s blocking full compile), `bigfail` (full compile fails).

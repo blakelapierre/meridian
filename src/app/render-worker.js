@@ -1,4 +1,4 @@
-import { createGpuPainter } from "../render/gpu.js?v=103";
+import { createGpuPainter } from "../render/gpu.js?v=104";
 import { sceneFromStage } from "../render/stage.js?v=6";
 import { cast, project } from "../engine/cast.js";
 
@@ -43,8 +43,21 @@ self.onmessage = (event) => {
         return;
       }
       self.postMessage({ type: "ready", info: facts.info, facts });
-      // The crowd (tree) variant compiles after the first picture is up.
-      setTimeout(() => { try { painter.warm?.(); } catch {} }, 1500);
+      // After the first picture: the full-effects shader (if we booted lite) and then the crowd
+      // variant build in the background; tick() swaps each in when it links.
+      const say = (state, info) => self.postMessage({ type: "effects", state, log: String(info?.log || "").slice(0, 600), ms: info?.ms || 0, parallel: Boolean(info?.parallel) });
+      painter.onEffects?.((state, info) => {
+        say(state, info);
+        if (state === "full" || state === "failed") setTimeout(() => { try { painter.warm?.(); } catch {} }, 200);
+      });
+      say(painter.effects?.().state || "full", painter.effects?.());
+      setTimeout(() => {
+        try {
+          if (!(msg.upgrade && painter.upgrade?.())) painter.warm?.();
+        } catch {}
+      }, 300);
+      // Poll the background builds even when no frame is being drawn.
+      setInterval(() => { try { painter.tick?.(); } catch {} }, 120);
     } catch (error) {
       self.postMessage({ type: "error", reason: String(error && error.message || error) });
     }

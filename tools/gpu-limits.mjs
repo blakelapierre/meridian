@@ -3,6 +3,8 @@
 // usage: node tools/gpu-limits.mjs <root> "<query>" <scenario> <waitMs> [out.png]
 // scenarios: none | slow (each compileShader busy-waits 15 s) | units8 (MAX_TEXTURE_IMAGE_UNITS 8)
 //            | bigfail (the full trace shader fails to compile, like a driver resource limit; lite compiles)
+//            | slowfull (only the full-effects shader's compile busy-waits 20 s; no parallel compile)
+//            | parallel (fake KHR_parallel_shader_compile: a full-effects program reports done 20 s after link)
 import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +17,8 @@ const patches = {
   units8: `(() => { const P = WebGL2RenderingContext.prototype; const g = P.getParameter; P.getParameter = function (k) { if (k === 0x8872) return 8; return g.call(this, k); }; })();`,
   bigfail: `(() => { const P = WebGL2RenderingContext.prototype; const src = new WeakMap(); const ss = P.shaderSource; P.shaderSource = function (s, t) { src.set(s, t.includes("const bool LITE = false") ? 1e9 : t.length); return ss.call(this, s, t); }; const gp = P.getShaderParameter; P.getShaderParameter = function (s, k) { if (k === 0x8B81 && (src.get(s) || 0) > 5e8) return false; return gp.call(this, s, k); }; const gl = P.getShaderInfoLog; P.getShaderInfoLog = function (s) { if ((src.get(s) || 0) > 5e8) return "ERROR: emulated driver: shader too large"; return gl.call(this, s); }; })();`,
 };
+patches.slowfull = `(() => { const P = WebGL2RenderingContext.prototype; const full = new WeakSet(); const ss = P.shaderSource; P.shaderSource = function (s, t) { if (t.includes("const bool LITE = false")) full.add(s); return ss.call(this, s, t); }; const c = P.compileShader; P.compileShader = function (s) { if (full.has(s)) { const t = Date.now(); while (Date.now() - t < 20000) {} } return c.call(this, s); }; })();`;
+patches.parallel = `(() => { const P = WebGL2RenderingContext.prototype; const EXT = { COMPLETION_STATUS_KHR: 0x91B1, MAX_SHADER_COMPILER_THREADS_KHR: 0x91B0 }; const ge = P.getExtension; P.getExtension = function (n) { return n === "KHR_parallel_shader_compile" ? EXT : ge.call(this, n); }; const full = new WeakSet(); const ss = P.shaderSource; P.shaderSource = function (s, t) { if (t.includes("const bool LITE = false")) full.add(s); return ss.call(this, s, t); }; const shaders = new WeakMap(); const at = P.attachShader; P.attachShader = function (p, s) { if (full.has(s)) shaders.set(p, true); return at.call(this, p, s); }; const linked = new WeakMap(); const lp = P.linkProgram; P.linkProgram = function (p) { linked.set(p, Date.now()); return lp.call(this, p); }; const gp = P.getProgramParameter; P.getProgramParameter = function (p, k) { if (k === 0x91B1) return !shaders.get(p) || Date.now() - linked.get(p) > 20000; return gp.call(this, p, k); }; })();`;
 const patch = patches[scenario];
 const { createStaticServer } = await import(join(root, "tools/serve.js"));
 const site = await createStaticServer(root);
@@ -45,8 +49,8 @@ try {
   const t0 = Date.now();
   let last = "";
   while (Date.now() - t0 < waitMs) {
-    await new Promise((r) => setTimeout(r, 3000));
-    const r = await send("Runtime.evaluate", { returnByValue: true, expression: `JSON.stringify({ boot: document.querySelector("#boot [data-boot-line]")?.textContent, bootHidden: document.querySelector("#boot")?.hidden, glerr: document.querySelector("#glerr")?.hidden ? "" : document.querySelector("#glerr")?.textContent, ds: Object.fromEntries(Object.entries(document.querySelector("canvas")?.dataset || {}).filter(([k]) => /renderer|picture|gpu|ready|center/.test(k))) })` });
+    await new Promise((r) => setTimeout(r, 1000));
+    const r = await send("Runtime.evaluate", { returnByValue: true, expression: `JSON.stringify({ boot: document.querySelector("#boot [data-boot-line]")?.textContent, bootHidden: document.querySelector("#boot")?.hidden, fx: document.querySelector("#fxnote")?.textContent || "", glerr: document.querySelector("#glerr")?.hidden ? "" : document.querySelector("#glerr")?.textContent, ds: Object.fromEntries(Object.entries(document.querySelector("canvas")?.dataset || {}).filter(([k]) => /renderer|picture|gpu|ready|center/.test(k))) })` });
     const v = r.result?.result?.value || "";
     if (v !== last) { console.log(`${Math.round((Date.now() - t0) / 1000)}s`, v.slice(0, 1400)); last = v; }
   }
