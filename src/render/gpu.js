@@ -373,9 +373,9 @@ bool pineCell(vec2 p, out vec4 tree) {
   uint h = hashU(int(cell.x), int(cell.y), uPineSeed);
   float roll = float(h >> 8u) / 16777216.0;
   if (roll >= 0.9) return false;
-  vec2 c = (cell + 0.5) * PINE_CELL + vec2(float(h & 255u) / 255.0 - 0.5, float((h >> 24u) & 255u) / 255.0 - 0.5) * 1.1;
+  vec2 c = (cell + 0.5) * PINE_CELL + vec2(float(h & 255u) / 255.0 - 0.5, float((h >> 24u) & 255u) / 255.0 - 0.5) * 1.2;
   float size = float((h >> 16u) & 255u) / 255.0;
-  tree = vec4(c, 0.85 + 0.25 * size, 4.5 + 4.0 * size);
+  tree = vec4(c, 1.25 + 0.4 * size, 4.2 + 3.6 * size);
   if (length(p - c) >= tree.z) return false;
   return roll < landAt((cell + 0.5) * PINE_CELL).b * 0.9;
 }
@@ -390,10 +390,10 @@ float pineTop(vec2 p, float g, float dens, out vec3 info) {
   float top = -1000.0;
   for (int k = 0; k < 3; k++) {
     float fk = float(k);
-    float Rk = R * (1.0 - 0.3 * fk);
+    float Rk = R * (1.0 - 0.29 * fk);
     if (r >= Rk) continue;
-    float lo = H * (0.12 + 0.3 * fk);
-    float hi = H * (0.55 + 0.22 * fk);
+    float lo = H * (0.06 + 0.32 * fk);
+    float hi = H * (0.46 + 0.27 * fk);
     float z = g + lo + (hi - lo) * (1.0 - r / Rk);
     if (z > top) {
       top = z;
@@ -465,8 +465,8 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
     float steep = 1.0 - clamp(n.z, 0.0, 1.0);
     vec3 needles = vec3(0.19, 0.23, 0.13) * (0.8 + valueNoise(p * 0.7) * 0.4);
     vec3 mtn = mix(grassC * vec3(0.92, 1.04, 0.86), needles, smoothstep(0.05, 0.4, L.b));
-    mtn = mix(mtn, rockC * 1.05, clamp(smoothstep(0.28, 0.6, steep) + smoothstep(PEAK * 0.62, PEAK * 0.8, g), 0.0, 1.0));
-    float snow = smoothstep(PEAK * 0.86, PEAK * 0.97, g + (valueNoise(p * 0.21) - 0.5) * 3.0) * (1.0 - smoothstep(0.55, 0.8, steep));
+    mtn = mix(mtn, rockC * 1.05, clamp(smoothstep(0.28, 0.6, steep) + smoothstep(PEAK * 0.7, PEAK * 0.86, g), 0.0, 1.0));
+    float snow = smoothstep(PEAK * 0.91, PEAK * 1.0, g + (valueNoise(p * 0.21) - 0.5) * 3.0) * (1.0 - smoothstep(0.55, 0.8, steep));
     mtn = mix(mtn, vec3(0.9, 0.92, 0.95), snow);
     rgb = mix(rgb, mtn, smoothstep(0.3, 2.0, L.r));
     vec3 lush = vec3(0.21, 0.36, 0.15) * (0.82 + valueNoise(p * 1.3) * 0.36);
@@ -1136,7 +1136,7 @@ void landSurface(vec3 p, vec3 rd, inout vec3 n, inout vec3 rgb, inout float ref)
       vec2 f = (p.xy - tree.xy) / max(tree.z, 0.5);
       float crown = here ? 1.0 - length(f) : -0.2;
       n = normalize(n + (here ? vec3(f * 0.9, 0.6) : vec3(0.0, 0.0, 0.4)));
-      rgb = needle * (0.5 + 0.5 * smoothstep(-0.1, 0.6, crown) * (0.75 + 0.25 * tree.w / 8.5));
+      rgb = needle * (0.5 + 0.5 * smoothstep(-0.1, 0.6, crown) * (0.75 + 0.25 * tree.w / 9.0));
       ref = 0.02;
       return;
     } else if (p.z < pz - 0.08) {

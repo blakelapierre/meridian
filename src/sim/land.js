@@ -23,7 +23,7 @@ export const MOUNTAIN = { x: -40, y: 160, radius: 104, height: 44 };
 export const LAKE = { x: 70, y: 96, radius: 14, level: 2.2, depth: 1.6 };
 // Tallest thing the land can hold: peak plus noise plus a pine on top. The trace starts its march below this.
 export const LAND_TOP = 60;
-export const PINE_CELL = 3.5;
+export const PINE_CELL = 4.5;
 
 function fnv(text) {
   let h = 2166136261;
@@ -146,7 +146,7 @@ function planWater(dune, seed) {
   const ground = (x, y) => shapedGround(dune, x, y, seed);
   const toLake = [LAKE.x - MOUNTAIN.x, LAKE.y - MOUNTAIN.y];
   const tl = Math.hypot(toLake[0], toLake[1]);
-  const spring = [MOUNTAIN.x + (toLake[0] / tl) * MOUNTAIN.radius * 0.16, MOUNTAIN.y + (toLake[1] / tl) * MOUNTAIN.radius * 0.16];
+  const spring = [MOUNTAIN.x + (toLake[0] / tl) * MOUNTAIN.radius * 0.24, MOUNTAIN.y + (toLake[1] / tl) * MOUNTAIN.radius * 0.24];
   const phase = hash01(1, 2, seed) * 6.283;
   const up = walkPath(spring, (p) => Math.hypot(p[0] - LAKE.x, p[1] - LAKE.y) < LAKE.radius * 0.6, 1.5, seed, (p, n) => {
     const e = 1.0;
@@ -389,10 +389,10 @@ export function pineInCell(field, ci, cj) {
   const cy = (cj + 0.5) * PINE_CELL;
   const dens = landPineDensity(field, cx, cy);
   if (!(roll < dens * 0.9)) return null;
-  const jx = ((h & 255) / 255 - 0.5) * 1.1;
-  const jy = (((h >>> 24) & 255) / 255 - 0.5) * 1.1;
+  const jx = ((h & 255) / 255 - 0.5) * 1.2;
+  const jy = (((h >>> 24) & 255) / 255 - 0.5) * 1.2;
   const size = ((h >>> 16) & 255) / 255;
-  return { x: cx + jx, y: cy + jy, radius: 0.85 + 0.25 * size, height: 4.5 + 4 * size };
+  return { x: cx + jx, y: cy + jy, radius: 1.25 + 0.4 * size, height: 4.2 + 3.6 * size };
 }
 
 export function allPines(field) {

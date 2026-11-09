@@ -16,9 +16,23 @@ Rain comes from the cloud over the pool. A pool is marked when the cloud deck st
 
 `test/slice.test.js` covers the clock mark. `test/batch12.test.js` covers rain from the deck.
 
+## The north land (Batch 24)
+
+A mountain stands in the north half of the island (peak near x −40, y 160, about 44 m). A spring sits a quarter of the way down from the top on the lake side. From it a stream about 1 m wide runs downhill, following the slope with a pull toward the lake, and widens to about 5 m before it meets a small lake (center x 70, y 96, about 14 m across the radius, 1.6 m deep in the middle, surface 2.2 m). A river 5–8 m wide leaves the lake to the east and falls to the sea past the coast. Pines grow on the slopes, thinning toward the tree line. Reeds with cattail heads and bushes line the banks.
+
+All of it is `src/sim/land.js`, a pure function of the world seed (integer hashing, no `Math.sin` in the mountain), baked once to a 0.5 m grid: ground offset over the dunes, water surface, pine density, bank wetness. The walk reads that grid through `duneHeight` and `standHeight`, and the picture reads it as a texture, so what you see is what you stand on. The voxel crust is not touched, so chunk hashes still cover only dug and filled voxels and match between peers as before. The south half, spawn and the yard are the old dunes.
+
+Water does not drown you: in deep water the feet stay at most 1.25 m under the surface. The surface ripples along its downhill direction, faster and with a little foam on the steep stream, slowly on the lake.
+
+To see it: `?look=mountain` stands across the lake from the mountain, `?look=spring` beside the spring looking down the stream. `?at=x,y[,yawDeg[,pitchDeg]]` stands anywhere (yaw 0 faces north, +y).
+
+## Proves
+
+`test/land.test.js`: the same bake every time and a different one for another seed, the crust hash unchanged, the stream continuous and never running uphill from the spring into the lake, the lake's size and depth, the river falling from the lake to sea level past the coast, pines by altitude and none in water or at spawn, reeds and bushes on the banks, the fog switch, and the shader's pine rule and hash matching the walk's.
+
 ## Next
 
-A river that is the crust, not a list of pools. Not in this build.
+A river that is the crust, not a list of pools: the stream is a baked surface, not water that flows into a dug channel. Pines are drawn, not solid: you walk through them, and up close they are stepped cones (a heightfield). Not in this build.
 
 ## Later
 

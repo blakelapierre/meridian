@@ -182,7 +182,7 @@ if (bootBus) {
     location.reload();
   };
 }
-const keepSlot = followId || params.get("look") || params.get("gate") || digDemo || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
+const keepSlot = followId || params.get("look") || params.get("at") || params.get("gate") || digDemo || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
 const keptStore = browserStore();
 if (freshBoot) {
   forgetKept(keptStore);
@@ -350,9 +350,15 @@ const home = agent ? AGENDAS[agendaName].home : null;
 const tourWanted = (demo || params.get("tour") === "1") && params.get("tour") !== "0" && !followId && !agendaName;
 const tourSeen = params.get("tour") === "1" ? [] : (() => { try { return JSON.parse(localStorage.getItem(TOUR_KEY) || "[]"); } catch { return []; } })();
 // A brand-new player with no demo link starts a few steps from the marker, facing it.
-const tourSpawn = tourWanted && !tourSeen.length && !home && !peer && !params.get("gate") && !params.get("look") && !digDemo;
+const tourSpawn = tourWanted && !tourSeen.length && !home && !peer && !params.get("gate") && !params.get("look") && !params.get("at") && !digDemo;
 // ?look=mountain stands on the lake shore facing the mountain; ?look=spring stands up the stream below the spring.
-const landLook = params.get("look") === "mountain" || params.get("look") === "spring" ? landView(land(), params.get("look")) : null;
+// ?at=x,y[,yawDeg[,pitchDeg]] stands at a point in meters (yaw 0 faces +y, north).
+const atLook = (() => {
+  const parts = String(params.get("at") || "").split(",").map(Number);
+  if (parts.length < 2 || !parts.slice(0, 2).every(Number.isFinite)) return null;
+  return { x: parts[0], y: parts[1], yaw: Number.isFinite(parts[2]) ? (parts[2] * Math.PI) / 180 : 0, pitch: Number.isFinite(parts[3]) ? (parts[3] * Math.PI) / 180 : 0 };
+})();
+const landLook = atLook || (params.get("look") === "mountain" || params.get("look") === "spring" ? landView(land(), params.get("look")) : null);
 const spawn = home
   ? { x: home[0] * 100, y: home[1] * 100, z: 0 }
   : landLook

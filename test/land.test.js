@@ -98,13 +98,13 @@ test("the river leaves the lake and reaches the sea, falling all the way", () =>
 
 test("pines grow on the slopes by altitude, not in water, not at spawn; reeds and bushes line the banks", () => {
   const pines = allPines(field);
-  assert.ok(pines.length > 300, `pines ${pines.length}`);
+  assert.ok(pines.length > 200, `pines ${pines.length}`);
   let slope = 0;
   for (const p of pines) {
     assert.ok(p.y > 24, "none in the south");
     assert.equal(waterAt(p.x, p.y), null, `pine in water at ${p.x},${p.y}`);
     assert.ok(duneHeight(p.x, p.y) < MOUNTAIN.height * 0.8, "below the tree line");
-    assert.ok(p.radius <= 1.1 && p.height <= 8.5);
+    assert.ok(p.radius <= 1.65 && p.height <= 9 && p.radius + 0.6 <= 4.5 / 2 + 1e-9, "a pine fits inside its cell");
     if (mountainHeight(p.x, p.y, field.seedHash) > 3) slope += 1;
   }
   assert.ok(slope / pines.length > 0.6, "most stand on the mountain");
@@ -158,8 +158,8 @@ test("the shader reads the same pine rule and hash as the walk", () => {
   }
   assert.match(gpu, /roll < landAt\(\(cell \+ 0\.5\) \* PINE_CELL\)\.b \* 0\.9/);
   assert.match(landSrc, /roll < dens \* 0\.9/);
-  assert.match(gpu, /0\.85 \+ 0\.25 \* size, 4\.5 \+ 4\.0 \* size/);
-  assert.match(landSrc, /radius: 0\.85 \+ 0\.25 \* size, height: 4\.5 \+ 4 \* size/);
+  assert.match(gpu, /1\.25 \+ 0\.4 \* size, 4\.2 \+ 3\.6 \* size/);
+  assert.match(landSrc, /radius: 1\.25 \+ 0\.4 \* size, height: 4\.2 \+ 3\.6 \* size/);
   assert.match(gpu, /uPineSeed"\), \(landField\.seedHash \^ 0x9172\)/);
   assert.match(landSrc, /field\.seedHash \^ 0x9172/);
   // The march starts under the land's top, not the old 5.6 m dune cap.
