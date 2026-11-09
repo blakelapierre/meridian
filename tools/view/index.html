@@ -3,6 +3,57 @@
   <head>
     <link rel="icon" href="../../favicon.svg?v=1" type="image/svg+xml" />
     <script src="../../src/app/ns.js?v=1"></script>
+    <script>
+      // Boot guard: a classic script, so it runs even when the game modules cannot (an old browser,
+      // a failed or stale download, a syntax error). It writes the real error onto the curtain
+      // instead of leaving it stuck, and it moves a stale cached copy of this page to the current
+      // build (GitHub Pages lets browsers keep this HTML for 10 minutes).
+      (function () {
+        var BUILD = "193";
+        var debug = /[?&]debug=1(&|$)/.test(location.search);
+        function say(text) {
+          var boot = document.getElementById("boot");
+          var line = boot && boot.querySelector("[data-boot-line]");
+          var booting = boot && !boot.hidden;
+          if (booting && line) line.textContent = text;
+          var note = document.getElementById("glerr");
+          if (note && (booting || debug)) {
+            note.hidden = false;
+            note.style.whiteSpace = "pre-wrap";
+            note.style.userSelect = "text";
+            note.textContent = text + "\n(build " + BUILD + ", " + navigator.userAgent + ")";
+          }
+        }
+        window.__meridianBootError = say;
+        window.addEventListener("error", function (e) {
+          var el = e && e.target;
+          if (el && el !== window && el.tagName) {
+            if (el.tagName === "SCRIPT") say("Could not load " + String(el.src || "a script").split("/").pop() + ". Reload the page, or check the connection.");
+            return;
+          }
+          var where = e.filename ? " (" + String(e.filename).split("/").pop() + ":" + e.lineno + ")" : "";
+          say("The page stopped: " + (e.message || "script error") + where + ". Add ?debug=1 for details.");
+        }, true);
+        window.addEventListener("unhandledrejection", function (e) {
+          var r = e && e.reason;
+          say("The page stopped: " + String((r && (r.stack || r.message)) || r || "a promise failed").split("\n").slice(0, debug ? 6 : 1).join("\n"));
+        });
+        setTimeout(function () {
+          if (!window.__meridianRunning) say("The game code did not start after 30 s (an old browser, or a download failed). Reload; add ?debug=1 for details.");
+        }, 30000);
+        try {
+          fetch("build.txt?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (text) {
+            var live = String(text || "").trim();
+            if (!/^\d+$/.test(live) || live === BUILD) return;
+            var url = new URL(location.href);
+            if (url.searchParams.get("build") === live) return;
+            url.searchParams.set("build", live);
+            location.replace(url.href);
+          }).catch(function () {});
+        } catch (e) {}
+      })();
+    </script>
+    <script nomodule>document.addEventListener("DOMContentLoaded", function () { window.__meridianBootError && window.__meridianBootError("This browser is too old for Meridian (no JavaScript modules). Try a current Chrome, Firefox or Safari."); });</script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Meridian</title>
@@ -281,7 +332,7 @@
       <ul id="pilot-goals"></ul>
     </section>
     <ul id="notes"></ul>
-    <script type="module" src="../../src/app/main.js?v=192"></script>
+    <script type="module" src="../../src/app/main.js?v=193"></script>
     <script>
       const fresh = document.querySelector("#fresh");
       if (fresh) {
