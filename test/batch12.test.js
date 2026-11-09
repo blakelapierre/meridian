@@ -47,8 +47,8 @@ test("the fin's cloud is the sky's cloud", () => {
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /valueNoise\(q\.xy \* 0\.018 \+ vec2\(uTime \* 0\.004, 0\.2\)\)/);
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
-  assert.match(main, /scene\.time = tick \/ 30/);
-  assert.match(main, /finCloud\(piece\.at, tick\)/);
+  assert.match(main, /scene\.time = envTick\(\) \/ 30/);
+  assert.match(main, /finCloud\(piece\.at, envTick\(\)\)/);
 });
 
 test("a cloud's shadow falls on the sand", () => {
@@ -275,7 +275,7 @@ test("the status line says when it rains", () => {
   assert.equal(rainWord(0.3), " drizzle");
   assert.equal(rainWord(0.9), " rain");
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
-  assert.match(main, /lightNote = ` · \$\{light\}\$\{rainWord\(rainNow\)\}`/);
+  assert.match(main, /lightNote = ` · \$\{light\}\$\{dayRate === 1 \? "" : ` ×\$\{dayRate\}`\}\$\{rainWord\(rainNow\)\}`/);
 });
 
 import { splashes } from "../src/sim/cloud.js";

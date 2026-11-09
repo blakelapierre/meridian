@@ -1,6 +1,13 @@
 export const DAY_TICKS = 72 * 60 * 30;
 export const SUN_MULTIPLIER = 1;
 
+// ?clock= speeds the day, the rain, and the plants. It does not speed walking. 1 is real time.
+export function clockScale(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(720, n);
+}
+
 export function sunDirection(tick, multiplier = SUN_MULTIPLIER) {
   const phase = ((tick * multiplier) / DAY_TICKS) * Math.PI * 2;
   return [Math.cos(phase), 0, Math.sin(phase)];

@@ -20,11 +20,29 @@ export function harmMessage(who, what, sig = 0) {
   return JSON.stringify({ t: "harm", channel: socketOf("harm"), who, what, sig });
 }
 
+export function blowMessage(who, target, amount, sig = 0) {
+  return JSON.stringify({
+    t: "harm",
+    channel: socketOf("harm"),
+    who,
+    what: "blow",
+    target,
+    amount: Math.round(amount),
+    sig,
+  });
+}
+
 export function readHarmMessage(text) {
   try {
     const message = JSON.parse(typeof text === "string" ? text : new TextDecoder().decode(text));
     if (message?.t !== "harm" || message.channel !== "harm") return null;
-    return { who: String(message.who || "peer"), what: String(message.what || "harm"), sig: message.sig || 0 };
+    return {
+      who: String(message.who || "peer"),
+      what: String(message.what || "harm"),
+      sig: message.sig || 0,
+      amount: Math.max(0, Math.min(120, Math.round(message.amount) || 0)),
+      target: message.target ? String(message.target) : "",
+    };
   } catch {
     return null;
   }

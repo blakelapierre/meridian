@@ -22,6 +22,8 @@ const ACCEL_S = 0.5; // acceleration only shapes the first half second
 
 // Receiver interest tiers. err is a position bound in metres, yawErr in radians, minGap the least
 // number of ticks between two sends, keepalive the most.
+// Ticks between loss repairs at the near tiers while a sent state is unacked.
+export const LOSS_GAP_NEAR = 6;
 export const TIERS = [
   { name: "near-visible", err: 0.05, yawErr: 0.05, minGap: 1, keepalive: 60 }, // up to 30 Hz
   { name: "mid-visible", err: 0.25, yawErr: 0.15, minGap: 5, keepalive: 90 }, // up to 6 Hz
@@ -238,7 +240,10 @@ export function shouldSend(rec, now, tierIndex) {
   // A coarse tier will not send again while its newest state still predicts the body.
   // If the peer has not confirmed that state, it is still on the last one it acked,
   // and one missed sprint correction is how a pose ends up 7 m off.
-  if (rec.verified && rec.ackTick < rec.verified.tick && tier.minGap > 3 && gap >= 3) {
+  // Near tiers repair too (Batch 17 packet-loss test): a straight walk at the near tier only
+  // sends on drift, so one lost packet on the unreliable lane left the peer coasting to the
+  // 2 m cap; they retry at most every LOSS_GAP_NEAR ticks until the peer acks.
+  if (rec.verified && rec.ackTick < rec.verified.tick && gap >= (tier.minGap > 3 ? 3 : LOSS_GAP_NEAR)) {
     if (!rec.acked) return "loss";
     const old = predict(rec.acked, now.tick);
     const oldErr = Math.hypot(old.p[0] - now.p[0], old.p[1] - now.p[1], old.p[2] - now.p[2]);

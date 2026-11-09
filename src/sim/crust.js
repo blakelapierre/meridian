@@ -1,4 +1,4 @@
-import { blake3 } from "@noble/hashes/blake3.js";
+import { blake3 } from "../../vendor/noble/hashes/blake3.js?v=1";
 
 // Voxel edge. Halved from 50 cm in save format 2 (see migrateWorld in persist.js).
 export const VOXEL_CM = 25;
