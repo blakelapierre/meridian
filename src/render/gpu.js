@@ -13,6 +13,12 @@ const AIR_Y0 = Math.min(VOLC_Y0, VOLCANO.y + WIND.y * 150 - 50);
 const AIR_X1 = Math.max(VOLC_X0 + VOLC_W, VOLCANO.x + WIND.x * 150 + 50);
 const AIR_Y1 = Math.max(VOLC_Y0 + VOLC_W, VOLCANO.y + WIND.y * 150 + 50);
 const AIR_TOP = LAVA_LEVEL + PLUME_TOP;
+// The plume's own box: its widest reach (5 m + 0.22 per meter of rise) around its downwind lean.
+const PLUME_REACH = 5 + PLUME_TOP * 0.22 + 4;
+const PLUME_X0 = Math.min(VOLCANO.x, VOLCANO.x + WIND.x * PLUME_TOP * 0.35) - PLUME_REACH;
+const PLUME_X1 = Math.max(VOLCANO.x, VOLCANO.x + WIND.x * PLUME_TOP * 0.35) + PLUME_REACH;
+const PLUME_Y0 = Math.min(VOLCANO.y, VOLCANO.y + WIND.y * PLUME_TOP * 0.35) - PLUME_REACH;
+const PLUME_Y1 = Math.max(VOLCANO.y, VOLCANO.y + WIND.y * PLUME_TOP * 0.35) + PLUME_REACH;
 const glf = (v) => Number(v).toFixed(4);
 const MAX_SHAPES = MAX_SHAPE_BODIES;
 const SHAPE_LINEAR = 80;
@@ -380,6 +386,8 @@ const float PLUME_TOP = ${glf(PLUME_TOP)};
 const vec2 WIND = vec2(${glf(WIND.x)}, ${glf(WIND.y)});
 const vec3 AIR_MIN = vec3(${glf(AIR_X0)}, ${glf(AIR_Y0)}, 0.0);
 const vec3 AIR_MAX = vec3(${glf(AIR_X1)}, ${glf(AIR_Y1)}, ${glf(AIR_TOP)});
+const vec3 PLUME_MIN = vec3(${glf(PLUME_X0)}, ${glf(PLUME_Y0)}, ${glf(LAVA_LEVEL - 1)});
+const vec3 PLUME_MAX = vec3(${glf(PLUME_X1)}, ${glf(PLUME_Y1)}, ${glf(AIR_TOP)});
 bool inVolcBox(vec2 p) {
   vec2 q = p - uVolcBox.xy;
   return q.x >= 0.0 && q.y >= 0.0 && q.x < uVolcBox.z && q.y < uVolcBox.w;
@@ -1275,14 +1283,15 @@ vec3 volcSurface(vec3 p, inout vec3 rgb, inout float ref) {
     float speed = gl > 0.2 ? 0.8 : 0.12;
     vec2 q = p.xy * 0.55 - flow * uTime * speed * live;
     float churn = valueNoise(p.xy * 0.3 + vec2(uTime * 0.05, -uTime * 0.04) * live);
-    float plates = valueNoise(q) * 0.65 + valueNoise(q * 2.3 + 7.0) * 0.35;
+    mat2 turn = mat2(0.8, -0.6, 0.6, 0.8);
+    float plates = valueNoise(turn * q) * 0.5 + valueNoise(turn * turn * q * 2.1 + 7.0) * 0.3 + valueNoise(q * 4.3 + 2.0) * 0.2;
     float cool = clamp(V.b / 70.0, 0.0, 1.0);
-    float crust = clamp(smoothstep(0.42, 0.64, plates + (churn - 0.5) * 0.35) + cool * 0.3, 0.0, 1.0);
+    float crust = clamp(smoothstep(0.36, 0.58, plates + (churn - 0.5) * 0.35) + cool * 0.3, 0.0, 1.0);
     if (live < 0.5) crust = max(crust, 0.88);
     float cracks = 1.0 - smoothstep(0.0, 0.07, abs(plates - 0.5));
     vec3 hotC = mix(vec3(1.0, 0.82, 0.3), vec3(0.95, 0.3, 0.05), smoothstep(0.0, 0.6, crust));
     rgb = mix(rgb, vec3(0.08, 0.065, 0.06), V.g);
-    glow = V.g * mix(hotC * 2.4, vec3(0.9, 0.2, 0.03) * (0.15 + cracks * 1.3), crust);
+    glow = V.g * mix(hotC * 1.5, vec3(0.9, 0.2, 0.03) * (0.12 + cracks * 1.2), crust);
     ref = 0.02;
   }
   glow += rgb * vec3(1.0, 0.42, 0.12) * V.a * V.a * 1.2 * (0.35 + 0.65 * live);
@@ -1338,11 +1347,15 @@ vec3 heatShimmer(vec3 ro, vec3 rd) {
   float t0;
   float t1;
   if (!rayBox(ro, rd, AIR_MIN, AIR_MAX, t0, t1)) return rd;
-  t1 = min(t1, t0 + 280.0);
-  float dt = (t1 - t0) / 8.0;
+  // Samples crowd toward the eye (spacing grows with the square), so a hot band a few meters
+  // away is not stepped over, and the weight is each sample's own share of the path.
+  float span = min(t1, t0 + 200.0) - t0;
   vec2 bend = vec2(0.0);
-  for (int i = 0; i < 8; i++) {
-    vec3 q = ro + rd * (t0 + (float(i) + 0.5) * dt);
+  for (int i = 0; i < 12; i++) {
+    float a0 = float(i) / 12.0;
+    float a1 = float(i + 1) / 12.0;
+    float dt = span * (a1 * a1 - a0 * a0);
+    vec3 q = ro + rd * (t0 + span * (0.5 * (a0 + a1)) * (0.5 * (a0 + a1)));
     float h = heatField(q);
     if (h <= 0.0) continue;
     vec2 w = vec2(dot(q, uRight) * 1.5, (q.z - uTime * 2.6) * 1.2);
@@ -1351,7 +1364,7 @@ vec3 heatShimmer(vec3 ro, vec3 rd) {
     float ny = valueNoise(w + vec2(0.0, 0.3));
     bend += vec2(n0 - nx, n0 - ny) * h * min(dt, 8.0);
   }
-  bend *= 0.0032;
+  bend *= 0.0045;
   float bl = length(bend);
   if (bl > 0.012) bend *= 0.012 / bl;
   return normalize(rd + uRight * bend.x + uUp * bend.y);
@@ -1366,14 +1379,15 @@ vec3 withVolcanoAir(vec3 ro, vec3 rd, float tHit, vec3 color) {
   float tEnd = min(t1, tHit);
   vec3 sun = normalize(uSun);
   float day = smoothstep(-0.05, 0.25, sun.z);
-  if (tEnd > t0) {
-    float span = min(tEnd, t0 + 320.0) - t0;
-    float dt = span / 10.0;
+  float p0;
+  float p1;
+  if (rayBox(ro, rd, PLUME_MIN, PLUME_MAX, p0, p1) && min(p1, tHit) > p0) {
+    float dt = (min(p1, tHit) - p0) / 12.0;
     float jitter = ign(gl_FragCoord.xy + 2.1 * mod(uFrame, 32.0));
     float optical = 0.0;
     float lit = 0.0;
-    for (int i = 0; i < 10; i++) {
-      vec3 q = ro + rd * (t0 + (float(i) + jitter) * dt);
+    for (int i = 0; i < 12; i++) {
+      vec3 q = ro + rd * (p0 + (float(i) + jitter) * dt);
       float ps = plumeShape(q);
       if (ps < 0.01) continue;
       float rise = q.z - uTime * 1.8;
@@ -1383,8 +1397,10 @@ vec3 withVolcanoAir(vec3 ro, vec3 rd, float tHit, vec3 color) {
       lit += d * dt * exp(-max(q.z - LAVA_LEVEL, 0.0) / 9.0) * exp(-0.09 * optical);
     }
     float T = exp(-0.09 * optical);
-    vec3 smoke = mix(vec3(0.07, 0.065, 0.065), vec3(0.5, 0.49, 0.48), day);
+    vec3 smoke = mix(vec3(0.07, 0.065, 0.065), vec3(0.58, 0.57, 0.56), day);
     color = mix(smoke, color, T) + vec3(1.0, 0.36, 0.08) * lit * 0.1;
+  }
+  if (tEnd > t0) {
     for (int k = 0; k < 12; k++) {
       float d = 2.0 + float(k * k) * 0.9;
       if (d < t0 || d > tEnd) continue;
@@ -1408,7 +1424,7 @@ vec3 withVolcanoAir(vec3 ro, vec3 rd, float tHit, vec3 color) {
       float m = smoothstep(size, size * 0.3, dist);
       if (m <= 0.0) continue;
       if (((h >> 5u) & 3u) == 0u) color += vec3(1.0, 0.45, 0.1) * m * (1.3 + 0.7 * sin(uTime * 9.0 + r0 * 40.0));
-      else color = mix(color, vec3(0.19, 0.18, 0.17), m * 0.8);
+      else color = mix(color, vec3(0.19, 0.18, 0.17) * (0.15 + 0.85 * day), m * 0.8);
     }
   }
   for (int i = 0; i < ${MAX_BOMBS}; i++) {
@@ -1429,9 +1445,9 @@ vec3 withVolcanoAir(vec3 ro, vec3 rd, float tHit, vec3 color) {
     float sc = dot(on - ro, rd);
     if (sc <= 0.0 || sc > tHit) continue;
     float dist = length(ro + rd * sc - on);
-    float width = uBombs[i].w * 0.6 * (0.3 + 0.7 * tc) + sc * 0.0015;
-    float g = exp(-(dist * dist) / (width * width)) * (0.15 + 0.85 * tc) * vel.w;
-    color += vec3(1.0, 0.5, 0.14) * g * 1.6;
+    float width = uBombs[i].w * 0.45 * (0.2 + 0.8 * tc) + sc * 0.0012;
+    float g = exp(-(dist * dist) / (width * width)) * tc * tc * vel.w;
+    color += vec3(1.0, 0.45, 0.12) * g * 0.9;
   }
   return color;
 }
