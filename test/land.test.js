@@ -242,16 +242,23 @@ test("the shader reads the same pine rule and hash as the walk", () => {
   assert.match(gpu, /LAND_TOP/);
 });
 
-test("?look=mountain and ?look=spring stand somewhere dry and face the landmark", () => {
+test("?look=mountain stands dry facing the peak; ?look=spring wades the stream facing uphill", () => {
   for (const which of ["mountain", "spring"]) {
     const v = landView(field, which);
-    assert.equal(waterAt(v.x, v.y), null, which);
     assert.ok(Number.isFinite(v.yaw) && Number.isFinite(v.pitch));
   }
+  assert.equal(waterAt(landView(field, "mountain").x, landView(field, "mountain").y), null);
+  // The spring view stands in the shallow stream (ankle deep, below WADE) and looks up the channel.
+  const brook = landView(field, "spring");
+  const wet = waterAt(brook.x, brook.y);
+  assert.ok(wet !== null && wet - duneHeight(brook.x, brook.y) < 0.6);
+  const ahead = 6;
+  assert.ok(duneHeight(brook.x + Math.sin(brook.yaw) * ahead, brook.y + Math.cos(brook.yaw) * ahead) > duneHeight(brook.x, brook.y));
   const shore = landView(field, "mountain");
   const toPeak = Math.atan2(MOUNTAIN.x - shore.x, MOUNTAIN.y - shore.y);
   assert.ok(Math.abs(toPeak - shore.yaw) < 1e-9);
   assert.ok(landWater(field, LAKE.x, LAKE.y) > 0);
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  assert.match(main, /const skyEye = Math\.min\(1500, Math\.max\(0, Number\(params\.get\("sky"\)\) \|\| 0\)\);/);
   assert.match(main, /params\.get\("look"\) === "mountain" \|\| params\.get\("look"\) === "spring"/);
 });

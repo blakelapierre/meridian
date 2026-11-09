@@ -529,14 +529,11 @@ export function fogLevel(raw, bot = false) {
 export function landView(field, which) {
   const spring = field.plan.spring;
   if (which === "spring") {
-    const v = field.plan.stream[Math.min(field.plan.stream.length - 1, 16)];
-    const dx = v.x - spring.x;
-    const dy = v.y - spring.y;
-    const l = Math.hypot(dx, dy) || 1;
-    const x = spring.x - (dx / l) * 3 + (dy / l) * 1.2;
-    const y = spring.y - (dy / l) * 3 - (dx / l) * 1.2;
-    const far = field.plan.stream[Math.min(field.plan.stream.length - 1, 40)];
-    return { x, y, yaw: Math.atan2(far.x - x, far.y - y), pitch: -0.22 };
+    // Stand in the stream a way down and look back up the channel toward the spring.
+    const stream = field.plan.stream;
+    const at = stream[Math.min(stream.length - 1, 30)];
+    const up = stream[Math.min(stream.length - 1, 18)];
+    return { x: at.x, y: at.y, yaw: Math.atan2(up.x - at.x, up.y - at.y), pitch: 0.04 };
   }
   const mx = MOUNTAIN.x - LAKE.x;
   const my = MOUNTAIN.y - LAKE.y;
