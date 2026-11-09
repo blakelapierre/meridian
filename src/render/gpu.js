@@ -2,7 +2,8 @@ import { cameraBasis } from "../engine/cast.js";
 import { GPU_TREE_AT, MAX_GPU_NODES, MAX_SHAPE_BODIES, MAX_SHAPE_NODES, gpuNodeCount, gpuNodeData, packGpuNodes, packShapeTree, shapeIndexData, shapeNodeCount, shapeNodeData } from "../engine/octree.js";
 import { VOXEL_M } from "../sim/crust.js";
 import { LAND_H, LAND_NX, LAND_NY, LAND_TOP, LAND_W, LAND_X0, LAND_Y0, MOUNTAIN, PINE_CELL, landTexels } from "../sim/land.js?v=2";
-import { land, volcano } from "../sim/life.js?v=83";
+import { land, under, volcano } from "../sim/life.js?v=84";
+import { ATLAS_H, ATLAS_W, underAtlas, underGlsl } from "./caves.js?v=1";
 import { LAVA_LEVEL, MAX_BOMBS, PLUME_TOP, VOLCANO, VOLC_N, VOLC_W, VOLC_X0, VOLC_Y0, WIND, volcanoTexels } from "../sim/volcano.js?v=1";
 import { ATLAS, BARK_TILE, CLOTH_TILE, FEATHER_TILE, GRASS_TILE, HAIR_TILE, HIDE_TILE, HORN_TILE, LEAF_TILE, METAL_TILE, ROCK_TILE, SAND_TILE, SCALE_TILE, SHAPE_TILE, SKIN_TILE, WOOD_TILE, barkTexture, blitTexture, clothTexture, featherTexture, grassTexture, hairTexture, hideTexture, hornTexture, leafTexture, metalTexture, rectFor, rockTexture, sandTexture, scaleTexture, skinTexture, woodTexture } from "./texture.js?v=64";
 
@@ -226,6 +227,7 @@ void main() {
   gl_Position = vec4(aRay.x * 2.0 - 1.0, (1.0 - aRay.y) * 2.0 - 1.0, 0.0, 1.0);
   gl_PointSize = 1.0;
 }`;
+  const underWorld = under();
   const fragBody = `#version 300 es
 precision highp float;
 uniform vec3 uOrigin;
@@ -254,6 +256,8 @@ uniform vec4 uFogBox;
 uniform float uFogTop;
 uniform sampler2D uVolc;
 uniform vec4 uVolcBox;
+uniform float uCaves;
+uniform float uInCave;
 uniform float uVolcano;
 uniform float uHeat;
 uniform int uBombCount;
@@ -388,13 +392,14 @@ const vec3 AIR_MIN = vec3(${glf(AIR_X0)}, ${glf(AIR_Y0)}, 0.0);
 const vec3 AIR_MAX = vec3(${glf(AIR_X1)}, ${glf(AIR_Y1)}, ${glf(AIR_TOP)});
 const vec3 PLUME_MIN = vec3(${glf(PLUME_X0)}, ${glf(PLUME_Y0)}, ${glf(LAVA_LEVEL - 1)});
 const vec3 PLUME_MAX = vec3(${glf(PLUME_X1)}, ${glf(PLUME_Y1)}, ${glf(AIR_TOP)});
+${underGlsl(underWorld)}
 bool inVolcBox(vec2 p) {
   vec2 q = p - uVolcBox.xy;
   return q.x >= 0.0 && q.y >= 0.0 && q.x < uVolcBox.z && q.y < uVolcBox.w;
 }
 vec4 volcAt(vec2 p) {
   if (!inVolcBox(p)) return vec4(0.0);
-  return texture(uVolc, (p - uVolcBox.xy) / uVolcBox.zw);
+  return tileAt(p, vec4(uVolcBox.xy, uVolcBox.z / ${VOLC_N}.0, ${VOLC_N}.0), 0.0);
 }
 // The same bits as hashU in src/sim/land.js.
 uint hashU(int i, int j, uint seed) {
@@ -506,6 +511,9 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
     vec3 mtn = mix(grassC * vec3(0.92, 1.04, 0.86), needles, smoothstep(0.05, 0.4, L.b));
     mtn = mix(mtn, rockC * 1.05, clamp(smoothstep(0.28, 0.6, steep) + smoothstep(PEAK * 0.7, PEAK * 0.86, g), 0.0, 1.0));
     float snow = smoothstep(PEAK * 0.91, PEAK * 1.0, g + (valueNoise(p * 0.21) - 0.5) * 3.0) * (1.0 - smoothstep(0.55, 0.8, steep));
+    // Snow banked around the ice castle on the summit.
+    float yard = 1.0 - smoothstep(22.0, 60.0, length(p - CASTLE_C.xy) + (valueNoise(p * 0.3) - 0.5) * 10.0);
+    snow = max(snow, yard * smoothstep(CASTLE_C.z - 24.0, CASTLE_C.z - 10.0, g) * (1.0 - smoothstep(0.6, 0.9, steep)));
     mtn = mix(mtn, vec3(0.9, 0.92, 0.95), snow);
     rgb = mix(rgb, mtn, smoothstep(0.3, 2.0, L.r));
     vec3 lush = vec3(0.21, 0.36, 0.15) * (0.82 + valueNoise(p * 1.3) * 0.36);
@@ -555,9 +563,44 @@ float islandExit(vec3 ro, vec3 rd) {
   return (-b + sqrt(disc)) / a;
 }
 
+// The eye under a cave roof (the page says so too, as uInCave; this holds on any frame).
+bool eyeInCave() {
+  if (uInCave > 0.5) return true;
+  if (uVolcBox.z <= 0.0) return false;
+  return (inBox3(uOrigin, LAVA_MIN, LAVA_MAX) || inBox3(uOrigin, GEM_MIN, GEM_MAX)) && uOrigin.z < duneHeight(uOrigin.xy) - 0.5;
+}
+// What the march reads: the dunes, and under the castle and cave boxes the special volumes too.
+float marchDist(vec3 q) {
+  float d = q.z - duneHeight(q.xy);
+  return inUnderBox(q) ? underDist(q, d) : d;
+}
+// What a hit landed on: 0 ground, 1 cave rock, 2 castle ice, 3 castle snow, 4 spire ice.
+int underKind(vec3 p) {
+  if (uVolcBox.z <= 0.0) return 0;
+  if (inBox3(p, CASTLE_MIN, CASTLE_MAX)) {
+    float k;
+    float c = castleSDF(p, k);
+    if (c < 0.08) return k > 2.5 ? 3 : (k > 1.5 ? 4 : 2);
+    // A bank of ground cut back by the castle's cleared air (beside the ramp): snow, its own normal.
+    if (p.z < duneHeight(p.xy) - 0.04) return 3;
+  }
+  if ((inBox3(p, LAVA_MIN, LAVA_MAX) || inBox3(p, GEM_MIN, GEM_MAX)) && p.z < duneHeight(p.xy) - 0.04) return 1;
+  return 0;
+}
+vec3 underNormal(vec3 p, float e) {
+  vec2 h = vec2(e, 0.0);
+  vec3 n = vec3(
+    marchDist(p + h.xyy) - marchDist(p - h.xyy),
+    marchDist(p + h.yxy) - marchDist(p - h.yxy),
+    marchDist(p + h.yyx) - marchDist(p - h.yyx));
+  return length(n) > 1.0e-6 ? normalize(n) : vec3(0.0, 0.0, 1.0);
+}
+int gUnderHit = 0;
+
 bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   gStep = 0.0;
-  if (dot(ro.xy, ro.xy) <= 65536.0 && ro.z < groundHeight(ro.xy) + 0.02) {
+  gUnderHit = 0;
+  if (dot(ro.xy, ro.xy) <= 65536.0 && ro.z < groundHeight(ro.xy) + 0.02 && marchDist(ro) <= 0.02) {
     t = 0.02;
     p = ro + rd * t;
     p.z = duneHeight(p.xy);
@@ -574,11 +617,23 @@ bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
     if (ro.z >= LAND_TOP) tFar = 0.0;
     else tFar = min(tFar, (LAND_TOP - ro.z) / rd.z);
   }
+  // Under ground (in a cave) the far end is wherever the rock is, not the sea plane.
+  if (ro.z < 0.0) tFar = max(tFar, 60.0);
   tFar = clamp(tFar, tNear, 8000.0);
   if (limit > 0.0) tFar = min(tFar, limit);
+  // The spans of the ray inside the castle and cave boxes march finely (walls are thin, tunnels narrow).
+  vec2 span[3];
+  bool anySpan = false;
+  {
+    float a; float b;
+    span[0] = boxSpan(ro, rd, CASTLE_MIN, CASTLE_MAX, a, b) && uVolcBox.z > 0.0 ? vec2(a, b) : vec2(1.0e9);
+    span[1] = boxSpan(ro, rd, LAVA_MIN, LAVA_MAX, a, b) && uVolcBox.z > 0.0 ? vec2(a, b) : vec2(1.0e9);
+    span[2] = boxSpan(ro, rd, GEM_MIN, GEM_MAX, a, b) && uVolcBox.z > 0.0 ? vec2(a, b) : vec2(1.0e9);
+    for (int k = 0; k < 3; k++) if (span[k].x < tFar) anySpan = true;
+  }
   float prevT = tNear;
   vec3 prevQ = ro + rd * prevT;
-  float prevDist = prevQ.z - duneHeight(prevQ.xy);
+  float prevDist = marchDist(prevQ);
   bool hit = false;
   float lo = prevT;
   float hi = prevT;
@@ -588,15 +643,24 @@ bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   vec2 lq = ro.xy - uLandBox.xy;
   bool nearLand = lq.x > -PINE_NEAR && lq.y > -PINE_NEAR && lq.x < uLandBox.z + PINE_NEAR && lq.y < uLandBox.w + PINE_NEAR;
   if (nearLand) budget += 44.0;
+  if (anySpan) budget += 150.0;
   gStep = advance;
   t = prevT;
-  for (int i = 0; i < 124; i++) {
+  for (int i = 0; i < 280; i++) {
     if (float(i) >= budget || t >= tFar) break;
+    bool fine = false;
+    float next = 1.0e9;
+    for (int k = 0; k < 3; k++) {
+      if (t >= span[k].x - 0.005 && t <= span[k].y) fine = true;
+      if (span[k].x > t) next = min(next, span[k].x);
+    }
     float stepNow = nearLand && t < PINE_NEAR ? min(advance, 0.25 + t * 0.04) : advance;
+    if (fine) stepNow = clamp(abs(prevDist) * 0.7, 0.03, 0.42);
+    else stepNow = min(stepNow, max(next - t, 0.01));
     gStep = stepNow;
     t += stepNow;
     vec3 q = ro + rd * t;
-    float dist = q.z - duneHeight(q.xy);
+    float dist = anySpan ? marchDist(q) : q.z - duneHeight(q.xy);
     bool cross = !hit && prevDist > 0.0 && dist <= 0.02;
     if (cross) {
       hit = true;
@@ -614,12 +678,13 @@ bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   for (int k = 0; k < 10; k++) {
     float mid = 0.5 * (lo + hi);
     vec3 m = ro + rd * mid;
-    if (m.z - duneHeight(m.xy) > 0.0) lo = mid;
+    if ((anySpan ? marchDist(m) : m.z - duneHeight(m.xy)) > 0.0) lo = mid;
     else hi = mid;
   }
   t = hi;
   p = ro + rd * hi;
-  p.z = duneHeight(p.xy);
+  gUnderHit = anySpan ? underKind(p) : 0;
+  if (gUnderHit == 0) p.z = duneHeight(p.xy);
   return dot(p.xy, p.xy) <= 65536.0;
 }
 
@@ -1152,7 +1217,7 @@ float wetAt(vec3 p) {
 }
 // Mountain shade: a short march toward the sun over the land (canopy level of detail).
 float landShadow(vec3 p, vec3 sun) {
-  if (sun.z <= 0.02 || (!inLandBox(p.xy) && !inVolcBox(p.xy))) return 1.0;
+  if (sun.z <= 0.02 || (!inLandBox(p.xy) && !inVolcBox(p.xy) && !inBox3(p, GEM_MIN, GEM_MAX))) return 1.0;
   float keep = gStep;
   gStep = 4.0;
   float t = 0.6;
@@ -1160,7 +1225,9 @@ float landShadow(vec3 p, vec3 sun) {
   for (int i = 0; i < 14; i++) {
     vec3 q = p + sun * t;
     if (q.z > LAND_TOP) break;
-    if (q.z < duneHeight(q.xy) - 0.05) { lit = 0.32; break; }
+    if (q.z < duneHeight(q.xy) - 0.05 && !(inUnderBox(q) && underDist(q, -0.05) > 0.0)) { lit = 0.32; break; }
+    // Ice lets light through: a lighter, bluer shade than rock.
+    if (inBox3(q, CASTLE_MIN, CASTLE_MAX) && castleD(q) < 0.0) { lit = 0.62; break; }
     t += 0.8 + t * 0.35;
   }
   gStep = keep;
@@ -1324,6 +1391,10 @@ float heatField(vec3 q) {
     float up = q.z - (duneBase(q.xy) + V.r);
     if (V.a > 0.02 && up > -0.5) h += V.a * exp(-max(up, 0.0) / 7.0);
   }
+  if (uCaves > 0.5 && inBox3(q, LAVA_MIN, LAVA_MAX)) {
+    vec4 m = tileAt(q.xy, LAVA_BOX, LAVA_U0);
+    if (m.g > m.r + 0.02 && q.z > m.r && q.z < m.g) h += smoothstep(0.4, 1.0, m.a) * 0.7 * exp(-(q.z - m.r) / 1.8);
+  }
   h = min(1.0, h + 0.9 * plumeShape(q));
   return h < 0.02 ? 0.0 : h;
 }
@@ -1400,7 +1471,8 @@ vec3 withVolcanoAir(vec3 ro, vec3 rd, float tHit, vec3 color) {
     vec3 smoke = mix(vec3(0.07, 0.065, 0.065), vec3(0.58, 0.57, 0.56), day);
     color = mix(smoke, color, T) + vec3(1.0, 0.36, 0.08) * lit * 0.1;
   }
-  if (tEnd > t0) {
+  // No ash or cinders under a cave roof.
+  if (tEnd > t0 && !eyeInCave()) {
     for (int k = 0; k < 12; k++) {
       float d = 2.0 + float(k * k) * 0.9;
       if (d < t0 || d > tEnd) continue;
@@ -1470,6 +1542,118 @@ vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   return albedo * (vec3(0.28, 0.30, 0.34) + vec3(1.05, 0.96, 0.84) * direct);
 }
 
+// Cave rock, gems and magma, finished here (no sun pass after): lit by the gem and magma lights,
+// a lamp at the eye, and daylight that leaks in near a mouth.
+vec3 caveShade(vec3 p, vec3 n, vec3 rd) {
+  bool lavaSide = inBox3(p, LAVA_MIN, LAVA_MAX);
+  vec4 m = lavaSide ? tileAt(p.xy, LAVA_BOX, LAVA_U0) : tileAt(p.xy, GEM_BOX, GEM_U0);
+  float mat = lavaSide ? tileMat(p.xy, LAVA_BOX, LAVA_U0) : tileMat(p.xy, GEM_BOX, GEM_U0);
+  float nz = valueNoise(p.xy * 1.7 + p.z * 0.9) * 0.6 + valueNoise(p.xy * 5.3 - p.z * 2.1) * 0.4;
+  float gap = max(m.g - m.r, 0.01);
+  float rise = (p.z - m.r) / gap;
+  vec3 albedo;
+  vec3 glow = vec3(0.0);
+  float shine = 0.0;
+  if (lavaSide) {
+    albedo = mix(vec3(0.09, 0.085, 0.085), vec3(0.22, 0.2, 0.19), nz);
+    // Hot cracks in the basalt, thin and only where the rock is hot (near the magma).
+    float vein = abs(valueNoise(p.xy * 0.8 + vec2(p.z * 0.9, -p.z * 0.5)) - 0.5) + 0.35 * abs(valueNoise(p.yx * 2.3 + p.z) - 0.5);
+    float crack = 1.0 - smoothstep(0.0, 0.025, vein);
+    float hot = smoothstep(0.3, 0.9, m.a);
+    glow += vec3(1.0, 0.28, 0.04) * crack * hot * 1.2 * (0.75 + 0.25 * sin(uTime * 1.3 + nz * 6.0));
+    if (m.b > 2.5 && rise < 0.12) {
+      float plates = valueNoise(p.xy * 1.6 + vec2(uTime * 0.05, -uTime * 0.04));
+      float seam = 1.0 - smoothstep(0.0, 0.16, abs(plates - 0.5));
+      albedo = vec3(0.05, 0.03, 0.02);
+      glow = mix(vec3(1.4, 0.36, 0.05), vec3(2.6, 1.3, 0.3), seam) * (0.75 + 0.25 * sin(uTime * 2.0 + plates * 9.0));
+    }
+  } else {
+    float band = 0.5 + 0.5 * sin(p.z * 3.1 + nz * 2.0);
+    albedo = mix(vec3(0.32, 0.28, 0.23), vec3(0.6, 0.55, 0.47), band * 0.6 + nz * 0.4);
+    float wet = clamp(m.a, 0.0, 1.0);
+    albedo *= 1.0 - 0.3 * wet;
+    shine = 0.25 * wet;
+    if (mat > 0.5 && mat < 4.5 && rise < 0.45) {
+      vec3 gc = gemColor(mat);
+      albedo = gc * 0.35;
+      shine = 0.6;
+      glow += gc * 0.4;
+      if (uCaves > 0.5) {
+        // Facets: a hashed cell flashes when its tilted face lines up with the eye.
+        vec3 cell = floor(p * 9.0);
+        float h = hash21(cell.xy + cell.z * 17.0);
+        vec3 facet = normalize(n + (vec3(hash21(cell.yz), hash21(cell.zx), h) - 0.5) * 1.2);
+        float glint = pow(max(dot(reflect(rd, facet), normalize(uOrigin - p + vec3(0.0, 0.0, 0.5))), 0.0), 40.0);
+        float twinkle = 0.5 + 0.5 * sin(uTime * (2.0 + h * 5.0) + h * 30.0);
+        glow += mix(gc, vec3(1.0), 0.6) * glint * twinkle * 3.0;
+      }
+    }
+  }
+  vec3 light = vec3(0.06, 0.062, 0.075);
+  vec3 toEye = uOrigin - p;
+  float de2 = dot(toEye, toEye);
+  light += vec3(1.0, 0.9, 0.76) * 1.1 * max(dot(n, toEye * inversesqrt(max(de2, 1.0e-4))), 0.0) / (1.0 + de2 / 70.0);
+  if (uCaves > 0.5) {
+    for (int k = 0; k < CAVE_LIGHTS; k++) {
+      vec4 l = CAVE_LIGHT[k];
+      vec3 o = l.xyz - p;
+      float d2 = dot(o, o);
+      if (d2 > 400.0) continue;
+      bool magma = l.w > 4.5;
+      float lit = max(dot(n, o * inversesqrt(max(d2, 1.0e-4))), 0.0) * 0.8 + 0.2;
+      light += gemColor(l.w) * (magma ? 3.2 : 1.6) * lit / (1.0 + d2 / (magma ? 7.0 : 3.0));
+    }
+  } else {
+    light += lavaSide ? vec3(0.25, 0.08, 0.02) : vec3(0.1, 0.1, 0.12);
+  }
+  vec3 color = albedo * light + glow;
+  if (shine > 0.0) {
+    vec3 v = normalize(toEye);
+    color += light * shine * pow(max(dot(reflect(-v, n), v), 0.0), 30.0) * 0.4;
+  }
+  // Daylight down a mouth: fades over a few meters of rock overhead.
+  float depth = duneHeight(p.xy) - p.z;
+  float sky = exp(-max(depth, 0.0) / 1.6) * smoothstep(-0.2, 0.6, n.z + 0.4);
+  if (sky > 0.02) color = mix(color, sunLit(p, n, albedo) + glow, sky);
+  return color;
+}
+
+// Ice: Fresnel sky reflection over light refracted through the wall, blue with thickness, and a
+// soft inner glow; frost on the faces that look up. Returns the glow added after the sun pass.
+vec3 iceShade(vec3 p, vec3 n, vec3 rd, int kind, inout vec3 rgb) {
+  float frost = smoothstep(0.35, 0.85, n.z) * (0.75 + 0.25 * valueNoise(p.xy * 3.0 + p.z));
+  // Rime: streaks down the walls and a fine speckle.
+  float streak = valueNoise(vec2(dot(p.xy, vec2(0.7, -0.7)) * 2.2, p.z * 0.35));
+  frost = max(frost, 0.45 * smoothstep(0.55, 0.85, streak) + 0.2 * valueNoise(p.xy * 7.1 + p.z * 4.7));
+  vec3 sun = normalize(uSun);
+  float day = smoothstep(-0.05, 0.25, sun.z) * 0.85 + 0.15;
+  float cosi = clamp(dot(-rd, n), 0.0, 1.0);
+  float fres = 0.06 + 0.94 * pow(1.0 - cosi, 5.0);
+  vec3 refl = skyColor(reflect(rd, n));
+  float thick = 1.4;
+  vec3 tr = refract(rd, n, 1.0 / 1.31);
+  if (dot(tr, tr) < 0.5) tr = reflect(rd, n);
+  if (uCaves > 0.5) {
+    // Through the ice to the far face.
+    thick = 0.0;
+    vec3 q = p - n * 0.04;
+    for (int i = 0; i < 12; i++) {
+      float d = -castleD(q);
+      if (d < 0.02) break;
+      float s = max(d, 0.12);
+      q += tr * s;
+      thick += s;
+      if (thick > 7.0) break;
+    }
+  }
+  vec3 back = tr.z < -0.1 ? vec3(0.78, 0.84, 0.92) * day : skyColor(tr);
+  vec3 absorb = exp(-min(thick, 4.0) * vec3(0.17, 0.065, 0.028) * (kind == 4 ? 1.6 : 1.0));
+  vec3 sub = vec3(0.42, 0.68, 0.9) * (1.0 - exp(-thick * 0.5)) * (0.16 + 0.22 * max(dot(-tr, sun), 0.0)) * day;
+  vec3 ice = mix(back * absorb + sub, refl, fres);
+  rgb = mix(vec3(0.12, 0.16, 0.2), vec3(0.86, 0.92, 0.98), frost);
+  return ice * (1.0 - frost);
+}
+
 vec3 boxNormal(vec3 p, vec3 bmin, vec3 bmax) {
   vec3 q = (p - (bmin + bmax) * 0.5) / max((bmax - bmin) * 0.5, vec3(0.001));
   vec3 a = abs(q);
@@ -1517,6 +1701,7 @@ void main() {
     vec3 p;
     float sandT = 1.0e30;
     vec3 sandP = ro;
+    int underHit = 0;
     bool sand = false;
     if (bounce == 0) sand = sandPlane(ro, rd, limit, sandT, sandP);
     else sand = sandCoarse(ro, rd, sandT, sandP);
@@ -1556,10 +1741,19 @@ void main() {
     } else if (sand && !openMouth && sandT < bestT) {
       bestT = sandT;
       bestP = sandP;
-      bestN = duneNormal(sandP.xy);
-      bestRgb = withPrints(groundAlbedo(sandP.xy, bestN), sandP.xy, bounce);
-      bestRef = 0.02;
-      landSurface(sandP, rd, bestN, bestRgb, bestRef);
+      underHit = bounce == 0 ? gUnderHit : 0;
+      if (underHit == 0) {
+        bestN = duneNormal(sandP.xy);
+        bestRgb = withPrints(groundAlbedo(sandP.xy, bestN), sandP.xy, bounce);
+        bestRef = 0.02;
+        landSurface(sandP, rd, bestN, bestRgb, bestRef);
+      } else {
+        bestN = underNormal(sandP, underHit == 1 ? 0.06 : 0.03);
+        // The floor slab's sides are the castle's ice footing; only its top and the ramp are snow.
+        if (underHit == 3 && abs(bestN.z) < 0.5 && inBox3(sandP, CASTLE_MIN, CASTLE_MAX) && castleD(sandP) < 0.08) underHit = 2;
+        bestRgb = underHit == 3 ? vec3(0.84, 0.87, 0.92) * (0.9 + 0.1 * valueNoise(sandP.xy * 2.0)) : vec3(0.5);
+        bestRef = underHit == 3 ? 0.02 : (underHit == 1 ? 0.0 : 0.08);
+      }
       found = true;
     }
     for (int i = 0; i < ${MAX_BOXES}; i++) {
@@ -1624,7 +1818,18 @@ void main() {
       }
     }
     vec3 bestGlow = vec3(0.0);
-    if (found && sand && bestT == sandT) bestGlow = volcSurface(bestP, bestRgb, bestRef);
+    bool caveLit = false;
+    if (found && sand && bestT == sandT) {
+      if (underHit == 0) bestGlow = volcSurface(bestP, bestRgb, bestRef);
+      else {
+        if (dot(bestN, rd) > 0.0) bestN = -bestN;
+        if (underHit == 1) {
+          bestGlow = caveShade(bestP, bestN, rd);
+          bestRgb = vec3(0.0);
+          caveLit = true;
+        } else if (underHit != 3) bestGlow = iceShade(bestP, bestN, rd, underHit, bestRgb);
+      }
+    }
     if (bombHit >= 0) {
       vec3 local = bestN * 3.1 + uBombs[bombHit].xyz * 0.37;
       float seam = valueNoise(local.xy + local.z) * 0.6 + valueNoise(local.yz * 1.7) * 0.4;
@@ -1647,7 +1852,7 @@ void main() {
     if (bounce == 0) firstT = min(bestT, workT);
     if (found) {
       if (dot(bestN, rd) > 0.0) bestN = -bestN;
-      if (bounce == 0) {
+      if (bounce == 0 && !caveLit) {
         bestRgb = sunLit(bestP, bestN, bestRgb);
         // Wet ground shines: a grazing-angle sky sheen where it rains, so puddled flats catch the light.
         if (bestN.z > 0.6) {
@@ -1658,12 +1863,12 @@ void main() {
           }
         }
       }
-      else {
+      else if (!caveLit) {
         float nd = max(dot(bestN, normalize(uSun)), 0.0);
         bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;
       }
       bestRgb += bestGlow;
-      if (bounce == 0) {
+      if (bounce == 0 && !caveLit) {
         float low = exp(-max(bestP.z, 0.0) * 0.11);
         float fog = (1.0 - exp(-bestT * 0.0011)) * mix(0.35, 1.0, low);
         fog = clamp(fog, 0.0, 0.62);
@@ -1720,7 +1925,7 @@ void main() {
   // Rain you can see: under a thick deck (uRain from src/sim/cloud.js) thin falling streaks dim and
   // grey the view. Streak columns are hashed, and each falls at its own pace on tick time.
   // Under a roof (anything solid straight above the camera) the near streaks and grey stop.
-  if (uRain > 0.0 && !blocked(uOrigin + vec3(0.0, 0.0, 0.3), vec3(0.0, 0.0, 1.0))) {
+  if (uRain > 0.0 && !eyeInCave() && !blocked(uOrigin + vec3(0.0, 0.0, 0.3), vec3(0.0, 0.0, 1.0))) {
     vec2 rp = vec2(vRay.x * 140.0, vRay.y * 9.0);
     float col = floor(rp.x);
     float h = hash21(vec2(col, 7.0));
@@ -1890,7 +2095,8 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, VOLC_N, VOLC_N, 0, gl.RGBA, gl.FLOAT, volcanoTexels(volcano()));
+    // An atlas: the volcano tile, then the cave tiles (src/render/caves.js).
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, ATLAS_W, ATLAS_H, 0, gl.RGBA, gl.FLOAT, underAtlas(underWorld, volcanoTexels(volcano()), VOLC_N));
     gl.bindTexture(gl.TEXTURE_2D, null);
   } catch {
     volcTex = null;
@@ -2339,6 +2545,9 @@ void main() {
       const vol = scene.volcano || null;
       gl.uniform1f(u("uVolcano"), vol ? vol.on : 0);
       gl.uniform1f(u("uHeat"), vol ? vol.heat : 0);
+      const caves = scene.caves || null;
+      gl.uniform1f(u("uCaves"), caves ? caves.on : 1);
+      gl.uniform1f(u("uInCave"), caves && caves.inCave ? 1 : 0);
       const bombs = vol && vol.on ? (vol.bombs || []).slice(0, MAX_BOMBS) : [];
       bombPos.fill(0);
       bombVel.fill(0);

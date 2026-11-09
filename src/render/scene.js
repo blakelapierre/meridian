@@ -4,7 +4,7 @@ import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=57";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js?v=2";
 import { dummyTexture } from "./texture.js";
-import { bankParts, duneHeight, fauna, floraParts } from "../sim/life.js?v=83";
+import { bankParts, duneHeight, fauna, floraParts } from "../sim/life.js?v=84";
 import { PEOPLE } from "../sim/people.js?v=2";
 import { helperParts } from "../sim/helper.js?v=1";
 

@@ -15,8 +15,8 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene, pictureCamera } from "../render/scene.js?v=79";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=101";
+import { buildScene, pictureCamera } from "../render/scene.js?v=80";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=102";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -145,7 +145,8 @@ import { craftHelper, cycleHelperTask, dismissHelper, helperLine, nearestHelper,
 import { stepBows } from "../sim/bow.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, eruptionAt, fauna, graze, groundLook, herdPrints, land, standHeight, volcano } from "../sim/life.js?v=83";
+import { blockedAt, duneHeight, eruptionAt, fauna, graze, groundLook, herdPrints, inCave, land, standAt, standHeight, under, volcano } from "../sim/life.js?v=84";
+import { cavesLevel, underView } from "../sim/under.js?v=1";
 import { heatLevel, volcanoClock, volcanoLevel, volcanoView } from "../sim/volcano.js?v=1";
 import { fogLevel, landView } from "../sim/land.js?v=2";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
@@ -166,7 +167,7 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture } from "./picture.js?v=4";
+import { openPicture } from "./picture.js?v=5";
 
 const canvas = document.querySelector("canvas");
 const params = new URLSearchParams(location.search);
@@ -363,11 +364,13 @@ const atLook = (() => {
   if (parts.length < 2 || !parts.slice(0, 2).every(Number.isFinite)) return null;
   return { x: parts[0], y: parts[1], yaw: Number.isFinite(parts[2]) ? (parts[2] * Math.PI) / 180 : 0, pitch: Number.isFinite(parts[3]) ? (parts[3] * Math.PI) / 180 : 0 };
 })();
-const landLook = atLook || (params.get("look") === "mountain" || params.get("look") === "spring" ? landView(land(), params.get("look")) : params.get("look") === "volcano" ? volcanoView(volcano()) : null);
+// ?look=castle faces the ice castle from below its ramp; ?look=lavacave and ?look=gemcave stand inside the caves.
+const underLooks = ["castle", "lavacave", "gemcave"];
+const landLook = atLook || (params.get("look") === "mountain" || params.get("look") === "spring" ? landView(land(), params.get("look")) : params.get("look") === "volcano" ? volcanoView(volcano()) : underLooks.includes(params.get("look")) ? underView(under(), params.get("look")) : null);
 const spawn = home
   ? { x: home[0] * 100, y: home[1] * 100, z: 0 }
   : landLook
-  ? { x: Math.round(landLook.x * 100), y: Math.round(landLook.y * 100), z: 0 }
+  ? { x: Math.round(landLook.x * 100), y: Math.round(landLook.y * 100), z: Math.round((landLook.z || 0) * 100) }
   : params.get("gate") === "1"
   ? { x: 0, y: -10900, z: 0 }
   : tourSpawn
@@ -458,6 +461,11 @@ const volcanoParam = volcanoLevel(params.get("volcano"), Boolean(params.get("bot
 const heatParam = volcanoParam ? heatLevel(params.get("heat"), Boolean(params.get("bot"))) : 0;
 const vtimeParam = params.get("vtime") !== null && params.get("vtime") !== "" ? Number(params.get("vtime")) : NaN;
 const volcanoStart = Date.now();
+// ?caves=0 drops the heavy cave and castle effects (lights, sparkle, refraction); bots skip them.
+const cavesParam = cavesLevel(params.get("caves"), Boolean(params.get("bot")));
+function cavesScene() {
+  return { on: cavesParam, inCave: inCave(player.position[0], player.position[1], player.position[2]) };
+}
 function volcanoScene() {
   if (!volcanoParam) return { on: 0, heat: 0, bombs: [] };
   const clock = params.get("vstill") === "1" && Number.isFinite(vtimeParam) ? vtimeParam : volcanoClock(vtimeParam, volcanoStart, Date.now());
@@ -1635,7 +1643,8 @@ function drawnOthers() {
 function cameraAim(sample = {}) {
   const bodyYaw = sample.yaw ?? yaw;
   const bodyPitch = sample.pitch ?? pitch;
-  const locked = zoom.blend >= 1 || (view === "first" && zoom.blend === 0);
+  // Under a cave roof the eye is your own: no chase camera through the rock.
+  const locked = zoom.blend >= 1 || (view === "first" && zoom.blend === 0) || inCave(player.position[0], player.position[1], player.position[2]);
   if (locked) {
     return {
       yaw: bodyYaw,
@@ -1691,10 +1700,10 @@ function aimCamera(sample, dt) {
     const len = Math.hypot(idealLook[0], idealLook[1], idealLook[2]) || 1;
     idealLook = [idealLook[0] / len, idealLook[1] / len, idealLook[2] / len];
   }
-  liftCamera(ideal, standHeight(ideal[0], ideal[1], columnFloor(terrain.log.crust, ideal[0], ideal[1])));
+  liftCamera(ideal, standAt(ideal[0], ideal[1], player.position[2], columnFloor(terrain.log.crust, ideal[0], ideal[1])));
   if (!cameraSpring) cameraSpring = createCameraSpring(ideal);
   cameraPos = stepCamera(cameraSpring, ideal, dt);
-  const landed = standHeight(cameraPos[0], cameraPos[1], columnFloor(terrain.log.crust, cameraPos[0], cameraPos[1]));
+  const landed = standAt(cameraPos[0], cameraPos[1], player.position[2], columnFloor(terrain.log.crust, cameraPos[0], cameraPos[1]));
   if (cameraPos[2] < landed + 0.45) {
     cameraPos[2] = landed + 0.45;
     cameraSpring.vel[2] = Math.max(0, cameraSpring.vel[2]);
@@ -1722,7 +1731,7 @@ function frameSlide(sample) {
     aim.third ? aim.distance : CLOSE,
   );
   behind[2] += follow.height;
-  liftCamera(behind, standHeight(behind[0], behind[1], columnFloor(terrain.log.crust, behind[0], behind[1])));
+  liftCamera(behind, standAt(behind[0], behind[1], player.position[2], columnFloor(terrain.log.crust, behind[0], behind[1])));
   const slip = [cameraPos[0] - behind[0], cameraPos[1] - behind[1], cameraPos[2] - behind[2]];
   const pulling = Boolean(selection?.point) && aim.third && zoom.blend < 0.45 && !rightDown;
   if (pulling) {
@@ -2665,6 +2674,7 @@ function stageFor(sample, width, height, scene) {
     rain: scene.rain,
     fog: fogParam,
     volcano: scene.volcano,
+    caves: scene.caves,
     gaze: scene.gaze,
     fovea: scene.fovea,
     inEyes: zoom.blend >= 1 || (view === "first" && zoom.blend === 0),
@@ -2698,6 +2708,7 @@ function paintRemote(sample, width, height) {
   scene.time = envTick() / 30;
   scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
   scene.volcano = volcanoScene();
+  scene.caves = cavesScene();
   scene.gaze = gazeFor(
     scene.camera,
     eyeOf(sample),
@@ -2747,6 +2758,7 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
   scene.fog = fogParam;
   scene.volcano = volcanoScene();
+  scene.caves = cavesScene();
   scene.gaze = gazeFor(
     scene.camera,
     eyeOf(sample),
@@ -4375,8 +4387,10 @@ if (params.get("still") !== "1") {
       }
       const roadHere = yard.pieces.some((piece) => piece.id === "road" && piece.at[0] === Math.round(player.position[0] / 0.5) && piece.at[1] === Math.round(player.position[1] / 0.5));
       if (roadHere && !dragging) sample.forward *= 1.15;
-      const ground = standHeight(player.position[0], player.position[1], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
+      // Caves and the castle: the floor under the feet (a cave floor, a courtyard), not the hill above.
+      const ground = standAt(player.position[0], player.position[1], player.position[2], columnFloor(terrain.log.crust, player.position[0], player.position[1]));
       world.ground = ground;
+      const wasAt = [player.position[0], player.position[1]];
       world.drop = shellDrop(player.position[0], player.position[1]) - ground;
       world.buoyancy = poolLift(pools, player.position);
       const falling = player.velocity[2];
@@ -4388,6 +4402,22 @@ if (params.get("still") !== "1") {
       const moved = vitals.down > 0
         ? { jump: false, running: false }
         : stepHands(world, player, stamina, { ...sample, roll: rollSpeed(roll, tick) }, jump, skills.jump.value);
+      // Rock and ice walls: slide along one axis, or stop.
+      if (blockedAt(player.position[0], player.position[1], Math.max(player.position[2], ground))) {
+        const z = Math.max(player.position[2], ground);
+        if (!blockedAt(player.position[0], wasAt[1], z)) {
+          player.position[1] = wasAt[1];
+          player.velocity[1] = 0;
+        } else if (!blockedAt(wasAt[0], player.position[1], z)) {
+          player.position[0] = wasAt[0];
+          player.velocity[0] = 0;
+        } else {
+          player.position[0] = wasAt[0];
+          player.position[1] = wasAt[1];
+          player.velocity[0] = 0;
+          player.velocity[1] = 0;
+        }
+      }
       settleLoose(world, (x, y) => standHeight(x, y, columnFloor(terrain.log.crust, x, y)));
       if (drifting && vitals.down <= 0) {
         const felt = cellWind.get(cellId(player.position[1]));

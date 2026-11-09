@@ -1,6 +1,7 @@
 import { spanShape, triShape } from "./form.js?v=1";
 import { LAKE, MOUNTAIN, bakeLand, bankPlants, inLand, landBank, landDelta, landPineDensity, landWater, mountainHeight } from "./land.js?v=2";
 import { bakeVolcano, bombsAt, inVolcano, lavaAt, volcanoDelta } from "./volcano.js?v=1";
+import { bakeUnder, bodyBlocked, floorUnder, inUnder, solidAt, underground } from "./under.js?v=1";
 
 export const HILL = 5.4;
 
@@ -128,6 +129,32 @@ export function standHeight(x, y, dug = 0) {
   const h = duneHeight(x, y);
   const w = waterAt(x, y);
   return w == null ? h : Math.max(h, w - WADE);
+}
+
+// The ice castle and the caves (under.js): baked once from the ground.
+let underWorld = null;
+export function under() {
+  if (!underWorld) underWorld = bakeUnder(duneHeight, volcano());
+  return underWorld;
+}
+// Where feet at height z stand: in the castle and the caves, the floor under the body (a cave floor
+// under the ground, the courtyard over it); everywhere else the ground, as before.
+export function standAt(x, y, z, dug = 0) {
+  if (dug < -0.01 || !inUnder(under(), x, y)) return standHeight(x, y, dug);
+  const f = floorUnder(under(), duneHeight, x, y, z);
+  return f == null ? standHeight(x, y, dug) : f;
+}
+// Would a body standing at (x, y, z) be inside rock or castle ice? (Walls stop you; only checked
+// in the castle and cave boxes, so the open island walks as it always did.)
+export function blockedAt(x, y, z) {
+  if (!inUnder(under(), x, y)) return false;
+  return bodyBlocked(under(), duneHeight, x, y, z);
+}
+export function solidHere(x, y, z) {
+  return solidAt(under(), duneHeight, x, y, z);
+}
+export function inCave(x, y, z) {
+  return inUnder(under(), x, y) && underground(under(), duneHeight, x, y, z);
 }
 
 function smoothstep(edge0, edge1, value) {
