@@ -177,7 +177,7 @@ test("?caves=0 and bots drop the heavy effects; the shader and the page are wire
   assert.match(main, /if \(blockedAt\(player\.position\[0\], player\.position\[1\]/);
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /uniform float uCaves;/);
-  assert.match(gpu, /if \(uCaves > 0\.5\) \{\n    for \(int k = 0; k < CAVE_LIGHTS; k\+\+\)/);
+  assert.match(gpu, /if \(!LITE && uCaves > 0\.5\) \{\n    for \(int k = 0; k < CAVE_LIGHTS; k\+\+\)/);
   assert.match(gpu, /vec3 tr = refract\(rd, n, 1\.0 \/ 1\.31\);/);
   assert.match(gpu, /float dist = anySpan \? marchDist\(q\) : q\.z - duneHeight\(q\.xy\);/);
   const stage = readFileSync(new URL("../src/render/stage.js", import.meta.url), "utf8");

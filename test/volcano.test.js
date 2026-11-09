@@ -150,7 +150,7 @@ test("?volcano= and ?heat= parse; bots skip the effects", () => {
   assert.match(gpu, /float lean = max\(dz, 0\.0\) \* 0\.35;/);
   assert.match(gpu, /float w = 5\.0 \+ max\(dz, 0\.0\) \* 0\.22;/);
   assert.match(gpu, /h \+= V\.a \* exp\(-max\(up, 0\.0\) \/ 7\.0\)/);
-  assert.match(gpu, /if \(uVolcano < 0\.5 \|\| uHeat < 0\.5\) return rd;/);
+  assert.match(gpu, /if \(LITE \|\| uVolcano < 0\.5 \|\| uHeat < 0\.5\) return rd;/);
   assert.match(gpu, /rd = heatShimmer\(ro, rd\);\n  vec3 rd0 = rd;/);
 });
 

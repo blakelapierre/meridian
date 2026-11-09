@@ -311,7 +311,7 @@ function glFacts() {
   const f = painter?.facts?.() || opened.painter?.facts?.() || {};
   const d = canvas.dataset;
   const parts = [
-    `mode ${opened.mode.where}${opened.mode.lite ? " lite" : ""}${opened.mode.mobile ? " (phone)" : ""}`,
+    `mode ${opened.mode.where}${(f.lite ?? opened.mode.lite) || d.gpuLite === "1" ? " lite" : ""}${opened.mode.mobile ? " (phone)" : ""}`,
     f.info || d.gpuInfo ? `gpu ${f.info || d.gpuInfo}` : "",
     f.caps || d.gpuCaps ? `caps ${f.caps || d.gpuCaps}` : "",
     f.compileMs ? `compile ${f.compileMs} ms` : "",

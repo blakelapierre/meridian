@@ -31,7 +31,7 @@ test("every arc/ellipse in src and tools goes through a clamp", () => {
 
 test("sim-only clients skip the GPU context; bench uses them past the live budget", () => {
   const main = read("src/app/main.js"), bench = read("tools/scale/bench.js");
-  assert.match(main, /SIM_ONLY \? null : opened\.painter \|\| createGpuPainter/);
+  assert.match(main, /SIM_ONLY \|\| opened\.mode\.where === "cpu" \? null : opened\.painter \|\| createGpuPainter/);
   assert.match(main, /SIM_ONLY \? \{ painter: null/);
   assert.match(main, /radius\.js\?v=\d+/);
   assert.match(bench, /simonly/); assert.match(bench, /LIVE_GL/);

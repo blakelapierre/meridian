@@ -31,3 +31,50 @@ A circle that follows a tap: the gaze follows the body's look (`gazeFor`), but a
 ## Later
 
 A sharper center than the periphery. The soldier view must still refuse to miss vsync for a screenshot.
+
+## Starting on phones (Batch 27)
+
+**What went wrong.** The picture thread had 12 s to say it was ready. If it took longer, the boot
+curtain stopped at "The picture did not start. Reload the page." for good, and a late "ready" was
+ignored. In that time the thread does all of this:
+
+- bakes the land, volcano and cave grids;
+- compiles the trace shader, which is about 110 kB and much bigger since the volcano and the
+  castle/caves;
+- compiles the same shader a second time as the crowd ("tree") variant.
+
+On a phone GPU compiler that is easily over 12 s. A missing cap or a failed compile ended in the
+same dead stop.
+
+**What it does now:**
+
+- **Stages.** The thread reports its stage, and the curtain shows it ("compiling the picture
+  (lite)"). The deadline is 90 s (`PICTURE_DEADLINE_MS`).
+- **No dead stop.** On a timeout or an error the page stops the thread and swaps in a fresh canvas.
+  The old canvas belongs to the thread and can't be drawn on again. Input is bound again on the new
+  canvas, and the CPU picture draws on it. The real reason shows in `#glerr`.
+- **Caps check.** `gpuCapsProblem` checks 16 texture units, 1024-wide textures, 224 fragment
+  vectors and highp, and names whichever is missing.
+- **Lite shader.** `const bool LITE` compiles out the heat shimmer, plume/ash, cave lights, gem
+  sparkle and ice refraction. The castle and cave rock still draw. Phones use lite by default (by
+  user agent or `userAgentData.mobile`), and a full shader that fails to compile retries as lite.
+- **Later tree compile.** The tree variant compiles 1.5 s after the first picture (`painter.warm()`),
+  not before it.
+
+**Parameters:**
+
+| Parameter | Effect |
+|---|---|
+| `?gl=full` | Force the full shader |
+| `?gl=lite` | Force the lite shader |
+| `?gl=main` | Trace on the page thread |
+| `?gl=cpu` | CPU picture only |
+| `?debug=1` | Show mode, GPU, caps, compile and build time, and the full shader's compile log on the page (selectable text) |
+
+**Reproducing.** `node tools/gpu-limits.mjs <root> "<query>" <scenario> <waitMs> [out.png]` runs
+headless Chrome with a phone user agent and patches WebGL in the page and in the worker. The
+scenarios:
+
+- `slow`: each compile takes 15 s.
+- `units8`: 8 texture units.
+- `bigfail`: the full shader fails to compile.
