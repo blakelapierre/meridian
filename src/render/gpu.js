@@ -185,7 +185,80 @@ export function fitCanvas(canvas, scale = 1, pixels = null) {
   if (canvas.height !== height) canvas.height = height;
 }
 
-export function createGpuPainter(canvas) {
+// What a device must have for the traced picture, and why not when it doesn't. Pure, for tests.
+// The trace binds 16 samplers (the WebGL2 minimum), a few hundred fragment uniform vectors, and
+// data textures up to 1024 wide.
+export const GPU_NEEDS = { textureUnits: 16, textureSize: 1024, fragmentVectors: 224, highpBits: 16 };
+export function gpuCapsProblem(caps) {
+  if (!caps) return "no WebGL2 context";
+  if (caps.highpBits != null && caps.highpBits < GPU_NEEDS.highpBits) return `fragment highp unsupported (${caps.highpBits} bits)`;
+  if (caps.textureUnits < GPU_NEEDS.textureUnits) return `only ${caps.textureUnits} texture units (needs ${GPU_NEEDS.textureUnits})`;
+  if (caps.textureSize < GPU_NEEDS.textureSize) return `max texture ${caps.textureSize} < ${GPU_NEEDS.textureSize}`;
+  if (caps.fragmentVectors < GPU_NEEDS.fragmentVectors) return `only ${caps.fragmentVectors} fragment uniform vectors (needs ${GPU_NEEDS.fragmentVectors})`;
+  return "";
+}
+export function readGpuCaps(gl) {
+  const high = gl.getShaderPrecisionFormat?.(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+  return {
+    textureUnits: gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS),
+    textureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+    fragmentVectors: gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
+    highpBits: high ? high.precision : null,
+    parallel: Boolean(gl.getExtension("KHR_parallel_shader_compile")),
+  };
+}
+
+// A program built without waiting on it. With KHR_parallel_shader_compile the driver compiles and
+// links on its own threads and poll() only asks COMPLETION_STATUS, so frames keep drawing; without
+// it the work happens on the first poll (the caller polls in idle time, after the picture is up).
+// `fragment` is GLSL source or an already compiled fragment shader. Pure over `gl`, for tests.
+export function startProgram(gl, ext, vs, fragment, attrib = "aPos") {
+  let fs = typeof fragment === "string" ? null : fragment;
+  let prog = null;
+  let begun = false;
+  let state = "pending";
+  let log = "";
+  const begin = () => {
+    begun = true;
+    if (!fs) {
+      fs = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fs, fragment);
+      gl.compileShader(fs);
+    }
+    prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.bindAttribLocation(prog, 0, attrib);
+    gl.linkProgram(prog);
+  };
+  if (ext) begin();
+  return {
+    get program() { return prog; },
+    get fragment() { return fs; },
+    get state() { return state; },
+    get log() { return log; },
+    poll() {
+      if (state !== "pending") return state;
+      if (!begun) begin();
+      else if (ext && !gl.getProgramParameter(prog, ext.COMPLETION_STATUS_KHR)) return state;
+      const compiled = !gl.getShaderParameter || gl.getShaderParameter(fs, gl.COMPILE_STATUS) !== false;
+      if (compiled && gl.getProgramParameter(prog, gl.LINK_STATUS)) state = "ok";
+      else {
+        log = String((fs && gl.getShaderInfoLog(fs)) || gl.getProgramInfoLog(prog) || "link failed");
+        state = "fail";
+        try { gl.deleteProgram(prog); } catch {}
+        prog = null;
+      }
+      return state;
+    },
+  };
+}
+
+// options.lite compiles the trace without the heavy volcano, cave and ice effects (heat shimmer,
+// plume and ash, cave lights, gem sparkle, ice refraction): a much smaller shader for phones. The
+// castle and cave rock still draw. A full shader that fails to compile retries as lite.
+export function createGpuPainter(canvas, options = {}) {
+  let lite = Boolean(options.lite);
   let gl;
   try {
     gl = canvas.getContext("webgl2", {
@@ -198,14 +271,14 @@ export function createGpuPainter(canvas) {
   } catch {
     return null;
   }
-  if (!gl) return fail(canvas, "no context");
-  // GLES checks. The shaders need highp floats in the fragment stage (ES3 guarantees it, but
-  // some drivers report 0 bits). Data textures are RGBA32F sampled NEAREST (core in ES3, no
-  // OES_texture_float_linear needed); every render target is RGBA8/R8, so no float render
-  // targets are required and EXT_color_buffer_float is only a bonus.
-  const high = gl.getShaderPrecisionFormat?.(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
-  if (high && high.precision < 16) return fail(canvas, `fragment highp unsupported (${high.precision} bits)`);
-  if (gl.getParameter(gl.MAX_TEXTURE_SIZE) < 1024) return fail(canvas, `max texture ${gl.getParameter(gl.MAX_TEXTURE_SIZE)} < 1024`);
+  if (!gl) return fail(canvas, "no WebGL2 context");
+  // GLES checks: the trace needs highp floats in the fragment stage, 16 texture units, data
+  // textures 1024 wide and a few hundred fragment uniform vectors (gpuCapsProblem). Data textures
+  // are RGBA32F sampled NEAREST; every render target is RGBA8/R8, so EXT_color_buffer_float is a bonus.
+  const caps = readGpuCaps(gl);
+  canvas.dataset.gpuCaps = `units ${caps.textureUnits}, tex ${caps.textureSize}, fvec ${caps.fragmentVectors}, highp ${caps.highpBits}${caps.parallel ? ", parallel" : ""}`;
+  const capsProblem = gpuCapsProblem(caps);
+  if (capsProblem) return fail(canvas, capsProblem);
   try {
     const info = gl.getExtension("WEBGL_debug_renderer_info");
     canvas.dataset.gpuInfo = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).slice(0, 80);
@@ -228,8 +301,10 @@ void main() {
   gl_PointSize = 1.0;
 }`;
   const underWorld = under();
-  const fragBody = `#version 300 es
+  const fragFor = (liteNow) => `#version 300 es
 precision highp float;
+// Lite: the heavy effects compile out (see createGpuPainter).
+const bool LITE = ${liteNow ? "true" : "false"};
 uniform vec3 uOrigin;
 uniform vec3 uForward;
 uniform vec3 uRight;
@@ -1414,7 +1489,7 @@ float ashDensity(vec3 q) {
 // gradient of a noise that rises with the convection (z minus time), weighted by how hot the air is
 // along the ray, so the view behind lava and the plume wobbles upward. ?heat=0 skips it.
 vec3 heatShimmer(vec3 ro, vec3 rd) {
-  if (uVolcano < 0.5 || uHeat < 0.5) return rd;
+  if (LITE || uVolcano < 0.5 || uHeat < 0.5) return rd;
   float t0;
   float t1;
   if (!rayBox(ro, rd, AIR_MIN, AIR_MAX, t0, t1)) return rd;
@@ -1443,7 +1518,7 @@ vec3 heatShimmer(vec3 ro, vec3 rd) {
 // Smoke and steam over the crater, lit orange from below; cinders and ash falling downwind; the
 // glowing trails of lava bombs. Only on the primary ray, and only when it crosses the volcano's air.
 vec3 withVolcanoAir(vec3 ro, vec3 rd, float tHit, vec3 color) {
-  if (uVolcano < 0.5) return color;
+  if (LITE || uVolcano < 0.5) return color;
   float t0;
   float t1;
   if (!rayBox(ro, rd, AIR_MIN, AIR_MAX, t0, t1)) return color;
@@ -1578,7 +1653,7 @@ vec3 caveShade(vec3 p, vec3 n, vec3 rd) {
       albedo = gc * 0.35;
       shine = 0.6;
       glow += gc * 0.4;
-      if (uCaves > 0.5) {
+      if (!LITE && uCaves > 0.5) {
         // Facets: a hashed cell flashes when its tilted face lines up with the eye.
         vec3 cell = floor(p * 9.0);
         float h = hash21(cell.xy + cell.z * 17.0);
@@ -1593,7 +1668,7 @@ vec3 caveShade(vec3 p, vec3 n, vec3 rd) {
   vec3 toEye = uOrigin - p;
   float de2 = dot(toEye, toEye);
   light += vec3(1.0, 0.9, 0.76) * 1.1 * max(dot(n, toEye * inversesqrt(max(de2, 1.0e-4))), 0.0) / (1.0 + de2 / 70.0);
-  if (uCaves > 0.5) {
+  if (!LITE && uCaves > 0.5) {
     for (int k = 0; k < CAVE_LIGHTS; k++) {
       vec4 l = CAVE_LIGHT[k];
       vec3 o = l.xyz - p;
@@ -1633,7 +1708,7 @@ vec3 iceShade(vec3 p, vec3 n, vec3 rd, int kind, inout vec3 rgb) {
   float thick = 1.4;
   vec3 tr = refract(rd, n, 1.0 / 1.31);
   if (dot(tr, tr) < 0.5) tr = reflect(rd, n);
-  if (uCaves > 0.5) {
+  if (!LITE && uCaves > 0.5) {
     // Through the ice to the far face.
     thick = 0.0;
     vec3 q = p - n * 0.04;
@@ -1938,26 +2013,106 @@ void main() {
   fragColor = vec4(present(accum), depthCode);
 }`;
   const specialize = (source, tree) => source.replace(/\/\*@(tree|line)\*\/([\s\S]*?)\/\*@\1\*\//g, (_, tag, inner) => ((tag === "tree") === tree ? inner : ""));
-  const linearBody = specialize(fragBody, false);
+  const compileStart = Date.now();
+  let fragBody = fragFor(lite);
   const vs = compile(gl, gl.VERTEX_SHADER, vert);
-  const fs = compile(gl, gl.FRAGMENT_SHADER, linearBody);
-  if (!vs || !fs) return fail(canvas, compile.lastLog || "shader");
-  const program = gl.createProgram();
+  let fs = vs ? compile(gl, gl.FRAGMENT_SHADER, specialize(fragBody, false)) : null;
+  if (vs && !fs && !lite) {
+    // Too much for this GPU's compiler: try again without the heavy effects.
+    canvas.dataset.gpuFullError = String(compile.lastLog || "shader").slice(0, 600);
+    lite = true;
+    fragBody = fragFor(true);
+    fs = compile(gl, gl.FRAGMENT_SHADER, specialize(fragBody, false));
+  }
+  canvas.dataset.gpuLite = lite ? "1" : "0";
+  if (!vs || !fs) return fail(canvas, `shader compile: ${compile.lastLog || "no log"}`);
+  let program = gl.createProgram();
   gl.attachShader(program, vs);
   gl.attachShader(program, fs);
   gl.bindAttribLocation(program, 0, "aPos");
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return fail(canvas, gl.getProgramInfoLog(program) || "link");
-  const treeFs = compile(gl, gl.FRAGMENT_SHADER, specialize(fragBody, true));
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return fail(canvas, `shader link: ${gl.getProgramInfoLog(program) || "no log"}`);
+  canvas.dataset.gpuCompileMs = String(Date.now() - compileStart);
+  // The tree variant (for crowds of spheres) and the full-effects shader build in the background,
+  // after the first picture: upgrade() starts them, tick() (every paint, and the picture thread's
+  // timer) polls them and swaps each program in the moment it links. No frame waits on a compile.
+  const parallel = gl.getExtension("KHR_parallel_shader_compile");
   let treeProgram = null;
-  if (treeFs) {
-    treeProgram = gl.createProgram();
-    gl.attachShader(treeProgram, vs);
-    gl.attachShader(treeProgram, treeFs);
-    gl.bindAttribLocation(treeProgram, 0, "aPos");
-    gl.linkProgram(treeProgram);
-    if (!gl.getProgramParameter(treeProgram, gl.LINK_STATUS)) treeProgram = null;
-  }
+  let treeJob = null;
+  let fullJob = null;
+  let pointJob = null;
+  // "failed": asked for full at boot, the compile failed and it fell back to lite.
+  const effects = { state: !lite ? "full" : options.lite ? "lite" : "failed", log: canvas.dataset.gpuFullError || "", startedAt: 0, ms: 0, parallel: Boolean(parallel), onChange: null };
+  const setEffects = (state, log = effects.log) => {
+    effects.state = state;
+    effects.log = log;
+    if (effects.startedAt) effects.ms = Date.now() - effects.startedAt;
+    canvas.dataset.gpuEffects = state;
+    canvas.dataset.gpuLite = state === "full" ? "0" : "1";
+    try { effects.onChange?.(state, effects); } catch {}
+  };
+  canvas.dataset.gpuEffects = effects.state;
+  const makeNodeTex = () => {
+    if (nodeTex) return true;
+    try {
+      nodeTex = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE15);
+      gl.bindTexture(gl.TEXTURE_2D, nodeTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, MAX_GPU_NODES, 0, gl.RGBA, gl.FLOAT, null);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      return true;
+    } catch {
+      nodeTex = null;
+      return false;
+    }
+  };
+  // Start (or restart, after the full shader lands) the crowd variant of whatever shader is live.
+  const warmTree = () => {
+    if (treeJob && treeJob.state === "pending") return;
+    treeJob = startProgram(gl, parallel, vs, specialize(fragBody, true));
+  };
+  // Swap in the full-effects shader, in the background. Returns false when there is nothing to do.
+  const upgrade = () => {
+    if (!lite || fullJob) return false;
+    effects.startedAt = Date.now();
+    fullJob = startProgram(gl, parallel, vs, specialize(fragFor(false), false));
+    setEffects("loading");
+    return true;
+  };
+  const tick = () => {
+    if (fullJob && fullJob.state === "pending") {
+      const state = fullJob.poll();
+      if (state === "ok") {
+        program = fullJob.program;
+        bindSamplers(program);
+        fragBody = fragFor(false);
+        lite = false;
+        if (pointVs) pointJob = startProgram(gl, parallel, pointVs, fullJob.fragment, "aRay");
+        // The crowd variant follows: rebuild it from the full shader.
+        if (treeJob) {
+          treeJob = null;
+          warmTree();
+        }
+        setEffects("full");
+      } else if (state === "fail") {
+        canvas.dataset.gpuFullError = fullJob.log.slice(0, 600);
+        setEffects("failed", fullJob.log);
+      }
+      return;
+    }
+    if (pointJob && pointJob.state === "pending" && pointJob.poll() === "ok") {
+      pointProgram = pointJob.program;
+      bindSamplers(pointProgram);
+    }
+    if (treeJob && treeJob.state === "pending" && treeJob.poll() === "ok" && makeNodeTex()) {
+      treeProgram = treeJob.program;
+      bindSamplers(treeProgram);
+    }
+  };
   const buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -2003,16 +2158,6 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_SHAPES, 1, 0, gl.RGBA, gl.FLOAT, null);
-    if (treeProgram) {
-      nodeTex = gl.createTexture();
-      gl.activeTexture(gl.TEXTURE15);
-      gl.bindTexture(gl.TEXTURE_2D, nodeTex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, MAX_GPU_NODES, 0, gl.RGBA, gl.FLOAT, null);
-    }
     boxMinTex = texture(gl, MAX_BOXES);
     boxMaxTex = texture(gl, MAX_BOXES);
     boxColorTex = texture(gl, MAX_BOXES);
@@ -2118,17 +2263,21 @@ void main() {
     fogY1 = Math.max(fogY1, bank.y + bank.radius * 2);
     fogTop = Math.max(fogTop, bank.z + 9);
   });
-  const loc = (name) => gl.getUniformLocation(program, name);
-  gl.useProgram(program);
-  gl.uniform1i(loc("uSphereTex"), 0);
-  gl.uniform1i(loc("uSphereColor"), 1);
-  gl.uniform1i(loc("uBoxMin"), 2);
-  gl.uniform1i(loc("uBoxMax"), 3);
-  gl.uniform1i(loc("uBoxColor"), 4);
-  gl.uniform1i(loc("uDigTex"), 5);
-  gl.uniform1i(loc("uPrintTex"), 8);
-  gl.uniform1i(loc("uTexRects"), 6);
-  gl.uniform1i(loc("uAtlas"), 7);
+  // The fixed sampler units of a trace program (the others are set every draw).
+  function bindSamplers(prog) {
+    const loc = (name) => gl.getUniformLocation(prog, name);
+    gl.useProgram(prog);
+    gl.uniform1i(loc("uSphereTex"), 0);
+    gl.uniform1i(loc("uSphereColor"), 1);
+    gl.uniform1i(loc("uBoxMin"), 2);
+    gl.uniform1i(loc("uBoxMax"), 3);
+    gl.uniform1i(loc("uBoxColor"), 4);
+    gl.uniform1i(loc("uDigTex"), 5);
+    gl.uniform1i(loc("uPrintTex"), 8);
+    gl.uniform1i(loc("uTexRects"), 6);
+    gl.uniform1i(loc("uAtlas"), 7);
+  }
+  bindSamplers(program);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   const upload = (unit, tex, width, data) => {
@@ -2584,7 +2733,14 @@ void main() {
       return true;
   };
   return {
+    get lite() { return lite; },
+    warm: warmTree,
+    upgrade,
+    tick,
+    effects: () => ({ state: effects.state, log: effects.log, ms: effects.ms, parallel: effects.parallel }),
+    onEffects(fn) { effects.onChange = fn; },
     paint(scene, width, height) {
+      tick();
       const askedW = width | 0;
       const askedH = height | 0;
       // A missing size used to fall through to the window-sized canvas. Tracing that

@@ -1,4 +1,4 @@
-import { createGpuPainter } from "../render/gpu.js?v=102";
+import { createGpuPainter } from "../render/gpu.js?v=104";
 import { sceneFromStage } from "../render/stage.js?v=6";
 import { cast, project } from "../engine/cast.js";
 
@@ -31,12 +31,33 @@ self.onmessage = (event) => {
   if (msg.type === "init") {
     try {
       canvas = wrap(msg.canvas);
-      painter = createGpuPainter(canvas);
+      // Say where we are first: building the trace (the land, volcano and cave grids, then one big
+      // shader compile) can take a phone tens of seconds, and the page waits on these notes.
+      self.postMessage({ type: "stage", stage: msg.lite ? "compiling the picture (lite)" : "compiling the picture" });
+      const started = performance.now();
+      painter = createGpuPainter(canvas, { lite: Boolean(msg.lite) });
+      const d = canvas.dataset;
+      const facts = { info: d.gpuInfo || "", caps: d.gpuCaps || "", lite: d.gpuLite === "1", compileMs: Number(d.gpuCompileMs) || 0, buildMs: Math.round(performance.now() - started), fullError: d.gpuFullError || "" };
       if (!painter) {
-        self.postMessage({ type: "error", reason: canvas.dataset.gpuError || "no picture" });
+        self.postMessage({ type: "error", reason: d.gpuError || "no picture", facts });
         return;
       }
-      self.postMessage({ type: "ready", info: canvas.dataset.gpuInfo || "" });
+      self.postMessage({ type: "ready", info: facts.info, facts });
+      // After the first picture: the full-effects shader (if we booted lite) and then the crowd
+      // variant build in the background; tick() swaps each in when it links.
+      const say = (state, info) => self.postMessage({ type: "effects", state, log: String(info?.log || "").slice(0, 600), ms: info?.ms || 0, parallel: Boolean(info?.parallel) });
+      painter.onEffects?.((state, info) => {
+        say(state, info);
+        if (state === "full" || state === "failed") setTimeout(() => { try { painter.warm?.(); } catch {} }, 200);
+      });
+      say(painter.effects?.().state || "full", painter.effects?.());
+      setTimeout(() => {
+        try {
+          if (!(msg.upgrade && painter.upgrade?.())) painter.warm?.();
+        } catch {}
+      }, 300);
+      // Poll the background builds even when no frame is being drawn.
+      setInterval(() => { try { painter.tick?.(); } catch {} }, 120);
     } catch (error) {
       self.postMessage({ type: "error", reason: String(error && error.message || error) });
     }
