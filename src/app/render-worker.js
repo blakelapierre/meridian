@@ -1,4 +1,4 @@
-import { createGpuPainter } from "../render/gpu.js?v=104";
+import { createGpuPainter } from "../render/gpu.js?v=105";
 import { sceneFromStage } from "../render/stage.js?v=6";
 import { cast, project } from "../engine/cast.js";
 
@@ -26,18 +26,38 @@ function wrap(offscreen) {
   });
 }
 
-self.onmessage = (event) => {
+self.onmessage = async (event) => {
   const msg = event.data || {};
   if (msg.type === "init") {
     try {
       canvas = wrap(msg.canvas);
       // Say where we are first: building the trace (the land, volcano and cave grids, then one big
       // shader compile) can take a phone tens of seconds, and the page waits on these notes.
-      self.postMessage({ type: "stage", stage: msg.lite ? "compiling the picture (lite)" : "compiling the picture" });
+      const tier = msg.tier || (msg.lite ? "lite" : "full");
+      self.postMessage({ type: "stage", stage: tier === "full" ? "compiling the picture" : `compiling the picture (${tier})` });
       const started = performance.now();
-      painter = createGpuPainter(canvas, { lite: Boolean(msg.lite) });
+      // Without preventDefault on the loss, the browser never gives the context back.
+      try { msg.canvas.addEventListener("webglcontextlost", (e) => e.preventDefault()); } catch {}
+      painter = createGpuPainter(canvas, { lite: tier !== "full", tier });
       const d = canvas.dataset;
-      const facts = { info: d.gpuInfo || "", caps: d.gpuCaps || "", lite: d.gpuLite === "1", compileMs: Number(d.gpuCompileMs) || 0, buildMs: Math.round(performance.now() - started), fullError: d.gpuFullError || "" };
+      const factsNow = () => ({ info: d.gpuInfo || "", caps: d.gpuCaps || "", lite: d.gpuLite === "1", tier: d.gpuTier || "", compileMs: Number(d.gpuCompileMs) || 0, buildMs: Math.round(performance.now() - started), fullError: d.gpuFullError || "", tries: d.gpuTries || "", lost: d.gpuLost === "1" });
+      if (!painter && d.gpuLost === "1") {
+        // The compile lost the context (a GPU watchdog or out of memory: the log is empty). Wait for
+        // the browser to give it back, then start again on the smallest tier.
+        const firstReason = d.gpuError || "context lost";
+        self.postMessage({ type: "stage", stage: "the GPU reset while compiling; retrying with the core shader" });
+        const restored = await new Promise((done) => {
+          const timer = setTimeout(() => done(false), 10000);
+          try {
+            msg.canvas.addEventListener("webglcontextrestored", () => { clearTimeout(timer); done(true); }, { once: true });
+          } catch { clearTimeout(timer); done(false); }
+        });
+        d.gpuError = "";
+        d.gpuLost = "";
+        if (restored) painter = createGpuPainter(canvas, { lite: true, tier: "core" });
+        if (!painter) d.gpuError = `${firstReason} | ${restored ? `core retry: ${d.gpuError || "failed"}` : "the context did not come back in 10 s"}`;
+      }
+      const facts = factsNow();
       if (!painter) {
         self.postMessage({ type: "error", reason: d.gpuError || "no picture", facts });
         return;

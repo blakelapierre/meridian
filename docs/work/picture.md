@@ -119,3 +119,37 @@ refraction) in the background, swapping it in the moment it links — no reload,
   than parsing its error page.
 - `tools/gpu-limits.mjs` takes a live URL as root. New scenarios: `nowebgl2`, `nooffscreen`,
   `noworkermodule`, `badworker`, `badmodule`.
+
+## Mali-G715: the trace shader does not compile (Batch 29)
+
+Blake's phone (ANGLE on ARM Mali-G715, OpenGL ES 3.2; caps units 32, tex 8192, fvec 1024, highp 23,
+no KHR_parallel_shader_compile) fails the **lite** fragment compile with an **empty info log**.
+It fails the same way in the picture thread and on the page thread (`?gl=main`), so neither the
+worker nor OffscreenCanvas is the cause. glslang (16.6, strict ES 3.00) accepts lite, core and bare,
+so the GLSL is valid. An empty log from ANGLE means the GPU driver's own compile failed
+(a size, register or time limit) or the context was lost. The new panel lines tell those apart.
+
+- **Diagnostics.** Each failed compile reports its stage (vertex or fragment), tier, source length,
+  time, whether the context was lost, `gl.getError()`, a null status, and the log. When every tier
+  fails, a three-line probe shader says whether the compiler works at all. All of this goes in
+  `?debug=1` under `tries:`.
+- **Tier ladder.** full, then lite, then **core**, then **bare**, built from the lite source
+  (`coreShader()` in gpu.js).
+  - core: stubs the volcano air, heat, fog banks, caves, castle ice and land shadows, keeps 1
+    reflection (not 4), marches 120 steps (not 280), and drops functions nothing calls. About 56k
+    characters (lite is about 73k).
+  - bare: as core, plus no pines, shapes, land detail, prints, textures or clouds, no reflection and
+    a 64-step march. About 38k characters.
+  - A lost context stops the ladder. The picture thread prevents the default on the loss, waits up
+    to 10 s for `webglcontextrestored`, then retries on core.
+  - The full-effects upgrade only runs from lite.
+- `?gl=core` and `?gl=bare` pick a tier directly (no upgrade).
+- **CPU picture.** It was 0 fps: whenever the core workers were busy, the page thread *also* traced
+  the frame itself. It now skips that frame, and the canvas is capped at 160×96 traced pixels
+  (`?cpupx=` changes it). It ran at about 10–50 fps headless.
+- **Black CPU picture with `?gl=main`.** A canvas that has given out a WebGL context never gives a
+  2D one. The CPU picture now always gets a fresh canvas (`swapCanvas`).
+- When the picture thread fails for a reason that is not the shader, the page tries tracing on the
+  page thread before using the CPU picture.
+- `tools/gpu-limits.mjs` scenarios: `malicore`, `malibare`, `maliall` (fragment shaders over a size
+  fail with an empty log), and `lostcompile` (a big compile loses the context, which comes back 1 s later).

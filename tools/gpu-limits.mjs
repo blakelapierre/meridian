@@ -24,6 +24,14 @@ patches.nooffscreen = `(() => { try { delete HTMLCanvasElement.prototype.transfe
 patches.noworkermodule = `(() => { if (!self.Worker) return; const W = self.Worker; self.Worker = function (url, opts) { if (opts && opts.type === "module") throw new TypeError("Module scripts are not supported on DedicatedWorker yet"); return new W(url, opts); }; })();`;
 patches.badworker = `(() => { if (!self.Worker) return; const W = self.Worker; self.Worker = function (url, opts) { return new W(String(url).replace(/render-worker\.js/, "render-worker-missing.js"), opts); }; })();`;
 patches.badmodule = "";
+// Mali-G715 (Blake's phone): the fragment compile fails with an empty log. Emulated by size:
+// fragment shaders longer than the limit "fail" (lite is ~73k chars, core ~56k, bare ~38k).
+const sizeFail = (limit) => `(() => { const P = WebGL2RenderingContext.prototype; const big = new WeakSet(); const ss = P.shaderSource; P.shaderSource = function (s, t) { if (t.length > ${limit} && !t.includes("gl_Position")) big.add(s); else big.delete(s); return ss.call(this, s, t); }; const gp = P.getShaderParameter; P.getShaderParameter = function (s, k) { if (k === 0x8B81 && big.has(s)) return false; return gp.call(this, s, k); }; const gl = P.getShaderInfoLog; P.getShaderInfoLog = function (s) { return big.has(s) ? "" : gl.call(this, s); }; })();`;
+patches.malicore = sizeFail(60000);
+patches.malibare = sizeFail(45000);
+patches.maliall = sizeFail(200);
+// The compile of a big fragment shader loses the context (a GPU watchdog); it comes back 1 s later.
+patches.lostcompile = `(() => { const P = WebGL2RenderingContext.prototype; let once = false; const c = P.compileShader; const src = new WeakMap(); const ss = P.shaderSource; P.shaderSource = function (s, t) { src.set(s, t.length); return ss.call(this, s, t); }; P.compileShader = function (s) { const r = c.call(this, s); if (!once && (src.get(s) || 0) > 60000) { once = true; const ext = this.getExtension("WEBGL_lose_context"); ext.loseContext(); setTimeout(() => ext.restoreContext(), 1000); } return r; }; })();`;
 const patch = patches[scenario];
 // root may be a live site URL (e.g. https://…/meridian/) instead of a checkout.
 const live = /^https?:/.test(root);
@@ -66,7 +74,7 @@ try {
   let last = "";
   while (Date.now() - t0 < waitMs) {
     await new Promise((r) => setTimeout(r, 1000));
-    const r = await Promise.race([new Promise((r) => setTimeout(() => r({ result: { result: { value: "(page busy: no answer in 5 s)" } } }), 5000)), send("Runtime.evaluate", { returnByValue: true, expression: `JSON.stringify({ q: location.search, boot: document.querySelector("#boot [data-boot-line]")?.textContent, bootHidden: document.querySelector("#boot")?.hidden, fx: document.querySelector("#fxnote")?.textContent || "", glerr: document.querySelector("#glerr")?.hidden ? "" : document.querySelector("#glerr")?.textContent, ds: Object.fromEntries(Object.entries(document.querySelector("canvas")?.dataset || {}).filter(([k]) => /renderer|picture|gpu|ready|center/.test(k))) })` })]);
+    const r = await Promise.race([new Promise((r) => setTimeout(() => r({ result: { result: { value: "(page busy: no answer in 5 s)" } } }), 5000)), send("Runtime.evaluate", { returnByValue: true, expression: `JSON.stringify({ fps: document.querySelector("#fps")?.textContent, cw: document.querySelector("canvas")?.width + "x" + document.querySelector("canvas")?.height, q: location.search, boot: document.querySelector("#boot [data-boot-line]")?.textContent, bootHidden: document.querySelector("#boot")?.hidden, fx: document.querySelector("#fxnote")?.textContent || "", glerr: document.querySelector("#glerr")?.hidden ? "" : document.querySelector("#glerr")?.textContent, ds: Object.fromEntries(Object.entries(document.querySelector("canvas")?.dataset || {}).filter(([k]) => /renderer|picture|gpu|ready|center/.test(k))) })` })]);
     const v = r.result?.result?.value || "";
     if (v !== last) { console.log(`${Math.round((Date.now() - t0) / 1000)}s`, v.slice(0, 1400)); last = v; }
   }

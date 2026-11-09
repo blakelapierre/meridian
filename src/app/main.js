@@ -16,7 +16,7 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene, pictureCamera } from "../render/scene.js?v=80";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=104";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=105";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -167,7 +167,7 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture, pictureMode } from "./picture.js?v=8";
+import { openPicture, pictureMode } from "./picture.js?v=9";
 
 // `let`: if the picture thread fails, the page swaps in a fresh canvas for the CPU picture.
 let canvas = document.querySelector("canvas");
@@ -237,7 +237,9 @@ const SIM_ONLY = new URLSearchParams(location.search).get("simonly") === "1";
 const opened = SIM_ONLY ? { painter: null, remote: false, mode: pictureMode("?gl=cpu") } : openPicture(canvas, { search: location.search });
 // ?debug=1 shows the whole graphics story (caps, compile time, the shader log) on the page.
 const GL_DEBUG = new URLSearchParams(location.search).get("debug") === "1";
-let painter = SIM_ONLY || opened.mode.where === "cpu" ? null : opened.painter || createGpuPainter(canvas, { lite: opened.mode.lite });
+let painter = SIM_ONLY || opened.mode.where === "cpu" ? null : opened.painter || createGpuPainter(canvas, { lite: opened.mode.lite, tier: opened.mode.tier });
+// What the failed GPU attempts said, kept across canvas swaps for the ?debug=1 panel.
+const glDiag = { ds: {}, facts: {} };
 let context = null;
 let viewScale = 0.5;
 const picture = createPicturePace();
@@ -280,10 +282,14 @@ if (painter && !painter.remote) {
   canvas.dataset.picture = "worker";
   painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
 } else {
+  // A canvas that has given out a WebGL context never gives a 2D one: the page-thread GPU try
+  // (?gl=main, or no picture thread) leaves it unusable, so the CPU picture gets a fresh canvas.
+  // (Before Batch 29 this drew nothing: a black screen at 60 fps.)
+  if (!SIM_ONLY && opened.mode.where !== "cpu") swapCanvas(canvas.dataset.gpuError || "WebGL2 is not available", false);
   context = canvas.getContext("2d", { alpha: false });
   if (context) context.imageSmoothingEnabled = false;
-  canvas.dataset.renderer = SIM_ONLY ? "none" : "cpu";
-  if (!SIM_ONLY && opened.mode.where !== "cpu") showGlError(canvas.dataset.gpuError || "WebGL2 is not available");
+  canvas.dataset.renderer = SIM_ONLY ? "none" : context ? "cpu" : "none";
+  if (!SIM_ONLY && opened.mode.where !== "cpu") showGlError(glDiag.ds.gpuError || "WebGL2 is not available");
 }
 // A visible note when the GPU path fails, so a blank screen never looks like a working one.
 function showGlError(reason) {
@@ -315,6 +321,7 @@ function effectsText(e) {
   if (e.state === "loading") return "full effects loading…";
   if (e.state === "full") return `full effects on${e.ms ? ` (${(e.ms / 1000).toFixed(1)} s in the background)` : ""}`;
   if (e.state === "failed") return "full effects unavailable here: lite picture";
+  if (e.state === "core" || e.state === "bare") return `${e.state} shader: a lighter picture (this GPU could not build the bigger ones)`;
   return "lite picture";
 }
 let fxTimer = 0;
@@ -337,14 +344,17 @@ function showEffects(e) {
 }
 // What we know about the GPU, for ?debug=1 and the curtain.
 function glFacts() {
-  const f = painter?.facts?.() || opened.painter?.facts?.() || {};
-  const d = canvas.dataset;
+  const f = { ...glDiag.facts, ...(painter?.facts?.() || opened.painter?.facts?.() || {}) };
+  const d = { ...glDiag.ds, ...canvas.dataset };
   const parts = [
     `mode ${opened.mode.where}${opened.mode.why ? ` (${opened.mode.why})` : ""}${opened.mode.mobile ? " (phone)" : ""}`,
     `effects ${effectsText(painter?.effects?.() || {}) || (d.gpuEffects || "")}`,
     f.info || d.gpuInfo ? `gpu ${f.info || d.gpuInfo}` : "",
     f.caps || d.gpuCaps ? `caps ${f.caps || d.gpuCaps}` : "",
+    f.tier || d.gpuTier ? `shader tier ${f.tier || d.gpuTier}` : "",
     f.compileMs ? `compile ${f.compileMs} ms` : "",
+    f.lost || d.gpuLost === "1" ? "the GPU context was lost while compiling" : "",
+    f.tries || d.gpuTries ? `tries:\n  ${String(f.tries || d.gpuTries).split("\n").join("\n  ")}` : "",
     f.buildMs ? `build ${f.buildMs} ms` : "",
     f.fullError || d.gpuFullError || painter?.effects?.()?.log ? `full shader: ${(painter?.effects?.()?.log || f.fullError || d.gpuFullError).slice(0, 800)}` : "",
   ];
@@ -2896,6 +2906,12 @@ function paint(sample, width = canvas.width, height = canvas.height) {
     canvas.dataset.renderer = "cpu";
     canvas.style.imageRendering = smoothUpscale ? "auto" : "pixelated";
   }
+  // While the cores are tracing the last CPU frame, skip this one: drawing it here as well would
+  // block the page thread (the 0 fps CPU picture on a phone, Batch 29).
+  if (cores.count > 0 && cpuBusy) {
+    lastScene = scene;
+    return scene;
+  }
   if (cores.count > 0 && !cpuBusy) {
     cpuBusy = true;
     const w = canvas.width;
@@ -3585,21 +3601,60 @@ if (painter?.remote) {
 }
 // The canvas went to the picture thread and cannot be drawn here again, so a fresh one takes its
 // place (same attributes, same input), and the CPU picture draws on it.
-function fallBackToCpu(reason, waitedMs) {
-  const failed = painter;
-  failed?.close?.();
-  painter = null;
+// The CPU picture stays small: at most CPU_MAX_PX traced pixels (it is upscaled on screen).
+const CPU_MAX_PX = Number(params.get("cpupx")) > 0 ? Number(params.get("cpupx")) : 160 * 96;
+function capCpuCanvas(el) {
+  const px = el.width * el.height;
+  if (px <= CPU_MAX_PX) return;
+  const k = Math.sqrt(CPU_MAX_PX / px);
+  el.width = Math.max(32, Math.floor(el.width * k));
+  el.height = Math.max(18, Math.floor(el.height * k));
+}
+// Replace the canvas with a fresh one (same attributes and input). The old one belongs to the
+// picture thread, or holds a failed WebGL context; neither can be drawn on again.
+function swapCanvas(reason, bind = true) {
+  Object.assign(glDiag.ds, { ...canvas.dataset });
   const fresh = canvas.cloneNode(false);
   fresh.width = 160;
   fresh.height = 90;
-  Object.assign(fresh.dataset, { gpuError: String(reason).slice(0, 300), renderer: "cpu", picture: "cpu" });
+  for (const key of Object.keys(fresh.dataset)) delete fresh.dataset[key];
+  fresh.dataset.gpuError = String(reason).slice(0, 300);
   canvas.replaceWith(fresh);
   canvas = fresh;
-  bindCanvasLoss(canvas);
-  bindCanvasInput(canvas);
+  // At start-up the page binds input to whatever canvas is current a little later.
+  if (bind) {
+    bindCanvasLoss(canvas);
+    bindCanvasInput(canvas);
+  }
+  return fresh;
+}
+function fallBackToCpu(reason, waitedMs) {
+  const failed = painter;
+  Object.assign(glDiag.facts, failed?.facts?.() || {});
+  failed?.close?.();
+  painter = null;
+  swapCanvas(reason);
+  // The thread itself failed (not the shader): the page thread may still trace. A shader that
+  // failed in the thread fails the same here (Mali, Batch 29), so that goes straight to the CPU.
+  if (!/shader|caps|texture units|max texture|highp|WebGL2|fragment uniform/i.test(String(reason))) {
+    const local = createGpuPainter(canvas, { lite: true, tier: opened.mode.tier === "full" ? "lite" : opened.mode.tier });
+    if (local) {
+      painter = local;
+      fitCanvas(canvas, viewScale);
+      canvas.style.imageRendering = "auto";
+      canvas.dataset.renderer = "webgl2";
+      canvas.dataset.picture = "main";
+      canvas.dataset.gpuWaitMs = String(waitedMs);
+      bootNote("The picture thread did not start; tracing on the page instead.", 0.8);
+      return;
+    }
+    Object.assign(glDiag.ds, { ...canvas.dataset });
+    swapCanvas(`${reason} | page: ${glDiag.ds.gpuError || "no WebGL2"}`);
+  }
   context = canvas.getContext("2d", { alpha: false });
   if (context) context.imageSmoothingEnabled = false;
   canvas.dataset.renderer = context ? "cpu" : "none";
+  canvas.dataset.picture = "cpu";
   canvas.dataset.gpuWaitMs = String(waitedMs);
   showGlError(reason);
   bootNote(`The traced picture did not start (${String(reason).split("\n")[0].slice(0, 90)}). Using the CPU picture.`, 0.8);
@@ -4853,6 +4908,7 @@ if (params.get("still") !== "1") {
       if (canvas.height !== displayH) canvas.height = displayH;
     } else {
       fitCanvas(canvas, viewScale, easedPixels);
+      capCpuCanvas(canvas);
     }
     paintKind = "full";
     const arrived = still && paced.scale > 0.98;
