@@ -3516,6 +3516,7 @@ if (painter?.remote) {
   bootNote("Waking the picture", 0.66);
   const wakeStart = Date.now();
   painter.onStage = (stage) => bootNote(`Waking the picture: ${stage}${opened.mode.mobile ? " (a phone can take a minute)" : ""}`, 0.7);
+  if (painter.stage?.()) painter.onStage(painter.stage());
   pictureUp = await painter.ready;
   if (!pictureUp) {
     // No dead stop: drop the thread and draw on the CPU instead, and say why.

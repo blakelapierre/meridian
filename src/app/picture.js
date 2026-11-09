@@ -6,7 +6,7 @@
 // shader (volcano, caves, ice) is very large, and mobile GPU compilers are slow on it.
 export function pictureMode(search = "", ua = "", mobileHint = null) {
   const gl = new URLSearchParams(search).get("gl") || "";
-  const mobile = mobileHint ?? /Android|iPhone|iPad|iPod|Mobile/i.test(String(ua));
+  const mobile = mobileHint === true || /Android|iPhone|iPad|iPod|Mobile/i.test(String(ua));
   return {
     where: gl === "cpu" ? "cpu" : gl === "main" ? "main" : "worker",
     lite: gl === "lite" ? true : gl === "full" ? false : mobile,
