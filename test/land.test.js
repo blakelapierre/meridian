@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { Crust } from "../src/sim/crust.js";
-import { ISLAND_R, LAKE, LAND_TOP, MOUNTAIN, allPines, bakeLand, bankPlants, fogLevel, landDigest, landView, landWater, mountainHeight } from "../src/sim/land.js";
+import { diamondSquare, sampleField } from "../src/sim/diamond.js";
+import { ISLAND_R, LAKE, LAND_TOP, MOUNTAIN, allPines, fractalAt, landFractal, northFade, bakeLand, bankPlants, fogLevel, landDigest, landView, landWater, mountainHeight } from "../src/sim/land.js";
 import { WADE, bankParts, baseDune, biomeAt, duneHeight, land, standHeight, waterAt } from "../src/sim/life.js";
 import { sceneFromStage } from "../src/render/stage.js";
 
@@ -15,6 +16,58 @@ test("the land bakes the same every time, and a different seed bakes a different
   assert.equal(again.plan.river.length, field.plan.river.length);
   const other = bakeLand(baseDune, "another-world", { fresh: true });
   assert.notEqual(landDigest(other), landDigest(field));
+});
+
+test("diamond-square is reproducible from its seed, tiles, and fills [-1, 1] with fractal detail", () => {
+  const a = diamondSquare(6, 1234);
+  const b = diamondSquare(6, 1234);
+  const c = diamondSquare(6, 1235);
+  assert.equal(a.size, 65);
+  assert.deepEqual([...a.cells], [...b.cells]);
+  assert.notDeepEqual([...a.cells], [...c.cells]);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of a.cells) {
+    lo = Math.min(lo, v);
+    hi = Math.max(hi, v);
+  }
+  assert.equal(lo, -1);
+  assert.equal(hi, 1);
+  // The wrapped edge matches, so the field tiles without a seam.
+  for (let k = 0; k < a.size; k += 1) {
+    assert.equal(a.cells[k], a.cells[(a.size - 1) * a.size + k]);
+    assert.equal(a.cells[k * a.size], a.cells[k * a.size + a.size - 1]);
+  }
+  assert.equal(sampleField(a, 3, 5), a.cells[5 * a.size + 3]);
+  // Detail at every scale: neighbours are close, far cells differ more (a rough, not white, field).
+  let near = 0;
+  let far = 0;
+  for (let k = 0; k < 64 * 64; k += 1) {
+    const x = k % 64;
+    const y = (k / 64) | 0;
+    near += Math.abs(sampleField(a, x, y) - sampleField(a, x + 1, y));
+    far += Math.abs(sampleField(a, x, y) - sampleField(a, x + 16, y));
+  }
+  assert.ok(far > near * 2, `far ${far} near ${near}`);
+  // The land's field is the same object per seed, and a pure function of it.
+  assert.equal(landFractal(field.seedHash), landFractal(field.seedHash));
+  assert.deepEqual([...diamondSquare(9, (field.seedHash ^ 0x6d2b79f5) >>> 0, 0.56).cells.slice(0, 64)], [...landFractal(field.seedHash).cells.slice(0, 64)]);
+  assert.equal(northFade(0, -150), 0);
+  assert.equal(northFade(0, 20), 0);
+  assert.ok(Math.abs(fractalAt(-40, 160)) <= 1);
+});
+
+test("the mountain has fractal ridges and gullies", () => {
+  // Around a ring at mid height the ground rises and falls many times, not a smooth cone.
+  const ring = [];
+  for (let k = 0; k < 360; k += 1) {
+    const a = (k / 360) * Math.PI * 2;
+    ring.push(mountainHeight(MOUNTAIN.x + Math.cos(a) * MOUNTAIN.radius * 0.45, MOUNTAIN.y + Math.sin(a) * MOUNTAIN.radius * 0.45, field.seedHash));
+  }
+  let turns = 0;
+  for (let k = 1; k < 359; k += 1) if ((ring[k] - ring[k - 1]) * (ring[k + 1] - ring[k]) < 0) turns += 1;
+  assert.ok(turns >= 12, `ridges and gullies around the flank: ${turns}`);
+  assert.ok(Math.max(...ring) - Math.min(...ring) > 3, "deep enough to see");
 });
 
 test("the voxel crust and its chunk hashes do not change with the land", () => {
@@ -49,9 +102,28 @@ test("the stream runs from the spring down into the lake, never uphill, and wide
   assert.ok(Math.hypot(stream[0].x - field.plan.spring.x, stream[0].y - field.plan.spring.y) < 0.01);
   for (let i = 1; i < stream.length; i += 1) {
     assert.ok(Math.hypot(stream[i].x - stream[i - 1].x, stream[i].y - stream[i - 1].y) < 2.5, `gap at ${i}`);
-    assert.ok(stream[i].surface <= stream[i - 1].surface + 1e-9, `uphill at ${i}`);
+    assert.ok(stream[i].surface < stream[i - 1].surface, `not falling at ${i}`);
     assert.ok(stream[i].half >= stream[i - 1].half - 1e-9, `narrows at ${i}`);
   }
+  // It winds around the mountain: the bearing from the peak sweeps at least 180° (it is about 260°).
+  let sweep = 0;
+  for (let i = 1; i < stream.length; i += 1) {
+    let d = Math.atan2(stream[i].y - MOUNTAIN.y, stream[i].x - MOUNTAIN.x) - Math.atan2(stream[i - 1].y - MOUNTAIN.y, stream[i - 1].x - MOUNTAIN.x);
+    d = ((((d + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
+    sweep += d;
+  }
+  assert.ok(Math.abs(sweep) >= Math.PI, `sweep ${(Math.abs(sweep) * 180) / Math.PI}°`);
+  // And it bends: the heading turns both ways many times.
+  let flips = 0;
+  let prevTurn = 0;
+  for (let i = 2; i < stream.length; i += 1) {
+    const a = Math.atan2(stream[i - 1].y - stream[i - 2].y, stream[i - 1].x - stream[i - 2].x);
+    const b = Math.atan2(stream[i].y - stream[i - 1].y, stream[i].x - stream[i - 1].x);
+    const t = Math.sign(Math.sin(b - a) - Math.sign(sweep) * 0.02);
+    if (t !== 0 && prevTurn !== 0 && t !== prevTurn) flips += 1;
+    if (t !== 0) prevTurn = t;
+  }
+  assert.ok(flips >= 6, `meander bends ${flips}`);
   assert.ok(stream[0].half <= 0.6, "starts as a small stream");
   assert.ok(stream.at(-1).half > stream[0].half * 3, "and widens");
   const end = stream.at(-1);
@@ -81,8 +153,11 @@ test("the river leaves the lake and reaches the sea, falling all the way", () =>
   assert.ok(river[0].surface <= LAKE.level);
   for (let i = 1; i < river.length; i += 1) {
     assert.ok(Math.hypot(river[i].x - river[i - 1].x, river[i].y - river[i - 1].y) < 2.5, `gap at ${i}`);
-    assert.ok(river[i].surface <= river[i - 1].surface + 1e-9, `uphill at ${i}`);
+    assert.ok(river[i].surface < river[i - 1].surface, `not falling at ${i}`);
   }
+  // The river meanders: its path is clearly longer than the straight line from lake to mouth.
+  const straight = Math.hypot(river.at(-1).x - river[0].x, river.at(-1).y - river[0].y);
+  assert.ok(river.at(-1).s > straight * 1.12, `sinuosity ${river.at(-1).s / straight}`);
   const mouth = river.at(-1);
   assert.ok(Math.hypot(mouth.x, mouth.y) > ISLAND_R, "the mouth is past the coast, where the sea starts");
   assert.ok(mouth.surface < 0.1 && mouth.surface >= 0, `mouth at sea level: ${mouth.surface}`);

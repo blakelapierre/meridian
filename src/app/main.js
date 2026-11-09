@@ -15,8 +15,8 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene, pictureCamera } from "../render/scene.js?v=77";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=99";
+import { buildScene, pictureCamera } from "../render/scene.js?v=78";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=100";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -145,8 +145,8 @@ import { craftHelper, cycleHelperTask, dismissHelper, helperLine, nearestHelper,
 import { stepBows } from "../sim/bow.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, herdPrints, land, standHeight } from "../sim/life.js?v=81";
-import { fogLevel, landView } from "../sim/land.js?v=1";
+import { duneHeight, fauna, graze, groundLook, herdPrints, land, standHeight } from "../sim/life.js?v=82";
+import { fogLevel, landView } from "../sim/land.js?v=2";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -165,7 +165,7 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture } from "./picture.js?v=2";
+import { openPicture } from "./picture.js?v=3";
 
 const canvas = document.querySelector("canvas");
 const params = new URLSearchParams(location.search);
@@ -451,6 +451,7 @@ let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") ===
 let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : landLook ? landLook.pitch : 0);
 // ?fog=0 turns the valley and lake fog off, 2 thickens it. Bot clients (?bot=) default to off.
 const fogParam = fogLevel(params.get("fog"), Boolean(params.get("bot")));
+const skyEye = Math.min(1500, Math.max(0, Number(params.get("sky")) || 0));
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
 // ?phase=<radians> sets the starting sun angle (0.87 is mid-morning, ~2.9 dusk, ~4.6 night) for repeatable screenshots.
 // ?clock= speeds the day, the weather, and plant growth. Walking stays at real time. 1 is the default.
@@ -1687,6 +1688,12 @@ function aimCamera(sample, dt) {
     cameraSpring.vel[2] = Math.max(0, cameraSpring.vel[2]);
   }
   cameraLook = stepLook(cameraSpring, idealLook, dt);
+  // ?sky=<meters>: a drone eye straight above the feet at that height, looking along yaw and pitch
+  // (set both with ?at=x,y,yaw,pitch). For overhead views of the land; the body still walks below.
+  if (skyEye > 0) {
+    cameraPos = [feet[0], feet[1], skyEye];
+    cameraLook = lookDirection(sample.yaw ?? yaw, sample.pitch ?? pitch);
+  }
 }
 
 function frameSlide(sample) {

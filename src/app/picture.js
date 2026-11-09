@@ -8,7 +8,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   }
   let thread;
   try {
-    thread = new WorkerImpl(new URL("./render-worker.js?v=5", import.meta.url), { type: "module" });
+    thread = new WorkerImpl(new URL("./render-worker.js?v=6", import.meta.url), { type: "module" });
   } catch {
     return { painter: null, remote: false };
   }

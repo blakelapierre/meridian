@@ -1,5 +1,5 @@
 import { spanShape, triShape } from "./form.js?v=1";
-import { LAKE, MOUNTAIN, bakeLand, bankPlants, inLand, landBank, landDelta, landPineDensity, landWater, mountainHeight } from "./land.js?v=1";
+import { LAKE, MOUNTAIN, bakeLand, bankPlants, inLand, landBank, landDelta, landPineDensity, landWater, mountainHeight } from "./land.js?v=2";
 
 export const HILL = 5.4;
 

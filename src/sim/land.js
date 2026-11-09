@@ -9,6 +9,8 @@
 // The bake is a 0.5 m grid over the north of the island. The walk (life.js duneHeight) and the
 // picture (gpu.js, as a texture) read the same numbers, so what you see is what you stand on.
 
+import { diamondSquare, sampleField } from "./diamond.js?v=1";
+
 export const LAND_SEED = "atoll-slice-1";
 export const LAND_CELL = 0.5;
 export const LAND_X0 = -160;
@@ -22,7 +24,7 @@ export const ISLAND_R = 256;
 export const MOUNTAIN = { x: -40, y: 160, radius: 104, height: 44 };
 export const LAKE = { x: 70, y: 96, radius: 14, level: 2.2, depth: 1.6 };
 // Tallest thing the land can hold: peak plus noise plus a pine on top. The trace starts its march below this.
-export const LAND_TOP = 60;
+export const LAND_TOP = 64;
 export const PINE_CELL = 4.5;
 
 function fnv(text) {
@@ -64,7 +66,29 @@ function noise(x, y, seed) {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
 
-// Ridged, a little craggy toward the top. Zero outside the footprint, so the south is unchanged.
+// One diamond-square field per seed: 513² over the land box, about 0.8 m a cell.
+export const DS_LEVELS = 9;
+const DS_CELL = LAND_W / (1 << DS_LEVELS);
+const dsCache = new Map();
+export function landFractal(seed = fnv(LAND_SEED)) {
+  let field = dsCache.get(seed);
+  if (!field) {
+    field = diamondSquare(DS_LEVELS, (seed ^ 0x6d2b79f5) >>> 0, 0.56);
+    dsCache.set(seed, field);
+  }
+  return field;
+}
+// The fractal at a point: [-1, 1].
+export function fractalAt(x, y, seed = fnv(LAND_SEED), scale = 1) {
+  return sampleField(landFractal(seed), ((x - LAND_X0) / DS_CELL) * scale, ((y - LAND_Y0) / DS_CELL) * scale);
+}
+// Gentle fractal rolls over the north half only: zero at the land box's edges and south of it.
+export function northFade(x, y) {
+  return smoothstep(LAND_Y0, LAND_Y0 + 36, y) * smoothstep(LAND_Y0 + LAND_H, LAND_Y0 + LAND_H - 30, y)
+    * smoothstep(LAND_X0, LAND_X0 + 30, x) * smoothstep(LAND_X0 + LAND_W, LAND_X0 + LAND_W - 30, x);
+}
+
+// Ridges and gullies from the diamond-square field, craggier toward the top. Zero outside the footprint.
 export function mountainHeight(x, y, seed = fnv(LAND_SEED)) {
   const dx = x - MOUNTAIN.x;
   const dy = y - MOUNTAIN.y;
@@ -74,9 +98,9 @@ export function mountainHeight(x, y, seed = fnv(LAND_SEED)) {
   if (u >= 1) return 0;
   const s = 1 - u;
   const shape = s * s * (3 - 2 * s);
-  const ridge = 1 - Math.abs(noise(x * 0.04, y * 0.04, seed ^ 0x9e) * 2 - 1);
-  const fine = noise(x * 0.13, y * 0.13, seed ^ 0x3c) - 0.5;
-  const rough = (ridge - 0.5) * 0.22 + fine * 0.08;
+  const ds = fractalAt(x, y, seed);
+  const ridge = 1 - Math.abs(fractalAt(x, y, seed, 0.5));
+  const rough = (ridge - 0.62) * 0.36 + ds * 0.1;
   return Math.max(0, MOUNTAIN.height * shape * (1 + rough * Math.min(1, s * 2.2)));
 }
 
@@ -86,7 +110,7 @@ function lakeRadius(x, y, seed) {
 
 // Terrain before the water cuts it: dunes + mountain, with the lake basin pressed in.
 function shapedGround(dune, x, y, seed) {
-  let g = dune(x, y) + mountainHeight(x, y, seed);
+  let g = dune(x, y) + mountainHeight(x, y, seed) + 0.7 * fractalAt(x, y, seed, 0.35) * northFade(x, y);
   const r = Math.hypot(x - LAKE.x, y - LAKE.y);
   const rl = lakeRadius(x, y, seed);
   if (r < rl) {
@@ -146,22 +170,37 @@ function planWater(dune, seed) {
   const ground = (x, y) => shapedGround(dune, x, y, seed);
   const toLake = [LAKE.x - MOUNTAIN.x, LAKE.y - MOUNTAIN.y];
   const tl = Math.hypot(toLake[0], toLake[1]);
-  const spring = [MOUNTAIN.x + (toLake[0] / tl) * MOUNTAIN.radius * 0.24, MOUNTAIN.y + (toLake[1] / tl) * MOUNTAIN.radius * 0.24];
   const phase = hash01(1, 2, seed) * 6.283;
-  const up = walkPath(spring, (p) => Math.hypot(p[0] - LAKE.x, p[1] - LAKE.y) < LAKE.radius * 0.6, 1.5, seed, (p, n) => {
-    const e = 1.0;
-    const gx = (ground(p[0] + e, p[1]) - ground(p[0] - e, p[1])) / (2 * e);
-    const gy = (ground(p[0], p[1] + e) - ground(p[0], p[1] - e)) / (2 * e);
-    const gl = Math.hypot(gx, gy) || 1;
+  // The stream winds most of the way around the mountain: a spiral out from the spring, about 270°
+  // around the peak, with meander bends, ending on the foot facing the lake. Then it runs to the lake.
+  const lakeBearing = Math.atan2(toLake[1], toLake[0]);
+  const sweep = Math.PI * (1.45 + 0.1 * hash01(5, 6, seed));
+  const turn = hash01(7, 8, seed) < 0.5 ? 1 : -1;
+  const start = lakeBearing - turn * sweep;
+  const r0 = MOUNTAIN.radius * 0.24;
+  const r1 = MOUNTAIN.radius * 0.92;
+  const spring = [MOUNTAIN.x + Math.cos(start) * r0, MOUNTAIN.y + Math.sin(start) * r0];
+  const spiral = [spring.slice()];
+  let at = spring.slice();
+  for (let k = 0; k < 4000; k += 1) {
+    const t = Math.min(1, k / 3999);
+    const ang = start + turn * sweep * t;
+    const bends = Math.sin(t * Math.PI * 2 * 7 + phase) * (2 + 5 * t) + (noise(t * 9 + phase, 2.5, seed ^ 0x21) - 0.5) * 4 * t;
+    const r = r0 + (r1 - r0) * Math.pow(t, 0.85) + bends * Math.min(1, t * 6);
+    const p = [MOUNTAIN.x + Math.cos(ang) * r, MOUNTAIN.y + Math.sin(ang) * r];
+    if (Math.hypot(p[0] - at[0], p[1] - at[1]) >= 1.5 || t === 1) {
+      spiral.push(p);
+      at = p;
+    }
+  }
+  const foot = walkPath(at, (p) => Math.hypot(p[0] - LAKE.x, p[1] - LAKE.y) < LAKE.radius * 0.6, 1.5, seed, (p, n) => {
     const lx = LAKE.x - p[0];
     const ly = LAKE.y - p[1];
     const ll = Math.hypot(lx, ly) || 1;
-    const wander = 0.5 * (noise(n * 0.08 + phase, 0.5, seed ^ 0x21) - 0.5);
-    const pull = 0.55 + 0.45 * Math.min(1, n / 60);
-    const fx = (-gx / gl) * (1 - pull) + (lx / ll) * pull;
-    const fy = (-gy / gl) * (1 - pull) + (ly / ll) * pull;
-    return [fx - fy * wander, fy + fx * wander];
+    const wander = 0.6 * Math.sin(n * 0.25 + phase);
+    return [lx / ll - (ly / ll) * wander, ly / ll + (lx / ll) * wander];
   });
+  const up = [...spiral, ...foot.slice(1)];
   const outAngle = -0.12 + (hash01(3, 4, seed) - 0.5) * 0.16;
   const sea = [Math.cos(outAngle) * (ISLAND_R + 10), Math.sin(outAngle) * (ISLAND_R + 10) + LAKE.y * 0.9];
   const ox = sea[0] - LAKE.x;
@@ -172,8 +211,12 @@ function planWater(dune, seed) {
     const sx = sea[0] - p[0];
     const sy = sea[1] - p[1];
     const sl = Math.hypot(sx, sy) || 1;
-    const wander = 0.9 * (noise(n * 0.05 + phase * 2, 1.5, seed ^ 0x43) - 0.5);
-    return [sx / sl - (sy / sl) * wander, sy / sl + (sx / sl) * wander];
+    // Meander bends: the heading swings across the line to the sea, wider near the lake, calmer by the coast.
+    const calm = 1 - smoothstep(ISLAND_R - 60, ISLAND_R, Math.hypot(p[0], p[1]));
+    const wander = (1.05 * Math.sin(n * 0.085 + phase * 2) + 0.6 * (noise(n * 0.05 + phase, 1.5, seed ^ 0x43) - 0.5)) * (0.3 + 0.7 * calm);
+    const c = Math.cos(wander);
+    const sn = Math.sin(wander);
+    return [(sx / sl) * c - (sy / sl) * sn, (sx / sl) * sn + (sy / sl) * c];
   });
   const upPts = smoothPath(up);
   const downPts = smoothPath(down);
@@ -181,24 +224,26 @@ function planWater(dune, seed) {
   const downS = arcLengths(downPts);
   const upLen = upS[upS.length - 1];
   const downLen = downS[downS.length - 1];
-  // Stream surface: falls with the ground, never rises, and meets the lake at its level.
+  // Stream surface: strictly falling. It follows the ground where the ground falls, cuts through where
+  // it rises, and never drops below a floor that itself falls to the lake's level at the end.
   const upSurf = [];
   let last = Infinity;
   for (let i = 0; i < upPts.length; i += 1) {
     const f = upS[i] / upLen;
-    const depth = 0.12 + 0.4 * f;
     const g = ground(upPts[i][0], upPts[i][1]) - 0.1;
-    last = Math.max(LAKE.level, Math.min(last - 0.004 * (i ? upS[i] - upS[i - 1] : 0), g));
+    const floor = LAKE.level + 0.4 * (1 - f);
+    last = Math.max(floor, Math.min(last - 0.004 * (i ? upS[i] - upS[i - 1] : 0), g));
     upSurf.push(last);
-    void depth;
   }
-  // River surface: from lake level down to just over the sea, never rising.
+  // River surface: strictly falling from just under lake level to just over the sea.
   const downSurf = [];
   last = LAKE.level - 0.02;
   for (let i = 0; i < downPts.length; i += 1) {
     const f = downS[i] / downLen;
     const plan = (LAKE.level - 0.02) * (1 - f) + 0.04 * f;
-    last = Math.min(last, Math.max(0.04, Math.min(plan, ground(downPts[i][0], downPts[i][1]) - 0.08)));
+    const floor = 0.05 * (1 - f) + 0.02 * f;
+    const ds = i ? downS[i] - downS[i - 1] : 0;
+    last = i === 0 ? last : Math.max(floor, Math.min(last - 0.0002 * ds, plan, ground(downPts[i][0], downPts[i][1]) - 0.08));
     downSurf.push(last);
   }
   const reach = (pts, s, len, surf, kind) => pts.map((p, i) => {
@@ -247,7 +292,7 @@ export function bakeLand(dune, seed = LAND_SEED, { fresh = false } = {}) {
     for (let v = 0; v + 1 < list.length; v += 1) segs.push([list[v], list[v + 1], verts.indexOf(list[v])]);
   }
   for (const [a, b, ai] of segs) {
-    const pad = Math.max(a.half, b.half) + 8;
+    const pad = Math.max(a.half, b.half) + 18;
     const i0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - pad - LAND_X0) / LAND_CELL));
     const i1 = Math.min(LAND_NX - 1, Math.ceil((Math.max(a.x, b.x) + pad - LAND_X0) / LAND_CELL));
     const j0 = Math.max(0, Math.floor((Math.min(a.y, b.y) - pad - LAND_Y0) / LAND_CELL));
@@ -295,7 +340,8 @@ export function bakeLand(dune, seed = LAND_SEED, { fresh = false } = {}) {
       if (nearAt[k] >= 0 && r >= rl - 0.5) {
         const d = near[k];
         const at = along(nearAt[k]);
-        const bandW = Math.max(4, at.half * 1.5 + 3);
+        // A deeper cut gets a wider band, so the walls of a gully slope instead of standing straight.
+        const bandW = Math.min(16, Math.max(4, at.half * 1.5 + 3, (g - at.surface) * 1.4));
         if (d < at.half) {
           const q = d / at.half;
           g = at.surface - at.depth * (1 - q * q) - 0.02;
@@ -483,13 +529,14 @@ export function fogLevel(raw, bot = false) {
 export function landView(field, which) {
   const spring = field.plan.spring;
   if (which === "spring") {
-    const v = field.plan.stream[Math.min(field.plan.stream.length - 1, 14)];
+    const v = field.plan.stream[Math.min(field.plan.stream.length - 1, 16)];
     const dx = v.x - spring.x;
     const dy = v.y - spring.y;
     const l = Math.hypot(dx, dy) || 1;
     const x = spring.x - (dx / l) * 3 + (dy / l) * 1.2;
     const y = spring.y - (dy / l) * 3 - (dx / l) * 1.2;
-    return { x, y, yaw: Math.atan2(LAKE.x - x, LAKE.y - y), pitch: -0.2 };
+    const far = field.plan.stream[Math.min(field.plan.stream.length - 1, 40)];
+    return { x, y, yaw: Math.atan2(far.x - x, far.y - y), pitch: -0.22 };
   }
   const mx = MOUNTAIN.x - LAKE.x;
   const my = MOUNTAIN.y - LAKE.y;

@@ -1,8 +1,8 @@
 import { cameraBasis } from "../engine/cast.js";
 import { GPU_TREE_AT, MAX_GPU_NODES, MAX_SHAPE_BODIES, MAX_SHAPE_NODES, gpuNodeCount, gpuNodeData, packGpuNodes, packShapeTree, shapeIndexData, shapeNodeCount, shapeNodeData } from "../engine/octree.js";
 import { VOXEL_M } from "../sim/crust.js";
-import { LAND_H, LAND_NX, LAND_NY, LAND_TOP, LAND_W, LAND_X0, LAND_Y0, MOUNTAIN, PINE_CELL, landTexels } from "../sim/land.js?v=1";
-import { land } from "../sim/life.js?v=81";
+import { LAND_H, LAND_NX, LAND_NY, LAND_TOP, LAND_W, LAND_X0, LAND_Y0, MOUNTAIN, PINE_CELL, landTexels } from "../sim/land.js?v=2";
+import { land } from "../sim/life.js?v=82";
 import { ATLAS, BARK_TILE, CLOTH_TILE, FEATHER_TILE, GRASS_TILE, HAIR_TILE, HIDE_TILE, HORN_TILE, LEAF_TILE, METAL_TILE, ROCK_TILE, SAND_TILE, SCALE_TILE, SHAPE_TILE, SKIN_TILE, WOOD_TILE, barkTexture, blitTexture, clothTexture, featherTexture, grassTexture, hairTexture, hideTexture, hornTexture, leafTexture, metalTexture, rectFor, rockTexture, sandTexture, scaleTexture, skinTexture, woodTexture } from "./texture.js?v=64";
 
 const MAX_SPHERES = 384;
