@@ -96,7 +96,8 @@ import { deedCost, deedMessage, DEEDS_KEY, fadeDeeds, friendLine, guarded, packD
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
 import { addPrint, PRINT_CAP } from "../sim/prints.js";
-import { paintChart } from "../render/chart.js?v=73";
+import { paintChart } from "../render/chart.js?v=74";
+import { edgeCueRadii, rad } from "../render/radius.js?v=1";
 import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, sightPractice, stepFollow, zoomFov } from "../sim/sight.js?v=10";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
 import { appraise, subjectFromHit } from "../sim/appraise.js";
@@ -225,8 +226,11 @@ if (keepSlot) {
   else if (params.get("who") === "new") dropCharacter(keptStore, keepSlot);
 }
 bootNote("Loading Meridian", 0.08);
-const opened = openPicture(canvas, { search: location.search });
-let painter = opened.painter || createGpuPainter(canvas);
+// ?simonly=1 (scale bench thumbnails past the live WebGL budget): no GPU context, no painting;
+// sim, bots and network run as usual. Browsers cap live WebGL contexts per tab (~16).
+const SIM_ONLY = new URLSearchParams(location.search).get("simonly") === "1";
+const opened = SIM_ONLY ? { painter: null, remote: false } : openPicture(canvas, { search: location.search });
+let painter = SIM_ONLY ? null : opened.painter || createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
 const picture = createPicturePace();
@@ -271,8 +275,8 @@ if (painter && !painter.remote) {
 } else {
   context = canvas.getContext("2d", { alpha: false });
   if (context) context.imageSmoothingEnabled = false;
-  canvas.dataset.renderer = "cpu";
-  showGlError(canvas.dataset.gpuError || "WebGL2 is not available");
+  canvas.dataset.renderer = SIM_ONLY ? "none" : "cpu";
+  if (!SIM_ONLY) showGlError(canvas.dataset.gpuError || "WebGL2 is not available");
 }
 // A visible note when the GPU path fails, so a blank screen never looks like a working one.
 function showGlError(reason) {
@@ -651,17 +655,19 @@ function paintCues(scene) {
       ctx.strokeStyle = `rgba(${r},${g},${b},${fade.toFixed(3)})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(screen.x * w, screen.y * h, 8 + age * 26, 0, Math.PI * 2);
+      ctx.arc(screen.x * w, screen.y * h, rad(8 + age * 26), 0, Math.PI * 2);
       ctx.stroke();
       continue;
     }
     // Off-screen (or low skill): an arc on an ellipse hugging the screen edge, centred on the bearing.
+    const radii = edgeCueRadii(w, h, age);
+    if (!radii) continue;
     const bearing = cue.angle - Math.PI / 2; // 0 ahead = top of screen
     const spread = cue.style.shimmer ? Math.max(cue.style.spread, 1.4) : cue.style.spread;
     ctx.lineWidth = cue.style.shimmer ? 3 : 4 + (1 - age) * 3;
     ctx.strokeStyle = `rgba(${r},${g},${b},${(cue.style.shimmer ? fade * 0.6 : fade).toFixed(3)})`;
     ctx.beginPath();
-    ctx.ellipse(w / 2, h / 2, w / 2 - 6 - age * 4, h / 2 - 6 - age * 4, 0, bearing - spread / 2, bearing + spread / 2);
+    ctx.ellipse(w / 2, h / 2, radii.rx, radii.ry, 0, bearing - spread / 2, bearing + spread / 2);
     ctx.stroke();
   }
 }
@@ -4688,7 +4694,7 @@ if (params.get("still") !== "1") {
     // ?paintfps= (or the probe) caps drawing only; the sim and network keep full speed.
     const capped = paintCap > 0 && now - lastCapped < 1000 / paintCap - 2;
     const roomy = shouldPaint(simSteps, performance.now() - frameStart);
-    if (params.get("nopaint") !== "1" && due && !capped && !fromTimer) {
+    if (!SIM_ONLY && params.get("nopaint") !== "1" && due && !capped && !fromTimer) {
       if (roomy && !pictureBusy) {
       lastCapped = now;
       const started = performance.now();
