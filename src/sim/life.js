@@ -1,5 +1,6 @@
 import { spanShape, triShape } from "./form.js?v=1";
 import { LAKE, MOUNTAIN, bakeLand, bankPlants, inLand, landBank, landDelta, landPineDensity, landWater, mountainHeight } from "./land.js?v=2";
+import { bakeVolcano, bombsAt, inVolcano, lavaAt, volcanoDelta } from "./volcano.js?v=1";
 
 export const HILL = 5.4;
 
@@ -23,11 +24,24 @@ export function land() {
   return landField;
 }
 
-// Ground height: the dunes, plus the north mountain, the lake basin, and the channel the water cut.
+let volcanoField = null;
+export function volcano() {
+  if (!volcanoField) volcanoField = bakeVolcano(baseDune);
+  return volcanoField;
+}
+
+// Ground height: the dunes, plus the north mountain, the lake basin, and the channel the water cut,
+// plus the volcano in the southwest (volcano.js).
 export function duneHeight(x, y) {
-  const h = baseDune(x, y);
+  let h = baseDune(x, y);
+  if (inVolcano(x, y)) h += volcanoDelta(volcano(), x, y);
   if (!inLand(x, y)) return h;
   return h + landDelta(land(), x, y);
+}
+
+// The lava bombs in the air at shared-clock time t (seconds): the same for every peer.
+export function eruptionAt(t) {
+  return bombsAt(t, volcano().seedHash, duneHeight);
 }
 
 // Water surface over this point, or null where it is dry.
@@ -141,6 +155,11 @@ export function biomeAt(x, y) {
     if (landPineDensity(field, x, y) > 0.15) return "pines";
     if (m > 2) return "slope";
   }
+  if (inVolcano(x, y)) {
+    const field = volcano();
+    if (lavaAt(field, x, y) > 0.4) return "lava";
+    if (volcanoDelta(field, x, y) > 1.5) return "cinder";
+  }
   const marsh = Math.exp(-(((x - 36) ** 2) + ((y + 96) ** 2)) / 2200);
   if (marsh > 0.42 && h < 1.6) return "marsh";
   const grove = Math.exp(-(((x + 16) ** 2) + ((y + 128) ** 2)) / 2600);
@@ -159,12 +178,14 @@ export function groundLook(x, y) {
   let grassW = (1 - rockW) * smoothstep(0.1, 0.34, crest) * (1 - smoothstep(0.58, 0.86, crest));
   grassW *= 1 - smoothstep(0.16, 0.46, slope);
   const biome = biomeAt(x, y);
-  if (biome === "lake" || biome === "river" || biome === "bank" || biome === "summit" || biome === "pines" || biome === "slope") {
+  if (biome === "lake" || biome === "river" || biome === "bank" || biome === "summit" || biome === "pines" || biome === "slope" || biome === "lava" || biome === "cinder") {
     const look = {
       lake: ["sand", [70, 92, 96]],
       river: ["sand", [78, 98, 100]],
       bank: ["grass", [62, 118, 52]],
       summit: ["rock", [150, 148, 146]],
+      lava: ["rock", [236, 96, 28]],
+      cinder: ["rock", [58, 52, 50]],
       pines: ["grass", [52, 82, 44]],
       slope: [rockW > 0.45 ? "rock" : "grass", rockW > 0.45 ? [124, 118, 108] : [96, 124, 62]],
     }[biome];
