@@ -2446,7 +2446,7 @@ void main() {
     if (tier !== "lite") return startSplit();
     if (!lite || fullJob) return false;
     effects.startedAt = Date.now();
-    fullJob = startProgram(gl, parallel, vs, specialize(fragFor(false), false));
+    fullJob = startProgram(gl, parallel, vs, minifyGlsl(specialize(fragFor(false), false)));
     setEffects("loading");
     return true;
   };

@@ -202,6 +202,6 @@ test("the page falls back to the CPU picture instead of a dead stop; the shader 
   assert.match(gpu, /warm: warmTree,/);
   const worker = readFileSync(new URL("../src/app/render-worker.js", import.meta.url), "utf8");
   assert.match(worker, /self\.postMessage\(\{ type: "stage"/);
-  assert.match(worker, /createGpuPainter\(canvas, \{ lite: tier !== "full", tier \}\)/);
+  assert.match(worker, /createGpuPainter\(canvas, \{ lite: tier !== "full", tier, hint: msg\.hint \|\| null \}\)/);
   assert.match(worker, /painter\.warm\?\.\(\)/);
 });

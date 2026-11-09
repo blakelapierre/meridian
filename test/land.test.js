@@ -220,7 +220,7 @@ test("?fog= toggles the fog: 0 off, 1 default, 2 thick; bots default off; the pi
   assert.equal(sceneFromStage(stage, atoll).fog, 1);
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /if \(uFog < 0\.5\) return color;/);
-  assert.match(gpu, /gl\.uniform1f\(u\("uFog"\), scene\.fog \?\? 1\)/);
+  assert.match(gpu, /U\("uniform1f", "uFog", scene\.fog \?\? 1\)/);
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /fogLevel\(params\.get\("fog"\)/);
 });
@@ -235,7 +235,7 @@ test("the shader reads the same pine rule and hash as the walk", () => {
   assert.match(landSrc, /roll < dens \* 0\.9/);
   assert.match(gpu, /1\.25 \+ 0\.4 \* size, 4\.2 \+ 3\.6 \* size/);
   assert.match(landSrc, /radius: 1\.25 \+ 0\.4 \* size, height: 4\.2 \+ 3\.6 \* size/);
-  assert.match(gpu, /uPineSeed"\), \(landField\.seedHash \^ 0x9172\)/);
+  assert.match(gpu, /uPineSeed", \(landField\.seedHash \^ 0x9172\)/);
   assert.match(landSrc, /field\.seedHash \^ 0x9172/);
   // The march starts under the land's top, not the old 5.6 m dune cap.
   assert.ok(!/ro\.z > 5\.6/.test(gpu));

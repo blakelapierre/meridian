@@ -57,10 +57,10 @@ test("the boot ladder, the lost-context retry, and a CPU picture that draws (wir
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   const worker = readFileSync(new URL("../src/app/render-worker.js", import.meta.url), "utf8");
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
-  assert.match(gpu, /const TIERS = \["full", "lite", "core", "bare"\];/);
+  assert.match(gpu, /const TIERS = \["full", "lite", "geo", "core", "bare"\];/);
   assert.match(gpu, /if \(compile\.last\?\.lost\) break;/, "a lost context stops the ladder");
   assert.match(gpu, /probe: a tiny shader compiles/);
-  assert.match(gpu, /if \(!lite \|\| fullJob \|\| tier !== "lite"\) return false;/, "no full upgrade from core or bare");
+  assert.match(gpu, /if \(tier !== "lite"\) return startSplit\(\);\s*if \(!lite \|\| fullJob\) return false;/, "below lite the upgrade is the split passes, never the whole full trace");
   assert.match(worker, /webglcontextlost", \(e\) => e\.preventDefault\(\)/);
   assert.match(worker, /webglcontextrestored[\s\S]*tier: "core"/);
   assert.match(main, /if \(cores\.count > 0 && cpuBusy\) \{\s*lastScene = scene;\s*return scene;/, "no main-thread CPU frame while the cores are busy");

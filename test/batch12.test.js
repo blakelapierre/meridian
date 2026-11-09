@@ -118,7 +118,7 @@ test("rain you can see under the deck that rains on pools", () => {
   assert.ok(rainOver(0, 0, wet), "visible rain only where the pool rule also rains");
   const gpu = readFileSync(new URL("../src/render/gpu.js", import.meta.url), "utf8");
   assert.match(gpu, /uniform float uRain;/);
-  assert.match(gpu, /gl\.uniform1f\(u\("uRain"\), scene\.rain \|\| 0\)/);
+  assert.match(gpu, /U\("uniform1f", "uRain", scene\.rain \|\| 0\)/);
 });
 
 import { packDeeds, unpackDeeds, deedMessage, readDeedMessage, theirLine, DEEDS_KEY } from "../src/sim/lore.js";
