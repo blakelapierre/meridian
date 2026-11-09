@@ -96,6 +96,18 @@ export function subjectFromHit(hit, pieces = []) {
       point: hit.point,
     };
   }
+  if (object.body === "helper") {
+    return {
+      name: "Helper",
+      material: "wood and brass",
+      action: "cycle its task",
+      detail: object.detail || "a made hand",
+      difficulty: 0,
+      kind: "helper",
+      id: object.id,
+      point: hit.point,
+    };
+  }
   if (object.body === "player") return { ...SUBJECTS.player, kind: "player", point: hit.point };
   if (object.type === "box" || object.type === "crust") {
     if (object.kind === "hearth") {

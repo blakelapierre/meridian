@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR, TOUR_START } from "../src/app/demo.js";
+import { characterChoice, createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, stepTour, tourDone, tourLine, tourStep, TOUR, TOUR_START } from "../src/app/demo.js";
 
 const q = (search) => new URLSearchParams(search);
 
@@ -10,6 +10,38 @@ test("demo mode is on for github.io and off for local or ?debug=1", () => {
   assert.equal(demoMode(q("debug=1"), "blakelapierre.github.io"), false);
   assert.equal(demoMode(q(""), "127.0.0.1"), false);
   assert.equal(demoMode(q("demo=1"), "localhost"), true);
+});
+
+test("a saved walk asks, a scripted frame does not, and a new start is explicit", () => {
+  assert.equal(characterChoice(q(""), { saved: false }), "new");
+  assert.equal(characterChoice(q(""), { saved: true }), "ask");
+  assert.equal(characterChoice(q("lighthouse=off"), { saved: true }), "ask");
+  assert.equal(characterChoice(q("who=keep"), { saved: true }), "keep");
+  assert.equal(characterChoice(q("who=new"), { saved: true }), "new");
+  assert.equal(characterChoice(q("bot=1"), { saved: true }), "keep");
+  assert.equal(characterChoice(q("look=dummy"), { saved: true }), "keep");
+  assert.equal(characterChoice(q("gate=1"), { saved: true }), "keep");
+  assert.equal(characterChoice(q("id=a"), { saved: true }), "keep");
+  const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
+  const view = readFileSync(new URL("../tools/view/index.html", import.meta.url), "utf8");
+  assert.match(main, /characterChoice\(params, \{ saved \}\)/);
+  assert.match(main, /await askWho\("A character is saved on this device\."\)/);
+  assert.match(main, /resumeCharacter && loadIdentity\(keptStore, keepSlot\)/);
+  assert.match(main, /resumeCharacter \? loadSheet\(keptStore, keepSlot\)/);
+  assert.match(main, /resumeCharacter \? loadWorld/);
+  assert.match(main, /if \(resumeCharacter\) unpackPlate/);
+  assert.match(main, /dropCharacter\(keptStore, keepSlot\)/);
+  assert.match(main, /guardTrace\(/);
+  assert.match(main, /painter\.onDrew/);
+  assert.match(main, /!pictureBusy/);
+  const gate = main.indexOf("await askWho(");
+  const picture = main.indexOf("openPicture(");
+  const paint = main.indexOf("paint(first,");
+  const room = main.indexOf("seekArchives();");
+  const ident = main.indexOf("loadIdentity(");
+  assert.ok(gate > 0 && picture > gate && paint > gate && room > gate && ident > gate, "the picture, the save, and the lighthouse wait for the choice");
+  assert.match(view, /id="who-keep"/);
+  assert.match(view, /id="who-new"/);
 });
 
 test("a public page never tries localhost and falls back to solo", () => {

@@ -154,6 +154,34 @@ export function pictureSize(scale, displayW, displayH) {
   return { width, height };
 }
 
+// A remote picture pays for a trace on another thread, and the page only learns the cost
+// after that draw returns. The first trace stays inside a small boot edge. Later traces
+// may grow a little past the one just measured, and must shrink when that draw ran long.
+export function guardTrace(width, height, { measured = false, drawMs = 0, budgetMs = 83, prevW = 0, prevH = 0, boot = 480 } = {}) {
+  let w = Math.max(2, Math.round(width) || 2);
+  let h = Math.max(2, Math.round(height) || 2);
+  const clampTo = (maxW, maxH) => {
+    const roomW = Math.max(2, maxW);
+    const roomH = Math.max(2, maxH);
+    if (w <= roomW && h <= roomH) return;
+    const cut = Math.min(roomW / w, roomH / h);
+    w = Math.max(2, Math.round(w * cut));
+    h = Math.max(2, Math.round(h * cut));
+  };
+  if (!measured) {
+    const long = Math.max(w, h);
+    if (long > boot) clampTo((w * boot) / long, (h * boot) / long);
+    return { width: w, height: h };
+  }
+  if (prevW > 0 && prevH > 0 && drawMs > budgetMs && budgetMs > 0) {
+    const room = Math.sqrt(budgetMs / drawMs);
+    clampTo(Math.max(96, prevW * room), Math.max(54, prevH * room));
+  } else if (prevW > 0 && prevH > 0) {
+    clampTo(prevW * 1.35, prevH * 1.35);
+  }
+  return { width: w, height: h };
+}
+
 export function stepOctave(level, covered) {
   if (covered < level) return Math.max(0, level - 1);
   if (covered > level) return Math.min(8, level + 1);

@@ -1,15 +1,20 @@
 import { cast, holdRayObjects, project, traceColor } from "./cast.js";
 
 export function paintFrame(scene, width, height, buffer) {
-  return holdRayObjects(scene.objects, () => paintHeld(scene, width, height, buffer));
+  return holdRayObjects(scene.objects, () => paintHeld(scene, width, height, buffer, 0, height));
 }
 
-function paintHeld(scene, width, height, buffer) {
+export function paintRows(scene, width, height, y0, y1, buffer) {
+  return holdRayObjects(scene.objects, () => paintHeld(scene, width, height, buffer, y0, y1));
+}
+
+function paintHeld(scene, width, height, buffer, y0, y1) {
   const pixels = buffer ?? new Uint8ClampedArray(width * height * 4);
   const miss = scene.miss || [0, 0, 0, 1];
-  let i = 0;
-  for (let y = 0; y < height; y++) {
+  const stop = Math.min(height, y1);
+  for (let y = y0; y < stop; y++) {
     const v = (y + 0.5) / height;
+    let i = y * width * 4;
     for (let x = 0; x < width; x++) {
       const u = (x + 0.5) / width;
       const direction = project(u, v, scene.camera);

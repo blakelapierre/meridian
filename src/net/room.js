@@ -1,3 +1,4 @@
+import { isLocalHubUrl, localSocket } from "./localhub.js?v=1";
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Wire v2: a client sends `proto` in announce and `subscribe` once. A lighthouse that knows
@@ -5,7 +6,7 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // stops polling `list` and announces every subscribedRefreshMs. An old lighthouse ignores both
 // and the client keeps the v1 behavior (announce every refreshMs, poll `list`).
 export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, subscribedRefreshMs = 12000, role = "player", catalog = "", proto = 2 }) {
-  const socket = new WebSocket(url);
+  const socket = isLocalHubUrl(url) ? localSocket(url) : new WebSocket(url);
   const listeners = new Set();
   let roster = null;
   let timer = null;
@@ -34,7 +35,7 @@ export function createRoom({ url, me, cell = "atoll-0", refreshMs = 5000, subscr
     for (const listener of [...listeners]) listener(message);
   });
   function announce() {
-    if (socket.readyState === WebSocket.OPEN) {
+    if (socket.readyState === 1) {
       socket.send(JSON.stringify({ type: "announce", pubkey: me, cell, role, catalog, proto }));
     }
   }
