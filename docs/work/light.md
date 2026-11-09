@@ -46,6 +46,10 @@ The status line names the weather: "day drizzle" or "day rain" where you stand.
 
 Steps splash on wet ground (wetness 0.3 and up), using the same `wetAt` the picture shows. A roof does not dry the splash yet.
 
+## This pass (day)
+
+Dawn is warm, noon is blue, dusk falls the other way, and night is dark with a moon and stars. `?clock=60` runs the day, the clouds, the rain, and the plants that fast. Walking stays at real time. `1` is the default. The line shows `×60` while it is on.
+
 ## Next
 
 A roof to stand under: floors sit on the ground, so the only cover today is a wall lip or beam; the dry-floor and no-streak rules wait for a raised roof piece, and rain sound should then drum and muffle under it. Not in this build.

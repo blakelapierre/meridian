@@ -1,10 +1,12 @@
 import { paintFrame } from "../engine/frame.js";
 import { mountFullscreen, mountTouch, wantsTouch } from "./touch.js?v=5";
 import { BOT_KEYS, createWander, stepWander } from "./bot.js?v=1";
+import { chatMessage, createChatLog, noteChat, readChat } from "../net/chat.js?v=1";
+import { FRAME_MAX_DT, STALL_MAX_DT, STALL_POLL_MS, stalledFor } from "./stall.js?v=1";
 import { resetEverything } from "./reset.js?v=1";
-import { mountOnboard } from "./onboard.js?v=2";
+import { mountOnboard } from "./onboard.js?v=3";
 import { createGoal, goalDone, goalLine, GOAL_KEY, stepGoal } from "./goal.js?v=1";
-import { createTour, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, signalMode, torrentLine, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=5";
+import { createTour, characterChoice, demoMode, goalOffset, lighthouseLine, lighthouseUrl, nextSlot, signalMode, torrentLine, stepTour, tourDone, tourLine, tourStep, TOUR_KEY, TOUR_START } from "./demo.js?v=7";
 import { hearStep, seaGain } from "../audio/cues.js";
 import { createListener } from "../audio/play.js?v=4";
 import { createAmbient, planAmbient } from "../audio/ambient.js";
@@ -13,12 +15,12 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene } from "../render/scene.js?v=69";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=94";
+import { buildScene, pictureCamera } from "../render/scene.js?v=76";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=98";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
-import { cameraAccel, cameraSpeed, createPacer, createMotionGovernor, createPicturePace, minFpsFrom, MINFPS_KEY, createTraceBudget, STILL_FRAME_MS, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=90";
+import { cameraAccel, cameraSpeed, createPacer, createMotionGovernor, createPicturePace, minFpsFrom, MINFPS_KEY, createTraceBudget, STILL_FRAME_MS, guardTrace, inFront, paceWord, pictureSize, traceInterval, viewStill, watchScene } from "../render/pace.js?v=91";
 import {
   authority,
   bandage,
@@ -44,11 +46,11 @@ import {
 } from "../sim/rules.js";
 import { overheadCamera, unpickedClock } from "../sim/clocks.js";
 import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from "../sim/player.js";
-import { dayWord, DAY_TICKS } from "../sim/sun.js";
+import { clockScale, dayWord, DAY_TICKS } from "../sim/sun.js?v=2";
 import { columnFloor, acceptCertifiedSlump, bitMode, certifySlump } from "../sim/crust.js";
 import { bitAim, crustFeet } from "../sim/bit.js?v=2";
 import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js";
+import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceBoxes, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceBow, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js";
 import {
   adoptPiece,
   bindHearth,
@@ -93,7 +95,7 @@ import { GEO_COLOR, createPlate, dragCenter, followSpan, isMapDrag, mapFollowAft
 import { deedCost, deedMessage, DEEDS_KEY, fadeDeeds, friendLine, guarded, packDeeds, readDeedMessage, theirLine, unpackDeeds, learnLore, friendTier, nextFriend, noteDeed, offerLore, packLore, shareRange, unpackLore } from "../sim/lore.js";
 import { acceptPiece, encodePiece } from "../net/pieces.js";
 import { acceptPrint, encodePrint } from "../net/prints.js";
-import { addPrint } from "../sim/prints.js";
+import { addPrint, PRINT_CAP } from "../sim/prints.js";
 import { paintChart } from "../render/chart.js?v=73";
 import { blendDir, blendOrigin, BASE_FOV, CLOSE, easeFollow, gazeFor, OPTICS, rangeRead, relaxOrbit, sightPractice, stepFollow, zoomFov } from "../sim/sight.js?v=10";
 import { AGENDAS, createAgent, stepAgenda } from "../sim/ai.js";
@@ -101,7 +103,7 @@ import { appraise, subjectFromHit } from "../sim/appraise.js";
 import { acceptSalvage, acceptWall, encodeSalvage, encodeWall } from "../net/walls.js";
 import { applyDummyHit, createDummy, resolveShot, stepDummy } from "../sim/fire.js";
 import { acceptHello, bytesHash } from "../net/hello.js";
-import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=10";
+import { ackMessage, createEstimator, createSendState, createView, decodeMotion, estimate, isMotion, modeOf, noteAck, observe, readAck, receive, sendNow, settle, shouldSend, shown, tierFor } from "../net/motion.js?v=11";
 import { decodePoseV2, encodePack, encodePoseV2, helloMessage, isPoseV2, packable, packState, poseDue, readHello, unwrap } from "../net/wire.js?v=4";
 import { bareAckDue, createNotify, isNotify, KIND, notifyStats, unwrap as unwrapNotify, wrap as wrapNotify } from "../net/notify.js?v=1";
 import { adapt as adaptBudget, createBudget, pick as pickSends, weightOf } from "../net/budget.js?v=2";
@@ -115,6 +117,7 @@ import {
   browserStore,
   bytesHex,
   characterBody,
+  dropCharacter,
   encodeSheet,
   forgetKept,
   hexBytes,
@@ -134,16 +137,20 @@ import { createPools, drainPool, fillCell, flowOnce, lowerPool, notePool, poolLi
 import { deedVolume, grantKey, lapseMessage, mayEdit, peerDeed, readLapse } from "../sim/deed.js";
 import { bondOpen, buyFromPurse, dragAsk, dragMessage, dragPace, hearBond, offerBond, payTithe, payTownship, readDragMessage, readDragRefuse, refuseDrag, spendPurse, spendTownship, stepDrag } from "../sim/fellowship.js";
 import { afterShot, boltHit, boltInSmoke, firePull, meleeHit, missDir, penFactor, spendMagazine, startBolt, stepBolt, stepShotWait } from "../sim/bolt.js";
-import { harmMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
+import { harmMessage, blowMessage, noteHarm, readHarmMessage } from "../sim/identityharm.js";
+import { applyBlow, beastBite, classifyStrike, lineBlow, riseQuarry, strikeQuarry } from "../sim/fight.js?v=1";
+import { createPilot, PILOT_GOALS, stepPilot, togglePilotGoal } from "../sim/pilot.js?v=1";
+import { craftHelper, cycleHelperTask, dismissHelper, helperLine, nearestHelper, packHelpers, stepHelper, unpackHelpers } from "../sim/helper.js?v=1";
+import { stepBows } from "../sim/bow.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, standHeight } from "../sim/life.js?v=76";
+import { duneHeight, fauna, graze, groundLook, herdPrints, standHeight } from "../sim/life.js?v=80";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
 import { shellDrop, shellTilt } from "../sim/shell.js";
 import { createTerrain } from "../net/terrain.js";
-import { connectPeer, createRoom, startRoom } from "../net/room.js?v=2";
+import { connectPeer, createRoom, startRoom } from "../net/room.js?v=3";
 import { backupsFrom, createTorrentRoom, trackersFrom } from "../net/signal-torrent.js?v=2";
 import { iceServers, rtcConfig } from "../net/ice.js?v=1";
 import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
@@ -155,9 +162,71 @@ import { acceptBlock, createChain, hex, installTip, tipOf } from "../sim/chain.j
 import { decode } from "../sim/cbor.js";
 import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
+import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
+import { createCores } from "./cores.js";
+import { openPicture } from "./picture.js";
 
 const canvas = document.querySelector("canvas");
-let painter = createGpuPainter(canvas);
+const params = new URLSearchParams(location.search);
+const digDemo = params.get("dig") === "1";
+const followId = params.get("follow");
+const agendaName = params.get("ai");
+const peer = Boolean(params.get("id"));
+let holdKeep = false;
+const freshBoot = params.get("fresh") === "1";
+const bootBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-boot");
+if (bootBus) {
+  bootBus.onmessage = (event) => {
+    if (event.data?.role !== "fresh" || freshBoot) return;
+    holdKeep = true;
+    location.reload();
+  };
+}
+const keepSlot = followId || params.get("look") || params.get("gate") || digDemo || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
+const keptStore = browserStore();
+if (freshBoot) {
+  forgetKept(keptStore);
+  if (bootBus) bootBus.postMessage({ role: "fresh" });
+  const clean = new URL(location.href);
+  clean.searchParams.delete("fresh");
+  history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
+}
+function askWho(line) {
+  const root = document.querySelector("#who");
+  if (!root) return Promise.resolve("keep");
+  const note = root.querySelector("[data-who-line]");
+  if (note) note.textContent = line || "";
+  root.hidden = false;
+  const boot = document.querySelector("#boot");
+  if (boot) boot.hidden = true;
+  root.querySelector("#who-keep")?.focus();
+  return new Promise((resolve) => {
+    const done = (who) => {
+      root.hidden = true;
+      if (boot) boot.hidden = false;
+      resolve(who);
+    };
+    root.querySelector("#who-keep")?.addEventListener("click", () => done("keep"), { once: true });
+    root.querySelector("#who-new")?.addEventListener("click", () => done("new"), { once: true });
+  });
+}
+// Picture, save, and the lighthouse stay stopped until this returns. Only Continue reads the old character.
+let resumeCharacter = false;
+if (keepSlot) {
+  const names = keptStore.keys?.() || [];
+  const saved = names.includes(`meridian-id-${keepSlot}`) || names.includes(`meridian-sheet-${keepSlot}`);
+  const choice = characterChoice(params, { saved });
+  if (choice === "ask") {
+    bootNote("Who is walking", 0.55);
+    const who = await askWho("A character is saved on this device.");
+    resumeCharacter = who === "keep";
+    if (!resumeCharacter) dropCharacter(keptStore, keepSlot);
+  } else if (choice === "keep") resumeCharacter = true;
+  else if (params.get("who") === "new") dropCharacter(keptStore, keepSlot);
+}
+bootNote("Loading Meridian", 0.08);
+const opened = openPicture(canvas, { search: location.search });
+let painter = opened.painter || createGpuPainter(canvas);
 let context = null;
 let viewScale = 0.5;
 const picture = createPicturePace();
@@ -181,12 +250,24 @@ let paintStill = false;
 const traceBudget = createTraceBudget();
 let pendingTrace = null;
 let idleGap = 0;
+// The picture thread draws off the main thread. One trace at a time, and the next
+// one stays near the size whose cost we have actually measured.
+let pictureBusy = false;
+let firstLook = null;
+let gpuDrawMs = 0;
+let shownTraceW = 0;
+let shownTraceH = 0;
 const poseSeenAt = new Map();
-if (painter) {
+if (painter && !painter.remote) {
   fitCanvas(canvas, viewScale);
   canvas.style.imageRendering = "auto";
   canvas.dataset.renderer = "webgl2";
   addEventListener("resize", () => fitCanvas(canvas, viewScale));
+} else if (painter?.remote) {
+  canvas.style.imageRendering = "auto";
+  canvas.dataset.renderer = "webgl2";
+  canvas.dataset.picture = "worker";
+  painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
 } else {
   context = canvas.getContext("2d", { alpha: false });
   if (context) context.imageSmoothingEnabled = false;
@@ -207,7 +288,6 @@ canvas.addEventListener("webglcontextlost", (event) => {
 });
 const width = canvas.width;
 const height = canvas.height;
-const params = new URLSearchParams(location.search);
 const NOTIFY_ON = params.get("notify") !== "0";
 const playerState = createPlayerState();
 const peerStates = new Map();
@@ -219,24 +299,11 @@ const resCap = Math.max(0, Math.min(1, Number(params.get("res")) || 0));
 try { smoothUpscale = smoothingFrom(location.search, window.localStorage); } catch { smoothUpscale = smoothingFrom(location.search, null); }
 painter?.setSmoothing?.(smoothUpscale);
 canvas.dataset.aa = smoothUpscale ? "1" : "0";
-let holdKeep = false;
-const freshBoot = params.get("fresh") === "1";
-const bootBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-boot");
-if (bootBus) {
-  bootBus.onmessage = (event) => {
-    if (event.data?.role !== "fresh" || freshBoot) return;
-    holdKeep = true;
-    location.reload();
-  };
-}
 const quiet = params.get("quiet") === "1";
 if (params.get("debug") === "1") document.documentElement.classList.add("debug");
 const demo = demoMode(params, location.hostname);
 document.documentElement.classList.toggle("demo", demo);
 const touchy = wantsTouch(window);
-const digDemo = params.get("dig") === "1";
-const followId = params.get("follow");
-const agendaName = params.get("ai");
 const extra = quiet || Boolean(followId) || Boolean(agendaName);
 const paceBus = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("meridian-pace");
 let primaryHolding = false;
@@ -247,7 +314,6 @@ if (extra && paceBus) {
 }
 const agent = agendaName && AGENDAS[agendaName] ? createAgent(agendaName) : null;
 const keys = new Set();
-const peer = Boolean(params.get("id"));
 
 // Content fetches retry: several same-origin frames booting at once (the scale bench) can
 // see a transient "Failed to fetch" in headless Chrome, which used to kill the whole page.
@@ -259,14 +325,22 @@ async function fetchRetry(url, options, tries = 5) {
     }
   }
 }
-const atoll = await fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.json());
-const catalogHex = await Promise.all([
+bootNote("Reading the island", 0.28);
+const cores = createCores({ url: new URL("./core-worker.js?v=1", import.meta.url) });
+canvas.dataset.cores = String(cores.count);
+let cpuBusy = false;
+const [atoll, atollBytes, catalogBytes, lighthouseConfig] = await Promise.all([
+  fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.json()),
   fetchRetry(new URL("../../content/atoll.json?v=1", import.meta.url)).then((response) => response.arrayBuffer()),
   fetchRetry(new URL("../../content/catalog.json", import.meta.url)).then((response) => response.arrayBuffer()),
-]).then(([atollBytes, catalogBytes]) => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
-const lighthouseConfig = await fetchRetry(new URL("../../content/lighthouse.json?v=2", import.meta.url))
-  .then((response) => (response.ok ? response.json() : null))
-  .catch(() => null);
+  fetchRetry(new URL("../../content/lighthouse.json?v=2", import.meta.url))
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null),
+]);
+bootNote("Checking the catalog", 0.48);
+const catalogHex = await cores.run("hash", { parts: [new Uint8Array(atollBytes), new Uint8Array(catalogBytes)] })
+  .catch(() => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
+await yieldToUi();
 const lighthouseAt = lighthouseUrl(params, location.hostname, lighthouseConfig);
 // "lighthouse", "torrent" (public WebTorrent trackers, the default with no lighthouse) or "solo".
 const signalKind = signalMode(params, lighthouseAt);
@@ -299,23 +373,14 @@ const world = createPlayerWorld(player);
 attachPlanet(world);
 world.tangentGravity = TANGENT_GRAVITY;
 const stamina = createStamina();
-const keepSlot = followId || params.get("look") || params.get("gate") || digDemo || params.get("key") ? "" : agendaName ? `ai-${agendaName}` : "self";
-const keptStore = browserStore();
-if (freshBoot) {
-  forgetKept(keptStore);
-  if (bootBus) bootBus.postMessage({ role: "fresh" });
-  const clean = new URL(location.href);
-  clean.searchParams.delete("fresh");
-  history.replaceState(null, "", `${clean.pathname}${clean.search}${clean.hash}`);
-}
-let identity = importKey(params.get("key") || "") || (keepSlot && loadIdentity(keptStore, keepSlot)) || createIdentity();
+let identity = importKey(params.get("key") || "") || (resumeCharacter && loadIdentity(keptStore, keepSlot)) || createIdentity();
 const bootPhrase = params.get("phrase") || "";
 if (bootPhrase && !params.get("key")) {
   const restored = restoreKey(unpackBook(keptStore.get("meridian-book")), bootPhrase) || importPhrase(bootPhrase);
   if (restored) identity = { secret: restored.secret, pubkey: restored.pubkey };
 }
 if (keepSlot && !params.get("key")) saveIdentity(keptStore, identity, keepSlot);
-identity.book = unpackBook(keptStore.get("meridian-book"));
+identity.book = resumeCharacter ? unpackBook(keptStore.get("meridian-book")) : null;
 const culture = firstCrate(params.get("culture") || "holds");
 const pools = createPools();
 const bonds = new Map();
@@ -329,7 +394,14 @@ const terrain = createTerrain({
   leader: params.get("offer") === "1" || !peer,
 });
 const dummy = createDummy();
+const quarry = {};
+let harmSeq = 1;
+let pilotGoal = "";
+const pilot = createPilot((() => {
+  try { return JSON.parse(localStorage.getItem("meridian-pilot") || "null"); } catch { return null; }
+})());
 const yard = createYard(atoll.placements.footing);
+let crew = [];
 yard.metal = culture.metal;
 yard.stone = culture.stone;
 yard.fiber = 2;
@@ -365,8 +437,11 @@ let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") ===
 let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
 // ?phase=<radians> sets the starting sun angle (0.87 is mid-morning, ~2.9 dusk, ~4.6 night) for repeatable screenshots.
+// ?clock= speeds the day, the weather, and plant growth. Walking stays at real time. 1 is the default.
 const phaseParam = Number(params.get("phase"));
+const dayRate = clockScale(params.get("clock"));
 let tick = ((Number.isFinite(phaseParam) && params.get("phase") !== null ? phaseParam : 0.87) / (Math.PI * 2)) * DAY_TICKS;
+const envTick = () => tick * dayRate;
 let trigger = false;
 let shotQueued = false;
 let cooldown = 0;
@@ -492,9 +567,9 @@ function stepAmbient() {
   const events = planAmbient(ambient, {
     now: tick / 30,
     listener: player.position,
-    light: dayWord(tick),
+    light: dayWord(tick, dayRate),
     actors: otherActors().map((other) => other.feet),
-    rain: rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick),
+    rain: rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick()),
   });
   for (const event of events) {
     const heard = hearSource(player.position, yaw, event.at, perception.senses.hearing, skills, event.category);
@@ -528,11 +603,12 @@ function stepAwareness() {
   // Exposure for the existing Tracking skill: other people's footprints and dig marks nearby.
   const [x, y] = player.position;
   const nearPrint = prints.some((print) => print.who !== "self" && Math.hypot(print.x - x, print.y - y) < 3);
+  const nearHoof = herdPrints(Date.now()).some((print) => Math.hypot(print.x - x, print.y - y) < 1.4);
   const nearDig = digSpots.some((spot) => Math.hypot(spot[0] - x, spot[1] - y) < 3);
-  if (nearPrint || nearDig) grantUse(skills, "tracking", { tick, gap: 60 });
+  if (nearPrint || nearDig || nearHoof) grantUse(skills, "tracking", { tick, gap: 60 });
   if (nearPrint) grantUse(skills, "trailing", { tick, gap: 80 });
   // Dark adaptation: trained by being out at night; it lifts the night picture a little.
-  const night = dayWord(tick) === "night";
+  const night = dayWord(tick, dayRate) === "night";
   if (night) grantUse(skills, "dark", { tick, gap: 240 });
   const lift = darkLift(skills.dark.value, night);
   const filter = lift > 0.01 ? `brightness(${(1 + lift).toFixed(2)})` : "";
@@ -725,7 +801,7 @@ const skills = createSkills();
 wireAbilityUi();
 // ?debug=1 exposes a small handle for headless playtests (skills and the ability UI only).
 if (params.get("debug") === "1") globalThis.meridianDebug = { skills, toggleLog, setCues, paintSkills: () => paintSkills(), checkAbilities, marks: () => tierMarks, wear: () => wear, player: () => [...player.position], yaw: () => yaw };
-const kept = keepSlot ? loadSheet(keptStore, keepSlot) : null;
+const kept = resumeCharacter ? loadSheet(keptStore, keepSlot) : null;
 let sheetSeq = kept?.seq || 0;
 if (kept && keepSlot) {
   const pose = applyCharacter(kept, { player, skills, yard, survey, notes });
@@ -734,15 +810,16 @@ if (kept && keepSlot) {
   for (const cell of survey.ground.values()) {
     stamp(plate, cell.point[0], cell.point[1], GEO_COLOR[cell.kind] || GEO_COLOR.sand, 1.6);
   }
+  if (kept.helpers) crew = unpackHelpers(kept.helpers);
 }
-if (keepSlot) unpackPlate(plate, loadPlate(keptStore, keepSlot));
+if (resumeCharacter) unpackPlate(plate, loadPlate(keptStore, keepSlot));
 let linkNote = "";
 const askedSolo = ["off", "none"].includes(params.get("lighthouse") || params.get("signal") || "");
 // No lighthouse configured (and solo not asked for): say the multiplayer server is offline.
 let lighthouseState = signalOn || askedSolo ? "off" : "offline";
 let torrentRoom = null;
 const net = { opsIn: 0, opsOut: 0, snapIn: 0, snapOut: 0, loreIn: 0, loreOut: 0, heard: 0, blocks: 0, dupes: 0, motionIn: 0 };
-const keptWorld = keepSlot ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
+const keptWorld = resumeCharacter ? loadWorld(keptStore, `meridian-world-${keepSlot}`) : null;
 const wear = keptWorld?.wear ? unpackWear(keptWorld.wear) : createWear();
 const wearFeet = new Map();
 let wearView = null;
@@ -933,6 +1010,7 @@ function pushSheet() {
     notes,
     ground: [...survey.ground.values()],
     seq: sheetSeq,
+    helpers: packHelpers(crew),
   });
   saveSheet(keptStore, body, keepSlot);
   savePlate(keptStore, plate, keepSlot);
@@ -965,7 +1043,15 @@ const shotFrames = [];
 
 addEventListener("keydown", (event) => {
   keys.add(event.code);
-  if (event.code === "KeyW" || event.code === "KeyA" || event.code === "KeyS" || event.code === "KeyD" || event.code === "KeyZ" || event.code === "KeyC") seated = false;
+  if (event.code === "KeyW" || event.code === "KeyA" || event.code === "KeyS" || event.code === "KeyD" || event.code === "KeyZ" || event.code === "KeyC") {
+    seated = false;
+    if (pilot.on && !event.repeat) {
+      pilot.on = false;
+      pilotGoal = "";
+      report = "pilot off";
+      paintPilot();
+    }
+  }
   if (event.code === "Tab" || event.code === "Backquote") event.preventDefault();
   if (event.repeat) return;
   playerPress(event.code);
@@ -1029,7 +1115,7 @@ addEventListener("keydown", (event) => {
       report = carryPhrase(identity);
     } else {
       if (event.shiftKey) {
-        if (!identity.book) identity.book = {};
+        if (!identity.book) identity.book = unpackBook(keptStore.get("meridian-book")) || {};
         rememberKey(identity.book, identity);
         keptStore.set("meridian-book", packBook(identity.book));
       }
@@ -1093,13 +1179,15 @@ addEventListener("keydown", (event) => {
     report = placed.ok ? "floor" : placed.reason;
   }
   if (event.code === "KeyF" && !event.repeat && slot !== "hammer") {
-    const pad = atoll.placements.dummy;
-    const dist = Math.hypot(player.position[0] - pad.x / 100, player.position[1] - pad.y / 100);
-    const hit = meleeHit(dist);
-    if (hit && dummy.health > 0) {
-      applyDummyHit(dummy, hit.hitbox);
+    const swung = nearestSwing();
+    if (!swung) report = "far";
+    else if (swung.kind === "dummy" && dummy.health > 0) {
+      applyDummyHit(dummy, swung.hit.hitbox);
       report = "melee";
-    } else report = "far";
+    } else if (swung.kind === "dummy") report = "down";
+    else {
+      landStrike(swung.kind === "player" ? { kind: "player", id: swung.id, hitbox: "chest" } : swung.strike, swung.hit.damage);
+    }
   }
   if (event.code === "KeyJ" && !event.repeat && slot === "hammer") {
     const mark = refreshAim(input());
@@ -1156,11 +1244,38 @@ addEventListener("keydown", (event) => {
     yard.pieces.push({ id: "slip", at, anchors: true, text: notes[notes.length - 1].line, by: "self" });
     report = "slip";
   }
+  if (event.code === "KeyH" && !event.repeat && slot === "hammer" && !(selection?.kind === "player" && yard.bound)) {
+    const mark = refreshAim(input());
+    const placed = tryPlaceBow(yard, mark.cell);
+    report = placed.ok ? "bow" : placed.reason;
+  }
   if (event.code === "KeyH" && !event.repeat && selection?.kind === "player" && yard.bound) {
     grantKey(deedKeys, selection.id);
     report = "key";
   }
   if (event.code === "KeyK" && !event.repeat) listener.toggle();
+  if (event.code === "Comma" && !event.repeat) {
+    if (event.shiftKey) {
+      const near = nearestHelper(crew, player.position[0], player.position[1]);
+      if (!near) report = "none";
+      else {
+        dismissHelper(yard, near);
+        crew = crew.filter((helper) => helper !== near);
+        report = "dismissed";
+      }
+    } else {
+      const made = craftHelper(yard, skills, {
+        x: player.position[0] + Math.cos(yaw) * 1.5,
+        y: player.position[1] - Math.sin(yaw) * 1.5,
+        tick,
+      }, crew);
+      report = made.ok ? "helper" : made.reason;
+    }
+  }
+  if (event.code === "Period" && !event.repeat) {
+    const near = nearestHelper(crew, player.position[0], player.position[1]);
+    report = near ? cycleHelperTask(near) : "none";
+  }
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
@@ -1290,7 +1405,7 @@ function turnWheel(direction) {
 function useRightClick() {
   if (followId || slot !== "hammer") return;
   const mark = refreshAim(input());
-  if (!mark.inRange || (mark.kind !== "wall" && mark.kind !== "crate" && mark.kind !== "wreck")) {
+  if (!mark.inRange || (mark.kind !== "wall" && mark.kind !== "crate" && mark.kind !== "wreck" && mark.kind !== "carcass")) {
     if (agent) agent.salvage = false;
     report = "far";
     return;
@@ -1328,8 +1443,8 @@ function applyAgenda(command) {
   trigger = !!command.hold;
   if (command.shot) shotQueued = true;
   if (command.zoom) turnWheel(command.zoom);
-  if (command.salvage && slot === "hammer" && !agent.salvage) rightEdge = true;
-  agent.salvage = !!(command.salvage && slot === "hammer");
+  if (command.salvage && slot === "hammer" && !agent?.salvage) rightEdge = true;
+  if (agent) agent.salvage = !!(command.salvage && slot === "hammer");
 }
 
 function eyeOf(sample) {
@@ -1338,6 +1453,43 @@ function eyeOf(sample) {
     player.position[1],
     player.position[2] + (sample?.crouch ? 1.1 : 1.65),
   ];
+}
+
+function bowTargets() {
+  const list = [];
+  if (dummy.health > 0) {
+    const pad = atoll.placements.dummy;
+    list.push({ id: "dummy", x: pad.x / 100, y: pad.y / 100, z: 0.9 });
+  }
+  for (const animal of fauna(Date.now(), player.position, { parts: false })) {
+    if (!animal.id || quarry[animal.id]?.wreck) continue;
+    list.push({ id: animal.id, x: animal.at[0], y: animal.at[1], z: (animal.at[2] || 0) + 0.4 });
+  }
+  for (const other of otherActors()) list.push({ id: other.id, x: other.feet[0], y: other.feet[1], z: other.feet[2] + 1 });
+  return list;
+}
+
+function paintPilot() {
+  const open = document.querySelector("#pilot-open");
+  const run = document.querySelector("#pilot-run");
+  const list = document.querySelector("#pilot-goals");
+  if (open) open.textContent = pilot.on ? `Pilot: ${pilotGoal || "on"}` : "Pilot";
+  if (run) run.textContent = pilot.on ? "Stop" : "Run";
+  if (!list) return;
+  list.replaceChildren(...PILOT_GOALS.map((goal) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.goal = goal.id;
+    button.setAttribute("aria-pressed", pilot.picked.includes(goal.id) ? "true" : "false");
+    button.innerHTML = `<b>${goal.title}</b><span>${goal.line}</span>`;
+    item.append(button);
+    return item;
+  }));
+}
+
+function savePilot() {
+  try { localStorage.setItem("meridian-pilot", JSON.stringify(pilot.picked)); } catch { /* the choice still stands this visit */ }
 }
 
 function otherActors() {
@@ -1363,6 +1515,80 @@ function sendStance() {
   const text = stanceMessage(crouch);
   for (const link of links) if (!link.notify && link.ctrl?.readyState === "open") try { link.ctrl.send(text); } catch { /* next refresh */ }
 }
+
+function fallenIds() {
+  const now = Date.now();
+  return Object.entries(quarry)
+    .filter(([, row]) => row.wreck && !(row.back && now >= row.back))
+    .map(([id]) => id);
+}
+
+function sendBlow(target, amount) {
+  harmSeq += 1;
+  const message = blowMessage(meId, target, amount, harmSeq);
+  noteHarm(harmLog, meId, "blow", harmSeq);
+  for (const link of links) {
+    if (link.ctrl?.readyState !== "open") continue;
+    try { link.ctrl.send(message); } catch { /* the blow is still on its way */ }
+  }
+}
+
+function landStrike(strike, amount) {
+  if (!strike || strike.kind === "dummy") return;
+  const dealt = Math.round(amount);
+  if (!(dealt > 0)) return;
+  if (strike.kind === "player") {
+    sendBlow(strike.id, dealt);
+    friends.set(strike.id, -1);
+    bonds.delete(strike.id);
+    report = `${strike.hitbox} ${dealt}`;
+    hear("shot", 0.7);
+    return;
+  }
+  const row = strikeQuarry(quarry, strike.id, dealt, Date.now());
+  if (!row?.fresh) {
+    report = row ? "down" : "miss";
+    return;
+  }
+  if (row.wreck && row.spec.metal > 0 && !quarry[strike.id].dropped) {
+    const animal = fauna(Date.now(), player.position, { parts: false }).find((one) => one.id === strike.id);
+    const at = animal?.at || [player.position[0], player.position[1], 0];
+    const cell = [Math.round(at[0] / 0.5), Math.round(at[1] / 0.5)];
+    if (!yard.pieces.some((piece) => piece.id === "carcass" && piece.at[0] === cell[0] && piece.at[1] === cell[1])) {
+      yard.pieces.push({ id: "carcass", at: cell, anchors: false, metal: row.spec.metal });
+    }
+    quarry[strike.id].dropped = true;
+    report = "wreck";
+    hear("hurt");
+    return;
+  }
+  report = row.wreck ? "down" : `${strike.id} ${Math.ceil(row.health)}`;
+  hear("shot", 0.45);
+}
+
+function nearestSwing() {
+  const here = player.position;
+  let best = null;
+  const consider = (id, kind, point, strike) => {
+    const dist = Math.hypot(here[0] - point[0], here[1] - point[1]);
+    const hit = meleeHit(dist);
+    if (!hit || (best && dist >= best.dist)) return;
+    best = { id, kind, dist, hit, strike };
+  };
+  const pad = atoll.placements.dummy;
+  consider("dummy", "dummy", [pad.x / 100, pad.y / 100], null);
+  for (const other of otherActors()) consider(other.id, "player", other.feet, { kind: "player", id: other.id, hitbox: "chest" });
+  for (const person of PEOPLE) {
+    if (fallenIds().includes(person.id)) continue;
+    consider(person.id, "person", person.at, { kind: "person", id: person.id, hitbox: "chest" });
+  }
+  for (const animal of fauna(Date.now(), here, { parts: false })) {
+    if (!animal.id || fallenIds().includes(animal.id)) continue;
+    consider(animal.id, "beast", animal.at, { kind: "beast", id: animal.id, hitbox: "body" });
+  }
+  return best;
+}
+
 function drawnOthers() {
   const list = otherActors().map((actor) => (stances.get(actor.id)?.crouch ? { ...actor, crouch: true } : actor));
   if (!dragging || selection?.kind !== "player") return list;
@@ -1485,6 +1711,7 @@ function sceneFor(sample, width, height) {
     // A roll shows: the figure stays balled up until the roll runs out.
     crouch: !!sample.crouch || rollSpeed(roll, tick) > 0,
     tick,
+    sunTick: envTick(),
     atoll,
     crust: terrain.log.crust,
     pieces: yard.pieces,
@@ -1506,6 +1733,8 @@ function sceneFor(sample, width, height) {
     stride: Math.min(1, Math.hypot(player.velocity?.[0] || 0, player.velocity?.[1] || 0) / 2.2),
     gait: bodyGait,
     worn: wornFor(slot),
+    down: fallenIds(),
+    helpers: crew,
   });
 }
 
@@ -1523,8 +1752,15 @@ function refreshAim(sample = {}) {
   if (slot === "bit") {
     return toolAim("bit", eye, dir, [{ type: "crust", field: terrain.log.crust }], yard.pieces);
   }
-  const objects = sceneFor(sample, 16, 9).objects.filter((object) => !object.self);
-  return toolAim(slot, eye, dir, objects, yard.pieces);
+  const objects = [{ type: "crust", field: terrain.log.crust }, ...pieceBoxes(yard.pieces)];
+  const pad = atoll.placements.dummy;
+  objects.push({
+    type: "sphere",
+    origin: [pad.x / 100, pad.y / 100, 0.9],
+    radius: 0.35,
+    body: "dummy",
+  });
+  return toolAim("hammer", eye, dir, objects, yard.pieces);
 }
 
 function adoptTarget(subject) {
@@ -1730,10 +1966,13 @@ function drawChart() {
       ...person,
       label: friends.has(person.id) ? `${person.id} ${friendTier(friends.get(person.id))}` : person.id,
     })),
-    movers: fauna(Date.now(), player.position, { parts: false }).map((animal, index) => ({
-      id: `${animal.kind}:${index}`,
-      at: animal.at,
-    })),
+    movers: [
+      ...fauna(Date.now(), player.position, { parts: false }).map((animal, index) => ({
+        id: `${animal.kind}:${index}`,
+        at: animal.at,
+      })),
+      ...crew.map((helper) => ({ id: helper.id, at: [helper.x, helper.y, 0] })),
+    ],
     sense: perception,
     ground: [...survey.ground.values()],
     places: [...survey.places.values()],
@@ -1813,6 +2052,11 @@ function identify(sample) {
 function actOn(sample) {
   if (!selection) {
     report = "no target";
+    return;
+  }
+  if (selection.kind === "helper" && selection.id) {
+    const helper = crew.find((one) => one.id === selection.id);
+    report = helper ? cycleHelperTask(helper) : "none";
     return;
   }
   if (selection.kind === "person") {
@@ -2203,8 +2447,8 @@ function publish() {
   const bit = document.querySelector("#bit");
   const walls = yard.pieces.filter((piece) => piece.id === "wall").length;
   const fluxPiece = yard.pieces.find((piece) => piece.id === "fin");
-  const shade = fluxPiece && !fluxPiece.broken ? finCloud(fluxPiece.at, tick) : 0;
-  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(tick) * finGain(fluxPiece.yaw || 0) * (1 - shade))}${shade >= 0.1 ? " cloud" : ""}` : "";
+  const shade = fluxPiece && !fluxPiece.broken ? finCloud(fluxPiece.at, envTick()) : 0;
+  const flux = fluxPiece && !fluxPiece.broken ? ` · flux ${Math.round(finOutput(envTick()) * finGain(fluxPiece.yaw || 0) * (1 - shade))}${shade >= 0.1 ? " cloud" : ""}` : "";
   const finNote = (yard.finMetal || 0) > 0 ? ` · fin ${yard.finMetal}` : "";
   const bound = yard.bound ? peerDeed({ cell: yard.bound, holder: pubkeyHex(identity.pubkey), radius: 6 }, yard.grace) : null;
   const boundNote = bound ? ` · bound${bound.grace ? " grace" : ""}` : "";
@@ -2212,9 +2456,9 @@ function publish() {
   const hurt = vitals.down > 0 ? "" : ` · body ${Math.ceil(vitals.integrity)}${vitals.blood < 100 ? ` blood ${Math.ceil(vitals.blood)}` : ""}${landingNote(skills, keys.has("ControlLeft") || keys.has("ControlRight"))}${legNote}${windNote}`;
   const spoilNote = yard.spoil ? ` · spoil ${yard.spoil}/${spoilCap(skills.mining.value)}` : "";
   const brushNote = slot === "bit" && brush !== "dig" ? ` · ${brush}` : "";
-  const light = dayWord(tick);
-  const rainNow = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
-  const lightNote = ` · ${light}${rainWord(rainNow)}`;
+  const light = dayWord(tick, dayRate);
+  const rainNow = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
+  const lightNote = ` · ${light}${dayRate === 1 ? "" : ` ×${dayRate}`}${rainWord(rainNow)}`;
   listener.setLevel(light === "night" ? 0.45 : light === "dawn" || light === "dusk" ? 0.7 : 1);
   const muteNote = listener.muted ? " · muted" : "";
   const friendNote = selection?.kind === "player" && friends.has(selection.id)
@@ -2270,7 +2514,10 @@ function publish() {
   const opticNote = optics === "none" ? "" : ` · ${optics}`;
   const rangeNote = rangeText ? ` · ${rangeText}` : "";
   const autoNote = autoRun ? " · auto" : "";
-  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${orderNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${finNote}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
+  const pilotNote = pilot.on && pilotGoal ? ` · pilot ${pilotGoal}` : "";
+  const nearHelper = crew.length ? nearestHelper(crew, player.position[0], player.position[1]) : null;
+  const helperNote = nearHelper ? ` · helper ${helperLine(nearHelper)}${crew.length > 1 ? ` · ${crew.length}` : ""}` : "";
+  if (bit) bit.textContent = `${players || archives ? `with ${players} ${players === 1 ? "player" : "players"} · ${archives} ${archives === 1 ? "archive" : "archives"}` : "alone"} · ${chainNote} · ${eyeView ? "eyes" : view}${autoNote}${pilotNote}${helperNote} · ${skillNote || "skills 0"}${charge}${opticNote}${rangeNote}${known}${friendNote}${bondNote}${orderNote}${dropNote}${cultureNote}${clockNote}${reloadNote}${fiberNote}${harmNote}${resonanceNote}${charterNote}${dragNote}${turnNote}${awayNote} · ${slot}${brushNote}${aim} · metal ${yard.metal} · stone ${yard.stone ?? 0}${spoilNote} · walls ${walls}${boundNote}${flux}${finNote}${hurt}${lightNote}${muteNote}${strike ? ` · ${strike}` : ""}${report ? ` · ${report}` : ""}${loreNote ? ` · ${loreNote}` : ""}${seen ? ` · seen ${seen}` : ""} · ${body} · ${ground} · ${rate} fps · ${pace} ${canvas.width}×${canvas.height}`;
   paintNet();
   paintHint();
   paintTarget();
@@ -2320,13 +2567,144 @@ function markTarget(scene) {
 }
 
 let lastScene = null;
+
+function releaseLook() {
+  if (!firstLook) return;
+  const go = firstLook;
+  firstLook = null;
+  go();
+}
+
+function applyLook(look) {
+  if (!look?.color) return;
+  const [r, g, b] = look.color;
+  canvas.dataset.center = `${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)}`;
+  const inEyes = zoom.blend >= 1 || (view === "first" && zoom.blend === 0);
+  const reading = inEyes ? rangeRead(look.rangeT, skills.ranging.value + skills.measure.value * 0.5, optics) : null;
+  rangeText = reading?.text || "";
+  if (reading?.meters != null) grantUse(skills, "ranging", { tick, gap: 45 });
+}
+
+function stageFor(sample, width, height, scene) {
+  const aim = cameraAim(sample);
+  return {
+    feet: [player.position[0], player.position[1], player.position[2]],
+    yaw: sample.yaw ?? yaw,
+    pitch: sample.pitch ?? pitch,
+    crouch: !!sample.crouch || rollSpeed(roll, tick) > 0,
+    tick,
+    sunTick: envTick(),
+    seed: atoll.worldSeed,
+    cell: atoll.cellId,
+    crust: [...terrain.log.crust.overrides],
+    pieces: yard.pieces,
+    width,
+    height,
+    view: followId ? "third" : view,
+    self: !followId && zoom.blend < 0.65 && view !== "first",
+    others: drawnOthers(),
+    cameraOrigin: cameraPos ? cameraPos.slice() : null,
+    cameraDir: cameraLook ? cameraLook.slice() : null,
+    fov: aim.fov,
+    lean,
+    smoke: smokeTicks > 0 ? [...(smokeAt || player.position)] : null,
+    swarm: swarmAt ? swarmAt.slice() : swarmPoint(player.position[0], player.position[1], digs),
+    pools,
+    bolts: bolts.map((bolt) => ({ position: bolt.position.slice() })),
+    loose: looseBodies(world).map((body) => ({
+      position: body.position,
+      size: body.size,
+      color: body.color,
+    })),
+    sparse: Boolean(bot),
+    stride: Math.min(1, Math.hypot(player.velocity?.[0] || 0, player.velocity?.[1] || 0) / 2.2),
+    gait: bodyGait,
+    worn: wornFor(slot),
+    down: fallenIds(),
+    wear: scene.wear,
+    prints: scene.prints,
+    work,
+    time: scene.time,
+    rain: scene.rain,
+    gaze: scene.gaze,
+    fovea: scene.fovea,
+    inEyes: zoom.blend >= 1 || (view === "first" && zoom.blend === 0),
+    helpers: crew,
+  };
+}
+
+// The page keeps input and the HUD. The picture thread builds the island and reads the center ray.
+function paintRemote(sample, width, height) {
+  const aim = cameraAim(sample);
+  const shot = pictureCamera({
+    feet: player.position,
+    yaw: sample.yaw ?? yaw,
+    pitch: sample.pitch ?? pitch,
+    crouch: !!sample.crouch || rollSpeed(roll, tick) > 0,
+    tick,
+    sunTick: envTick(),
+    width,
+    height,
+    view: followId ? "third" : view,
+    cameraOrigin: cameraPos,
+    cameraDir: cameraLook,
+    fov: aim.fov,
+  });
+  const scene = { sun: shot.sun, miss: shot.miss, camera: shot.camera, objects: [] };
+  scene.wear = wearScene();
+  const hooves = herdPrints(Date.now()).slice(-PRINT_CAP);
+  const room = PRINT_CAP - hooves.length;
+  scene.prints = room > 0 ? [...prints.slice(-room), ...hooves] : hooves;
+  scene.work = work;
+  scene.time = envTick() / 30;
+  scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
+  scene.gaze = gazeFor(
+    scene.camera,
+    eyeOf(sample),
+    lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch),
+    skills.eyesight.value,
+    skills.focus.value,
+  );
+  if (scene.gaze) canvas.dataset.gaze = String(Math.round(scene.gaze.reach));
+  perception = withFocus(perceptionFrom({
+    eyesight: skills.eyesight.value,
+    focus: skills.focus.value,
+    hearing: skills.hearing.value,
+    localization: skills.localization.value,
+    dark: skills.dark.value,
+  }), {
+    x: scene.gaze ? scene.gaze.x : 0.5,
+    y: scene.gaze ? scene.gaze.y : 0.5,
+    dir: lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch),
+  });
+  scene.fovea = { ...foveaUniforms(perception), still: paintStill };
+  canvas.dataset.fovea = `${Math.round(perception.senses.sight.fovea * 180 / Math.PI)}deg/${perception.senses.sight.period}f`;
+  markTarget(scene);
+  markGoal(scene);
+  paintCues(scene);
+  if (performance.now() - abilityCheckAt > 500) { abilityCheckAt = performance.now(); checkAbilities(); }
+  paintNotices();
+  showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
+  const drew = painter.paintStage(stageFor(sample, width, height, scene), width, height);
+  if (drew) {
+    pictureBusy = true;
+    shownTraceW = width;
+    shownTraceH = height;
+  } else canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
+  lastScene = scene;
+  return scene;
+}
+
 function paint(sample, width = canvas.width, height = canvas.height) {
+  if (painter?.remote) return paintRemote(sample, width, height);
   const scene = sceneFor(sample, width, height);
   scene.wear = wearScene();
-  scene.prints = prints;
+  const hooves = herdPrints(Date.now()).slice(-PRINT_CAP);
+  const room = PRINT_CAP - hooves.length;
+  scene.prints = room > 0 ? [...prints.slice(-room), ...hooves] : hooves;
   scene.work = work;
-  scene.time = tick / 30;
-  scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], tick);
+  scene.time = envTick() / 30;
+  scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
   scene.gaze = gazeFor(
     scene.camera,
     eyeOf(sample),
@@ -2367,6 +2745,11 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   showSight(slot === "bit" || slot === "hammer" ? refreshAim(sample) : null);
   if (painter) {
     const drew = painter.paint(scene, width, height);
+    if (painter.remote && drew) {
+      pictureBusy = true;
+      shownTraceW = width;
+      shownTraceH = height;
+    }
     if (!drew) canvas.dataset.gpuError = canvas.dataset.gpuError || "draw";
     lastScene = scene;
     return scene;
@@ -2382,6 +2765,34 @@ function paint(sample, width = canvas.width, height = canvas.height) {
     }
     canvas.dataset.renderer = "cpu";
     canvas.style.imageRendering = smoothUpscale ? "auto" : "pixelated";
+  }
+  if (cores.count > 0 && !cpuBusy) {
+    cpuBusy = true;
+    const w = canvas.width;
+    const h = canvas.height;
+    const bands = Math.max(1, cores.count);
+    const rows = Math.ceil(h / bands);
+    const parts = [];
+    for (let band = 0; band < bands; band += 1) {
+      const y0 = band * rows;
+      const y1 = Math.min(h, y0 + rows);
+      if (y0 >= h) break;
+      parts.push(cores.run("band", { scene, width: w, height: h, y0, y1 }).then((slice) => ({ y0, slice })));
+    }
+    Promise.all(parts).then((done) => {
+      if (!context) return;
+      const pixels = new Uint8ClampedArray(w * h * 4);
+      for (const part of done) pixels.set(part.slice, part.y0 * w * 4);
+      if (slot === "line") {
+        const center = (Math.floor(h / 2) * w + Math.floor(w / 2)) * 4;
+        pixels[center] = 255;
+        pixels[center + 1] = 255;
+        pixels[center + 2] = 255;
+      }
+      context.putImageData(new ImageData(pixels, w, h), 0, 0);
+    }).catch(() => {}).finally(() => { cpuBusy = false; });
+    lastScene = scene;
+    return scene;
   }
   const pixels = paintFrame(scene, canvas.width, canvas.height);
   if (slot === "line") {
@@ -2426,11 +2837,12 @@ function fire(sample) {
     seed: tick,
     objects: scene.objects.filter((object) => !object.self),
   });
+  const strike = classifyStrike(shot.hit);
   const nonce = Math.floor(tick);
   seenShots.add(nonce);
-  if (!shot.hitbox) {
+  if (!shot.hitbox && !strike) {
     report = "miss";
-  } else {
+  } else if (shot.hitbox) {
     const voters = 1 + links.filter((link) => {
       const pose = poses.get(link.to);
       return pose && sameCell(cellId(player.position[1]), cellId(pose.y));
@@ -2449,10 +2861,11 @@ function fire(sample) {
       const scaled = Math.round(applied.damage * penFactor(0, 1));
       grantUse(skills, "marksmanship", { tick });
       grantUse(skills, "focus", { tick, gap: 30 });
-      if (dayWord(tick) === "night") grantUse(skills, "marksmanship", { tick });
+      if (dayWord(tick, dayRate) === "night") grantUse(skills, "marksmanship", { tick });
       report = `${applied.hitbox} ${scaled} quorum`;
     } else report = "provisional";
   }
+  if (strike && strike.kind !== "dummy") landStrike(strike, lineBlow(strike.hitbox));
   const frame = encodeShot(identity, {
     nonce,
     origin: eye,
@@ -2468,11 +2881,11 @@ function fire(sample) {
     friends.set(selection.id, -1);
     bonds.delete(selection.id);
   }
-  if (!shot.hitbox) {
+  if (!shot.hitbox && !(strike && strike.kind !== "dummy")) {
     const pull = firePull(yard.pieces.find((piece) => piece.id === "mission")?.fires || []);
     bolts.push(startBolt(eye, missDir(shot.dir, pull)));
   }
-  if (shot.hitbox) tourFacts.hits += 1;
+  if (shot.hitbox || (strike && strike.kind !== "dummy")) tourFacts.hits += 1;
   else if (tourStep(tour)?.id === "shoot") {
     const d = atoll.placements.dummy;
     const to = [d.x / 100 - eye[0], d.y / 100 - eye[1], 1.3 - eye[2]];
@@ -2480,7 +2893,7 @@ function fire(sample) {
     const dot = (to[0] * shot.dir[0] + to[1] * shot.dir[1] + to[2] * shot.dir[2]) / len;
     if (dot > Math.cos(8 * Math.PI / 180)) tourFacts.nearShots += 1;
   }
-  flashShot(shot.hitbox ? `hit ${shot.hitbox}` : "miss");
+  flashShot(shot.hitbox ? `hit ${shot.hitbox}` : strike && strike.kind !== "dummy" ? `hit ${strike.hitbox}` : "miss");
   const look = lookDirection(sample.yaw, sample.pitch);
   const facing = look[0] * shot.dir[0] + look[1] * shot.dir[1] + look[2] * shot.dir[2];
   hear("shot", (shot.hitbox ? 1 : 0.35) * crackInside(Math.hypot(player.position[0] - atoll.placements.dummy.x / 100, player.position[1] - atoll.placements.dummy.y / 100)) * frontGain(facing), Math.max(-1, Math.min(1, shot.dir[0])));
@@ -2532,6 +2945,7 @@ function onOps(bytes, from) {
     if (bytesHex(accepted.pubkey) !== bytesHex(identity.pubkey)) return;
     if ((accepted.seq || 0) <= sheetSeq) return;
     const pose = applyCharacter(accepted.body, { player, skills, yard, survey, notes });
+    if (accepted.body.helpers) crew = unpackHelpers(accepted.body.helpers);
     tierMarks = tierSnapshot(skills);
     yaw = pose.yaw;
     pitch = pose.pitch;
@@ -2637,6 +3051,7 @@ function onOps(bytes, from) {
     pieces: yard.pieces,
     width,
     height,
+    helpers: crew,
   });
   const accepted = acceptShot(bytes, scene.objects);
   if (!accepted.ok || accepted.hitbox === "miss" || seenShots.has(accepted.nonce)) {
@@ -2707,7 +3122,15 @@ function ensureRoom() {
 async function openLink(to, offer, role) {
   if (!to || to === meId || links.some((link) => link.to === to) || opening.has(to)) return;
   opening.add(to);
-  const room = await ensureRoom();
+  let room;
+  try {
+    room = await ensureRoom();
+  } catch (error) {
+    // Without this a failed room join left `to` in `opening` forever and the peer was never retried.
+    opening.delete(to);
+    if (linkLine) linkLine.textContent = String(error);
+    return;
+  }
   const pc = new RTCPeerConnection(rtcConfig(await iceServers(params), params));
   const channels = {};
   for (const spec of [["ctrl", 0, true], ["ops", 1, true], ["snap", 2, false], ["lore", 3, true]]) {
@@ -2732,6 +3155,11 @@ async function openLink(to, offer, role) {
     const ack = readAck(text);
     if (ack) {
       noteAck(link.motion, ack.tick);
+      return;
+    }
+    const chat = readChat(text);
+    if (chat) {
+      noteChat(chatLog, to, chat, Date.now());
       return;
     }
     const drag = readDragMessage(text);
@@ -2779,6 +3207,14 @@ async function openLink(to, offer, role) {
     }
     const harm = readHarmMessage(text);
     if (harm) {
+      if (harm.what === "blow" && harm.target === meId && harm.amount > 0) {
+        const seen = harmLog.some((row) => row.what === "blow" && row.sig === harm.sig && harm.sig);
+        if (!seen) {
+          const applied = applyBlow(vitals, harm.amount);
+          report = applied.dead ? "down" : `hit ${harm.amount}`;
+          if (applied.dealt) hear("hurt");
+        }
+      }
       noteHarm(harmLog, harm.who, harm.what, harm.sig);
       return;
     }
@@ -2965,10 +3401,46 @@ async function seekOnce() {
 }
 
 const first = input();
-if (painter) fitCanvas(canvas, viewScale);
-paint(first);
-publish();
-canvas.dataset.ready = "1";
+let pictureUp = true;
+if (painter?.remote) {
+  painter.onProblem = (reason) => {
+    pictureBusy = false;
+    showGlError(reason);
+    releaseLook();
+  };
+  painter.onDrew = (ms, look) => {
+    pictureBusy = false;
+    if (look) applyLook(look);
+    releaseLook();
+    if (!(ms > 0)) return;
+    gpuDrawMs = ms;
+    lastPaintMs = ms;
+    if (pendingTrace?.wait) {
+      pendingTrace.paintMs = ms;
+      pendingTrace.wait = false;
+    }
+  };
+  bootNote("Waking the picture", 0.66);
+  pictureUp = await painter.ready;
+  if (!pictureUp) {
+    showGlError(painter.failReason() || "the picture thread did not start");
+    bootNote("The picture did not start. Reload the page.", 0.66);
+  } else painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
+} else if (painter) fitCanvas(canvas, viewScale);
+if (pictureUp) {
+  bootNote("Drawing the beach", 0.9);
+  await yieldToUi();
+  if (painter?.remote) {
+    await new Promise((resolve) => {
+      firstLook = resolve;
+      paint(first, 160, 90);
+      setTimeout(resolve, 4000);
+    });
+  } else paint(first, canvas.width, canvas.height);
+  publish();
+  canvas.dataset.ready = "1";
+  bootDone();
+}
 // Horizontal field of view in radians, from the last painted camera.
 function viewFov() {
   const cam = lastScene?.camera;
@@ -3014,6 +3486,20 @@ globalThis.meridianProbe = {
   lighthouse: () => lighthouseState,
   signal: () => ({ kind: signalKind, state: lighthouseState, peers: torrentRoom?.peers() || 0, trackers: torrentRoom?.trackersUp() || 0 }),
   fps: () => Number(canvas.dataset.fps || 0),
+  tick: () => tick,
+  // Chat (reliable ctrl lane): say() sends one line to every open link; chat() reads the inbox.
+  say: (text) => {
+    const line = chatMessage(chatSeq + 1, text);
+    if (!line) return 0;
+    chatSeq += 1;
+    let sent = 0;
+    for (const link of links) {
+      if (link.ctrl?.readyState !== "open") continue;
+      try { link.ctrl.send(line); sent += 1; } catch {}
+    }
+    return sent;
+  },
+  chat: () => chatLog.lines.map((line) => ({ ...line })),
   renderer: () => canvas.dataset.renderer || "",
   gpuError: () => canvas.dataset.gpuError || "",
   errors: () => [...pageErrors, ...(canvas.dataset.err ? [canvas.dataset.err] : [])],
@@ -3046,6 +3532,29 @@ if (agent) {
   if (note) note.textContent = `${AGENDAS[agendaName].title}: ${AGENDAS[agendaName].agenda}`;
   canvas.dataset.ai = agendaName;
 }
+document.querySelector("#pilot-goals")?.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button?.dataset.goal) return;
+  togglePilotGoal(pilot, button.dataset.goal);
+  savePilot();
+  paintPilot();
+});
+document.querySelector("#pilot-open")?.addEventListener("click", () => {
+  const panel = document.querySelector("#pilot");
+  if (panel) panel.hidden = !panel.hidden;
+});
+document.querySelector("#pilot-close")?.addEventListener("click", () => {
+  const panel = document.querySelector("#pilot");
+  if (panel) panel.hidden = true;
+});
+document.querySelector("#pilot-run")?.addEventListener("click", () => {
+  if (!pilot.picked.length) return;
+  pilot.on = !pilot.on;
+  if (!pilot.on) pilotGoal = "";
+  report = pilot.on ? "pilot" : "pilot off";
+  paintPilot();
+});
+paintPilot();
 canvas.dataset.pace = "vsync";
 showChart();
 
@@ -3197,6 +3706,8 @@ function netGraphRows() {
 }
 // Frames stop in a hidden or starved tab; keep peers fed by wall time so they still see us.
 let lastPublishMs = 0;
+const chatLog = createChatLog();
+let chatSeq = 0;
 
 function publishPose() {
   lastPublishMs = performance.now();
@@ -3309,9 +3820,15 @@ if (params.get("still") !== "1") {
   let lastTraceKey = "";
   let last = performance.now();
   let bank = 0;
-  const frame = (now) => {
+  // Hidden, offscreen or starved tabs stop calling rAF. A wall-clock driver steps the sim (not
+  // the paint) by real elapsed time so bots, physics and the network keep pace (Batch 17).
+  let lastFrameMs = performance.now();
+  const frame = (now, fromTimer = false) => {
+    lastFrameMs = performance.now();
+    const frameStart = lastFrameMs;
+    let simSteps = 0;
     try {
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const dt = Math.min(fromTimer ? STALL_MAX_DT : FRAME_MAX_DT, (now - last) / 1000);
     bank += dt;
     last = now;
     if (agent) {
@@ -3322,6 +3839,31 @@ if (params.get("still") !== "1") {
         tick,
         wall: yard.pieces.some((piece) => piece.id === "wall"),
       }));
+    } else if (pilot.on && !followId) {
+      const foot = yard.pieces.find((piece) => piece.id === "footing");
+      const openCell = foot ? [foot.at[0] + 1, foot.at[1]] : null;
+      const openTaken = openCell && yard.pieces.some((piece) => piece.at[0] === openCell[0] && piece.at[1] === openCell[1] && piece.id !== "floor");
+      const command = stepPilot(pilot, {
+        x: player.position[0],
+        y: player.position[1],
+        yaw,
+        tick,
+        metal: yard.metal,
+        open: openCell && !openTaken ? [openCell[0] * 0.5, openCell[1] * 0.5] : null,
+        dummy: [atoll.placements.dummy.x / 100, atoll.placements.dummy.y / 100],
+        dummyUp: dummy.health > 0,
+        beasts: fauna(Date.now(), player.position, { parts: false })
+          .filter((animal) => animal.id && !quarry[animal.id]?.wreck)
+          .map((animal) => ({ id: animal.id, x: animal.at[0], y: animal.at[1] })),
+        people: PEOPLE.filter((person) => !quarry[person.id]?.wreck).map((person) => ({ id: person.id, x: person.at[0], y: person.at[1] })),
+      });
+      if (command) {
+        applyAgenda(command);
+        if (command.goal && command.goal !== pilotGoal) {
+          pilotGoal = command.goal;
+          paintPilot();
+        }
+      }
     }
     if (bot && botOn && !followId && !agent) {
       const held = stepWander(bot, { x: player.position[0], y: player.position[1], yaw }, dt);
@@ -3363,8 +3905,56 @@ if (params.get("still") !== "1") {
     useEdge = false;
     buyEdge = false;
     while (bank >= 1 / 30) {
+      if (!shouldSimStep(simSteps, performance.now() - frameStart)) break;
+      simSteps += 1;
       try {
       stepDummy(dummy);
+      if (crew.length) {
+        const foot = yard.pieces.find((piece) => piece.id === "footing");
+        const home = foot ? [foot.at[0] * 0.5, foot.at[1] * 0.5] : [player.position[0], player.position[1]];
+        const loose = [];
+        if (crew.some((helper) => helper.task === "haul" && !(helper.carry > 0))) {
+          for (const body of looseBodies(world)) {
+            if (Math.hypot(body.velocity[0], body.velocity[1], body.velocity[2]) > 0.25) continue;
+            loose.push({
+              x: body.position[0],
+              y: body.position[1],
+              take() {
+                const index = world.universe.indexOf(body);
+                if (index < 0) return false;
+                world.universe.splice(index, 1);
+                return true;
+              },
+            });
+          }
+        }
+        for (const helper of crew) {
+          const done = stepHelper(helper, {
+            tick,
+            player: [player.position[0], player.position[1]],
+            home,
+            loose,
+          });
+          if (done.deposited) {
+            yard.stone = (yard.stone || 0) + done.deposited;
+            report = "hauled";
+          }
+        }
+      }
+      riseQuarry(quarry, Date.now());
+      if (vitals.down <= 0) {
+        for (const animal of fauna(Date.now(), player.position, { parts: false })) {
+          if (!animal.id || quarry[animal.id]?.wreck) continue;
+          const dist = Math.hypot(animal.at[0] - player.position[0], animal.at[1] - player.position[1]);
+          const bite = beastBite(animal.id, dist) / 30;
+          if (!(bite > 0)) continue;
+          const applied = applyBlow(vitals, bite);
+          if (applied.dead) {
+            report = "down";
+            hear("hurt");
+          } else if (applied.dealt && tick % 15 === 0) report = `${animal.id} bites`;
+        }
+      }
       const wreckAt = [atoll.placements.dummy.x / 100, atoll.placements.dummy.y / 100, 0.9];
       const wreckCell = [Math.round(wreckAt[0] / 0.5), Math.round(wreckAt[1] / 0.5)];
       if (dummy.health === 0) {
@@ -3386,9 +3976,14 @@ if (params.get("still") !== "1") {
         const wreck = yard.pieces.findIndex((piece) => piece.id === "wreck");
         if (wreck >= 0) yard.pieces.splice(wreck, 1);
       }
+      for (const shot of stepBows(yard.pieces, bowTargets())) {
+        const loosed = startBolt(shot.origin, shot.dir, 34);
+        loosed.bite = shot.bite;
+        bolts.push(loosed);
+      }
       for (let bolt = bolts.length - 1; bolt >= 0; bolt -= 1) {
         const wind = windAt(player.position[0], player.position[1]);
-        const blown = dayWord(tick) === "night" ? wind.map((part) => part * 1.5) : wind;
+        const blown = dayWord(tick, dayRate) === "night" ? wind.map((part) => part * 1.5) : wind;
         stepBolt(bolts[bolt], 1 / 30, 9.81, blown);
         if (smokeTicks > 0 && boltInSmoke(bolts[bolt], smokeAt)) {
           bolts.splice(bolt, 1);
@@ -3401,13 +3996,38 @@ if (params.get("still") !== "1") {
           bolts[bolt].velocity[1] += (mission.at[1] * 0.5 - bolts[bolt].position[1]) * pull;
         }
         const hit = boltHit(bolts[bolt], wreckAt);
-        if (hit && dummy.health > 0) applyDummyHit(dummy, "chest");
+        const bite = bolts[bolt].bite || 0;
+        let struck = hit && dummy.health > 0;
+        if (struck && bite) {
+          dummy.health = Math.max(0, dummy.health - bite);
+          dummy.quiet = 0;
+        } else if (struck) applyDummyHit(dummy, "chest");
+        if (!struck) {
+          for (const animal of fauna(Date.now(), player.position, { parts: false })) {
+            if (!animal.id || quarry[animal.id]?.wreck) continue;
+            const body = [animal.at[0], animal.at[1], animal.at[2] + 0.3];
+            if (!boltHit(bolts[bolt], body, 0.45)) continue;
+            landStrike({ kind: "beast", id: animal.id, hitbox: "body" }, bite || lineBlow("chest"));
+            struck = true;
+            break;
+          }
+        }
+        if (!struck && bite) {
+          for (const other of otherActors()) {
+            const body = [other.feet[0], other.feet[1], other.feet[2] + 1];
+            if (!boltHit(bolts[bolt], body, 0.55)) continue;
+            sendBlow(other.id, bite);
+            report = `bow ${bite}`;
+            struck = true;
+            break;
+          }
+        }
         const flying = bolts[bolt];
-        if (!hit && (flying.bounces || 0) < 1 && flying.position[2] < 0 && flying.velocity[2] < 0 && Math.abs(flying.velocity[0]) > Math.abs(flying.velocity[2])) {
+        if (!hit && !struck && (flying.bounces || 0) < 1 && flying.position[2] < 0 && flying.velocity[2] < 0 && Math.abs(flying.velocity[0]) > Math.abs(flying.velocity[2])) {
           flying.position[2] = 0;
           flying.velocity[2] *= -0.35;
           flying.bounces = 1;
-        } else if (hit || flying.age > 2 || flying.position[2] < -1) bolts.splice(bolt, 1);
+        } else if (hit || struck || flying.age > 2 || flying.position[2] < -1) bolts.splice(bolt, 1);
       }
       terrain.setCell(cellId(player.position[1]));
       const walked = cellId(player.position[1]) === "atoll-1";
@@ -3467,8 +4087,8 @@ if (params.get("still") !== "1") {
       if (tick > 0 && tick % 1800 === 0) {
         for (const piece of yard.pieces) {
           if (piece.id !== "fin") continue;
-          trackFin(piece, tick);
-          const gained = fluxMetal(tick, piece.yaw || 0, piece.broken, finCloud(piece.at, tick));
+          trackFin(piece, envTick());
+          const gained = fluxMetal(envTick(), piece.yaw || 0, piece.broken, finCloud(piece.at, envTick()));
           if (gained && finCredit(gained)) {
             yard.metal += gained;
             yard.finMetal = (yard.finMetal || 0) + gained;
@@ -3478,7 +4098,7 @@ if (params.get("still") !== "1") {
       if (tick % 30 === 0) {
         let rained = false;
         for (const pool of pools) {
-          const wet = rainPool(pool, tick, { deck: true });
+          const wet = rainPool(pool, envTick(), { deck: true });
           if (wet && wet.rain !== pool.rain) {
             pool.rain = wet.rain;
             rained = true;
@@ -3536,7 +4156,7 @@ if (params.get("still") !== "1") {
       reloadBeat = waited.reload;
       bleed(vitals, 1 / 30);
       if (bloodDrop(vitals)) report = "down";
-      if (player.position[1] < -190) hear("sea", seaGain(dayWord(tick)));
+      if (player.position[1] < -190) hear("sea", seaGain(dayWord(tick, dayRate)));
       stepAmbient();
       stepAwareness();
 
@@ -4002,15 +4622,24 @@ if (params.get("still") !== "1") {
     const finalScale = resCap > 0 ? Math.min(pacedScale, resCap) : pacedScale;
     if (!extra) lastShownScale = finalScale;
     if (!extra && settled) stillShownScale = Math.max(finalScale, 0.15);
-    const trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
+    let trace = finalScale === paced.scale ? { width: paced.width, height: paced.height } : pictureSize(finalScale, displayW, displayH);
+    if (painter?.remote) {
+      trace = guardTrace(trace.width, trace.height, {
+        measured: gpuDrawMs > 0,
+        drawMs: gpuDrawMs,
+        budgetMs: frameBudget,
+        prevW: shownTraceW,
+        prevH: shownTraceH,
+      });
+    }
     // Trace cost is the extra frame time a trace adds over a present-only frame; it lands in the next gap.
     if (!extra && decision.gap > 0) {
-      if (pendingTrace) {
+      if (pendingTrace && !pendingTrace.wait) {
         const traceCost = Math.max(pendingTrace.paintMs, decision.gap - idleGap, 1);
         canvas.dataset.traceCost = String(Math.round(traceCost));
         traceBudget.note(pendingTrace.pixels, traceCost, pendingTrace.budget);
         pendingTrace = null;
-      } else if (decision.gap < 1000) {
+      } else if (!pendingTrace && decision.gap < 1000) {
         idleGap = idleGap ? idleGap * 0.9 + decision.gap * 0.1 : decision.gap;
       }
     }
@@ -4023,7 +4652,8 @@ if (params.get("still") !== "1") {
     canvas.dataset.level = Number(finalScale || 0).toFixed(2);
     canvas.dataset.detail = "0";
     canvas.style.imageRendering = canvasRendering(smoothUpscale, trace.width, displayW);
-    if (painter) {
+    if (painter?.remote) painter.resize(displayW, displayH);
+    else if (painter) {
       if (canvas.width !== displayW) canvas.width = displayW;
       if (canvas.height !== displayH) canvas.height = displayH;
     } else {
@@ -4043,14 +4673,19 @@ if (params.get("still") !== "1") {
     const due = extra ? decision.paint : active ? now - lastTrace >= interval * 0.85 : decision.paint;
     // ?paintfps= (or the probe) caps drawing only; the sim and network keep full speed.
     const capped = paintCap > 0 && now - lastCapped < 1000 / paintCap - 2;
-    if (params.get("nopaint") !== "1" && due && !capped) {
+    const roomy = shouldPaint(simSteps, performance.now() - frameStart);
+    if (params.get("nopaint") !== "1" && due && !capped && !fromTimer) {
+      if (roomy && !pictureBusy) {
       lastCapped = now;
       const started = performance.now();
       paint(sample, trace.width, trace.height);
       const paintMs = performance.now() - started;
       if (!extra) {
-        lastPaintMs = paintMs;
-        pendingTrace = { pixels: trace.width * trace.height * fraction, paintMs, budget: frameBudget };
+        if (painter?.remote) pendingTrace = { pixels: trace.width * trace.height * fraction, paintMs: 0, budget: frameBudget, wait: true };
+        else {
+          lastPaintMs = paintMs;
+          pendingTrace = { pixels: trace.width * trace.height * fraction, paintMs, budget: frameBudget };
+        }
       }
       pacer.note(paintMs, active, still);
       lastTrace = now;
@@ -4059,6 +4694,7 @@ if (params.get("still") !== "1") {
       if (key !== lastTraceKey) blend = 0;
       else blend = 1;
       lastTraceKey = key;
+      }
     }
     const fade = Math.min(0.12, Math.max(0.03, interval / 1000));
     blend = Math.min(1, blend + dt / fade);
@@ -4075,20 +4711,27 @@ if (params.get("still") !== "1") {
       report = "frame";
       canvas.dataset.err = String(error && error.message || error);
     }
-    requestAnimationFrame(frame);
+    if (!fromTimer) requestAnimationFrame(frame);
   };
-  if (keepSlot && keptWorld) {
-    for (const [key, sample] of keptWorld.crust || []) terrain.log.crust.overrides.set(key, sample);
-    for (const text of keptWorld.frames) {
-      try {
-        onOps(hexBytes(text));
-      } catch {
-        // A stored frame that no longer decodes is skipped.
-      }
-    }
-  }
+  setInterval(() => { if (stalledFor(lastFrameMs, performance.now())) frame(performance.now(), true); }, STALL_POLL_MS);
   addEventListener("pagehide", () => {
     if (keepSlot && !holdKeep) pushSheet();
   });
-  requestAnimationFrame(frame);
+  const walk = async () => {
+    if (keepSlot && keptWorld) {
+      const crust = keptWorld.crust || [];
+      for (let i = 0; i < crust.length; i += 1) {
+        const [key, sample] = crust[i];
+        terrain.log.crust.overrides.set(key, sample);
+        if ((i & 31) === 31) await yieldToUi();
+      }
+      const frames = keptWorld.frames || [];
+      for (let i = 0; i < frames.length; i += 1) {
+        try { onOps(hexBytes(frames[i])); } catch { /* A stored frame that no longer decodes is skipped. */ }
+        if ((i & 3) === 3) await yieldToUi();
+      }
+    }
+    requestAnimationFrame(frame);
+  };
+  walk();
 }

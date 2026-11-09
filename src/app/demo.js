@@ -19,7 +19,7 @@ export function isLocalHost(hostname = "") {
 export function lighthouseUrl(params, hostname = "", config = null) {
   const asked = params.get("lighthouse") || params.get("signal");
   if (asked === "off" || asked === "none") return null;
-  if (asked && /^wss?:\/\//.test(asked)) return asked;
+  if (asked && /^(wss?:\/\/|bc:)/.test(asked)) return asked;
   const local = isLocalHost(hostname);
   const configured = config && typeof config.url === "string" && /^wss?:\/\//.test(config.url) ? config.url : null;
   if (local) return (config && config.local) || "ws://127.0.0.1:8787";
@@ -33,7 +33,7 @@ export function lighthouseUrl(params, hostname = "", config = null) {
 export function signalMode(params, url) {
   const asked = params.get("lighthouse") || params.get("signal") || "";
   if (asked === "off" || asked === "none" || params.get("solo") === "1") return "solo";
-  if (/^wss?:\/\//.test(params.get("lighthouse") || "")) return "lighthouse";
+  if (/^(wss?:\/\/|bc:)/.test(params.get("lighthouse") || "")) return "lighthouse";
   if (params.get("signal") === "torrent") return "torrent";
   if (params.get("signal") === "lighthouse") return url ? "lighthouse" : "solo";
   return url ? "lighthouse" : "torrent";
@@ -83,6 +83,15 @@ export const TOUR = [
     touch: "Walk to the gate marker, then tap E Use to join the strike.", done: "Joined the strike" },
 ];
 export const TOUR_KEY = "meridian-tour-2";
+
+// A normal walk or the solo demo asks when a save exists. Scripted frames keep going.
+export function characterChoice(params, { saved = false } = {}) {
+  const asked = params.get("who");
+  if (asked === "new" || asked === "keep") return asked;
+  if (!saved) return "new";
+  const scripted = params.get("bot") || params.get("follow") || params.get("ai") || params.get("look") || params.get("gate") === "1" || params.get("dig") === "1" || params.get("key") || params.get("id");
+  return scripted ? "keep" : "ask";
+}
 
 export function createTour(done = []) {
   return { index: TOUR.findIndex((step) => !done.includes(step.id)), confirm: "", confirmUntil: 0, skip: false };

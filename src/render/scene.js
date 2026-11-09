@@ -2,10 +2,11 @@ import { Crust } from "../sim/crust.js";
 import { pieceBoxes } from "../sim/build.js";
 import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=57";
 import { lookDirection } from "../sim/hands.js";
-import { sunDirection } from "../sim/sun.js";
+import { sunDirection } from "../sim/sun.js?v=2";
 import { dummyTexture } from "./texture.js";
-import { duneHeight, fauna, floraParts } from "../sim/life.js?v=76";
+import { duneHeight, fauna, floraParts } from "../sim/life.js?v=80";
 import { PEOPLE } from "../sim/people.js?v=2";
+import { helperParts } from "../sim/helper.js?v=1";
 
 const WOOD = [0.42, 0.3, 0.18, 1];
 const OTHER = [0.55, 0.42, 0.22, 1];
@@ -62,8 +63,9 @@ function coarse(parts, keep = 3) {
   return [...parts].sort((a, b) => (b.bulk ?? b.radius ?? 0) - (a.bulk ?? a.radius ?? 0)).slice(0, keep);
 }
 
-function drawnPart(part, body) {
-  if (part.type === "shape") return { ...part, body: part.body || body };
+function drawnPart(part, body, id = "") {
+  const named = part.id || id;
+  if (part.type === "shape") return { ...part, body: part.body || body, ...(named ? { id: named } : {}) };
   return {
     type: "sphere",
     origin: part.at || part.origin,
@@ -71,13 +73,35 @@ function drawnPart(part, body) {
     color: part.color,
     reflectivity: 0.03,
     body,
+    ...(named ? { id: named } : {}),
     ...(part.tile ? { tile: part.tile } : {}),
   };
 }
 
-export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null }) {
+export function pictureCamera({ feet, yaw, pitch, crouch = false, tick = 0, sunTick = null, width = 1, height = 1, view = "first", cameraOrigin = null, cameraDir = null, fov = 70 }) {
   const eye = eyeHeight(crouch);
-  const sun = sunDirection(tick);
+  const sun = sunDirection(sunTick == null ? tick : sunTick);
+  const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
+  const dir = cameraDir || lookDirection(yaw, pitch);
+  const origin = cameraOrigin
+    ? cameraOrigin.slice()
+    : view === "third"
+      ? chaseOrigin(feet, yaw, pitch, crouch)
+      : [feet[0], feet[1], feet[2] + eye];
+  return {
+    sun,
+    miss: [0.42 * day, 0.58 * day, 0.82 * day, 1],
+    camera: {
+      origin,
+      dir,
+      fov,
+      aspect: width / height,
+      planeDistance: 1,
+    },
+  };
+}
+
+export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick = null, atoll, crust, pieces = [], width, height, view = "first", self = true, others = [], cameraOrigin = null, cameraDir = null, fov = 70, smoke = null, swarm = null, pools = [], bolts = [], loose = [], lean = 0, sparse = false, stride = 0, gait = 0, worn = null, down = [], helpers = [] }) {
   const objects = [];
   if (crust !== false) {
     objects.push({ type: "crust", field: crust || new Crust(atoll.worldSeed, atoll.cellId) });
@@ -123,15 +147,17 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     });
   }
   if (!sparse) {
-    for (const part of floraParts(tick * 1000 / 30)) objects.push(drawnPart(part, "flora"));
+    for (const part of floraParts(tick * 1000 / 30, sunTick == null ? tick : sunTick)) objects.push(drawnPart(part, "flora"));
   }
   for (const animal of fauna(Date.now(), feet, { parts: !sparse })) {
+    if (animal.id && down.includes(animal.id)) continue;
     const parts = !sparse && animal.parts?.length ? animal.parts : [animal];
-    for (const part of parts) objects.push(drawnPart(part, animal.kind));
+    for (const part of parts) objects.push(drawnPart(part, animal.kind, animal.id));
   }
   for (const person of PEOPLE) {
     const z = duneHeight(person.at[0], person.at[1]);
-    const figure = playerParts([person.at[0], person.at[1], z], person.yaw, false, {
+    const fallen = down.includes(person.id);
+    const figure = playerParts([person.at[0], person.at[1], z], person.yaw, fallen, {
       self: false,
       color: person.color,
       body: "person",
@@ -201,6 +227,11 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
       tile: "rock",
     });
   }
+  for (const helper of helpers) {
+    if (helper?.x == null || helper?.y == null) continue;
+    const z = duneHeight(helper.x, helper.y);
+    for (const part of helperParts(helper, z)) objects.push(part);
+  }
   if (view === "third" && self) {
     const figure = playerParts(feet, yaw + (lean || 0), crouch, { self: true, gait, stride: crouch ? Math.min(stride, 0.2) : stride, worn });
     for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
@@ -210,6 +241,8 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     const phase = other.walk ? (other.feet[0] + other.feet[1]) * 1.7 : tick * 0.07;
     const figure = playerParts(other.feet, other.yaw, !!other.crouch, {
       self: false,
+      body: "player",
+      id: other.id,
       color: other.color || OTHER,
       gait: phase,
       stride: other.crouch ? 0.12 : moving,
@@ -217,23 +250,8 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, atoll, 
     });
     for (const part of (sparse ? coarse(figure) : figure)) objects.push(part);
   }
-  const day = sun[2] > 0 ? 0.15 + sun[2] * 0.85 : 0.08;
-  const dir = cameraDir || lookDirection(yaw, pitch);
-  const origin = cameraOrigin
-    ? cameraOrigin.slice()
-    : view === "third"
-      ? chaseOrigin(feet, yaw, pitch, crouch)
-      : [feet[0], feet[1], feet[2] + eye];
   return {
-    sun,
-    miss: [0.42 * day, 0.58 * day, 0.82 * day, 1],
+    ...pictureCamera({ feet, yaw, pitch, crouch, tick, sunTick, width, height, view, cameraOrigin, cameraDir, fov }),
     objects: orderForCamera(objects, feet),
-    camera: {
-      origin,
-      dir,
-      fov,
-      aspect: width / height,
-      planeDistance: 1,
-    },
   };
 }

@@ -22,7 +22,7 @@ Slice keys. Later screens do not get to steal these. Hands are first person: the
 | 3 | Tool (bit or hammer) | — | — | — |
 | 4 | Select utility. Press again to cycle the four strike slots | — | — | — |
 | Wheel | Follow distance and height. Scroll out to sit farther and higher | same | same | same |
-| G | Throw the selected utility | — | — | — |
+| H | — | — | Plant a crossbow on supported ground | — |
 | B | — | — | — | Buy menu. Hidden outside the window |
 | Tab | Cycle people. Shift goes backward | same | same | same |
 | M | Sensed map. Coordinates and heading always. Range, people, names, and objects grow with mapping | same | same | same |
@@ -58,6 +58,8 @@ Handled by the walk today but outside the slice table above.
 | P | Place a post (hammer) |
 | X | Drag or let go of the selected player |
 | N | Pin your last note as a slip |
+| Comma | Build a helper once building is at least 4. Costs 8 metal, 4 stone, and 1 fiber. Shift dismisses the nearest and returns half the metal and stone |
+| Period | Cycle the nearest helper: follow, dig, haul, survey, hold. Its own skills rise from that work |
 | H | Grant a deed key to the selected player |
 | K | Toggle the listener |
 

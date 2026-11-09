@@ -6,7 +6,13 @@ export function duneHeight(x, y) {
   const roll = 0.5 * Math.sin(x * 0.15) + 0.5 * Math.cos(y * 0.13);
   const wash = 0.5 * Math.sin((x + y) * 0.17 + 1.3) + 0.5;
   const n = Math.max(0, Math.min(1, 0.55 * roll + 0.45 * wash));
-  return n * n * HILL;
+  const broad = 0.5 + 0.5 * Math.sin(x * 0.021 + 0.6) * Math.cos(y * 0.018);
+  let h = n * n * HILL * (0.78 + 0.22 * broad);
+  const marsh = Math.exp(-(((x - 36) ** 2) + ((y + 96) ** 2)) / 2200);
+  h *= 1 - marsh * 0.55;
+  const ridge = Math.exp(-(((x + 24) ** 2)) / 520) * Math.max(0, Math.cos(y * 0.02));
+  h = Math.min(HILL, h + ridge * 1.6);
+  return Math.max(0, h);
 }
 
 export function graze(patch) {
@@ -25,20 +31,54 @@ export function grazeAnimal(patch, at = [12, -150, 0]) {
   };
 }
 
-// A herd is several of the same animal. They do not walk.
+// A herd is several of the same animal. A dead patch stays where it fell.
+// A living one walks a slow loop and leaves the prints behind it.
+export function herdFoot(index, nowMs, anchor = [12, -150]) {
+  const phase = nowMs / 1000 * 0.16 + index * ((Math.PI * 2) / 3);
+  const radiusX = 3.6 + index * 0.45;
+  const radiusY = 2.3 + index * 0.3;
+  const x = anchor[0] + Math.cos(phase) * radiusX;
+  const y = anchor[1] + Math.sin(phase) * radiusY;
+  return {
+    x,
+    y,
+    yaw: Math.atan2(-Math.sin(phase) * radiusX, Math.cos(phase) * radiusY),
+    gait: phase * 8,
+  };
+}
+
+// A hoof plants on a fixed clock. The mark stays on that spot until the trail rolls off.
+const HOOF_MS = 700;
+
+export function herdPrints(nowMs, count = 3, anchor = [12, -150]) {
+  const out = [];
+  const latest = Math.floor(nowMs / HOOF_MS) * HOOF_MS;
+  for (let i = 0; i < count; i += 1) {
+    for (let s = 0; s < 8; s += 1) {
+      const step = herdFoot(i, latest - s * HOOF_MS, anchor);
+      out.push({ x: step.x, y: step.y, yaw: step.yaw, scale: 0.45, who: `goat:${i}` });
+    }
+  }
+  return out;
+}
+
 export function herd(patch, at = [12, -150, 0], count = 3, parts = true, nowMs = 0) {
   const one = grazeAnimal(patch, at);
   if (!one) return [];
   const animals = [];
-  const ground = at[2] || 0;
+  const dead = Boolean(patch?.dead);
+  const anchor = [at[0], at[1]];
   for (let i = 0; i < count; i += 1) {
-    const foot = [one.at[0] + (i - (count - 1) / 2) * 1.05, one.at[1] + (i - 1) * 0.2, ground];
-    const yaw = 0.15 + i * 0.5;
+    const step = dead
+      ? { x: anchor[0] + (i - (count - 1) / 2) * 1.05, y: anchor[1] + (i - 1) * 0.2, yaw: 0.15 + i * 0.5, gait: 0 }
+      : herdFoot(i, nowMs, anchor);
+    const foot = [step.x, step.y, duneHeight(step.x, step.y)];
     animals.push({
       ...one,
+      id: `goat:${i}`,
       at: foot,
       herd: count,
-      ...(parts ? { parts: goatParts(foot, yaw, Boolean(patch?.dead), nowMs) } : {}),
+      ...(parts ? { parts: goatParts(foot, step.yaw, dead, nowMs, step.gait) } : {}),
     });
   }
   return animals;
@@ -54,26 +94,44 @@ function smoothstep(edge0, edge1, value) {
   return t * t * (3 - 2 * t);
 }
 
-export function groundLook(x, y) {
+function slopeAt(x, y) {
   const h = duneHeight(x, y);
   const e = 0.75;
   const nx = h - duneHeight(x + e, y);
   const ny = h - duneHeight(x, y + e);
-  const nz = e;
-  const slope = 1 - Math.max(0, Math.min(1, nz / Math.hypot(nx, ny, nz)));
+  return 1 - Math.max(0, Math.min(1, e / Math.hypot(nx, ny, e)));
+}
+
+// Beach, scrub, meadow, marsh, grove, and ridge. The kind on the chart stays sand, grass, or rock.
+export function biomeAt(x, y) {
+  const h = duneHeight(x, y);
+  const marsh = Math.exp(-(((x - 36) ** 2) + ((y + 96) ** 2)) / 2200);
+  if (marsh > 0.42 && h < 1.6) return "marsh";
+  const grove = Math.exp(-(((x + 16) ** 2) + ((y + 128) ** 2)) / 2600);
+  if (grove > 0.38 && h > 0.4 && h < 3.4) return "grove";
+  if (slopeAt(x, y) > 0.34 || h > HILL * 0.78) return "ridge";
+  if (h < 0.55) return "beach";
+  if (h < 1.7) return "scrub";
+  return "meadow";
+}
+
+export function groundLook(x, y) {
+  const h = duneHeight(x, y);
+  const slope = slopeAt(x, y);
   const crest = Math.max(0, Math.min(1, h / HILL));
   const rockW = Math.max(0, Math.min(1, smoothstep(0.2, 0.5, slope) + smoothstep(0.62, 0.92, crest) * 0.8));
   let grassW = (1 - rockW) * smoothstep(0.1, 0.34, crest) * (1 - smoothstep(0.58, 0.86, crest));
   grassW *= 1 - smoothstep(0.16, 0.46, slope);
-  const sand = [196, 168, 112];
-  const grass = [72, 132, 54];
-  const rock = [142, 136, 124];
+  const biome = biomeAt(x, y);
+  const sand = biome === "marsh" ? [118, 124, 86] : [196, 168, 112];
+  const grass = biome === "grove" ? [48, 110, 42] : biome === "meadow" ? [86, 150, 58] : biome === "marsh" ? [64, 108, 62] : [92, 124, 48];
+  const rock = biome === "ridge" ? [132, 126, 116] : [142, 136, 124];
   const mix = (a, b, t) => a.map((channel, i) => Math.round(channel + (b[i] - channel) * t));
   const mixed = mix(mix(sand, grass, grassW), rock, rockW);
   const lift = 0.78 + crest * 0.34;
   const color = [...mixed.map((channel) => Math.min(255, Math.round(channel * lift))), 255];
   const kind = rockW > 0.45 ? "rock" : grassW > 0.35 ? "grass" : "sand";
-  return { kind, color, crest, grassW, rockW };
+  return { kind, biome, color, crest, grassW, rockW };
 }
 
 function shy(at, from, sense, push) {
@@ -160,15 +218,21 @@ export function skinkParts(at, yaw = 0, nowMs = 0) {
   return parts;
 }
 
-export function goatParts(at, yaw = 0, dead = false, nowMs = 0) {
+export function goatParts(at, yaw = 0, dead = false, nowMs = 0, gait = 0) {
   const parts = [];
   const hide = dead ? [0.3, 0.24, 0.18, 1] : GOAT;
   const z = (up) => (dead ? up * 0.45 : up);
   const breathe = dead ? 0 : Math.sin(nowMs / 520) * 0.012;
+  const pace = dead ? 0 : gait;
   const add = (lf, lr, up, radius, color, tile = "hide") => orient(parts, at, yaw, lf, lr, z(up), radius, color, tile);
   for (const side of [1, -1]) {
-    limb(parts, at, yaw, [0.12, side * 0.07, z(0.34)], [0.14, side * 0.08, z(0.03)], 0.03, hide);
-    limb(parts, at, yaw, [-0.12, side * 0.07, z(0.34)], [-0.14, side * 0.08, z(0.03)], 0.03, hide);
+    for (const fore of [1, -1]) {
+      const phase = pace + (side * fore > 0 ? 0 : Math.PI);
+      const swing = Math.sin(phase) * 0.07;
+      const lift = Math.max(0, Math.cos(phase)) * 0.045;
+      const along = 0.13 * fore;
+      limb(parts, at, yaw, [along, side * 0.07, z(0.34)], [along + swing, side * 0.08, z(0.03 + lift)], 0.03, hide);
+    }
   }
   limb(parts, at, yaw, [0.12, 0, z(0.4 + breathe)], [-0.16, 0, z(0.38 + breathe)], 0.09, hide);
   add(0.2, 0, 0.52, 0.04, hide);
@@ -193,7 +257,7 @@ const PLANTS = [
   { kind: "tree", x: 20, y: -142 },
 ];
 
-function bushParts(parts, x, y, z, color, nowMs) {
+function bushParts(parts, x, y, z, color, nowMs, scale = 1) {
   const dark = [color[0] * 0.65, color[1] * 0.7, color[2] * 0.6, 1];
   const gust = Math.sin(nowMs / 800) * 0.03;
   const puffs = [
@@ -208,28 +272,28 @@ function bushParts(parts, x, y, z, color, nowMs) {
   ];
   for (const [dx, dy, dz, radius, leaf] of puffs) {
     const stem = leaf[0] > leaf[1];
-    parts.push({ at: [x + dx + gust * dz, y + dy, z + dz], radius, color: leaf, tile: stem ? "bark" : "leaf" });
+    parts.push({ at: [x + (dx + gust * dz) * scale, y + dy * scale, z + dz * scale], radius: radius * scale, color: leaf, tile: stem ? "bark" : "leaf" });
   }
 }
 
-function tuftParts(parts, x, y, z, color, nowMs) {
+function tuftParts(parts, x, y, z, color, nowMs, scale = 1) {
   const dry = [color[0] * 0.85, color[1] * 0.8, color[2] * 0.6, 1];
   for (let i = 0; i < 7; i += 1) {
     const ang = (i / 7) * Math.PI * 2;
     const sway = Math.sin(nowMs / 420 + i) * 0.06;
-    const root = [x + Math.cos(ang) * 0.02, y + Math.sin(ang) * 0.015, z + 0.02];
-    const tip = [x + Math.cos(ang) * 0.16 + sway, y + Math.sin(ang) * 0.1, z + 0.22];
-    const side = [x + Math.cos(ang + 0.5) * 0.05, y + Math.sin(ang + 0.5) * 0.05, z + 0.08];
+    const root = [x + Math.cos(ang) * 0.02 * scale, y + Math.sin(ang) * 0.015 * scale, z + 0.02 * scale];
+    const tip = [x + (Math.cos(ang) * 0.16 + sway) * scale, y + Math.sin(ang) * 0.1 * scale, z + 0.22 * scale];
+    const side = [x + Math.cos(ang + 0.5) * 0.05 * scale, y + Math.sin(ang + 0.5) * 0.05 * scale, z + 0.08 * scale];
     parts.push(triShape(root, side, tip, i % 2 ? dry : color, { at: tip, tile: "leaf" }));
   }
 }
 
-function treeParts(parts, x, y, z, nowMs) {
+function treeParts(parts, x, y, z, nowMs, scale = 1) {
   const bark = [0.38, 0.26, 0.14, 1];
   const leaf = [0.2, 0.42, 0.16, 1];
   const shade = [0.12, 0.3, 0.1, 1];
   const gust = Math.sin(nowMs / 900);
-  parts.push(spanShape("cylinder", [x, y, z + 0.05], [x + gust * 0.04, y, z + 1.55], 0.07, bark, { tile: "bark" }));
+  parts.push(spanShape("cylinder", [x, y, z + 0.05 * scale], [x + gust * 0.04 * scale, y, z + 1.55 * scale], 0.07 * scale, bark, { tile: "bark" }));
   const crown = [
     [0, 0, 1.85, 0.34, leaf],
     [0.28, 0.1, 1.75, 0.22, leaf],
@@ -241,22 +305,99 @@ function treeParts(parts, x, y, z, nowMs) {
     [0, -0.05, 2.15, 0.14, leaf],
   ];
   for (const [dx, dy, dz, radius, color] of crown) {
-    parts.push({ at: [x + dx + gust * dz * 0.04, y + dy, z + dz], radius, color, tile: "leaf" });
+    parts.push({ at: [x + (dx + gust * dz * 0.04) * scale, y + dy * scale, z + dz * scale], radius: radius * scale, color, tile: "leaf" });
   }
 }
 
-// Plants are spheres, plus a trunk and a tuft of blades. The box budget belongs to the town.
+const SEED_EVERY = 3600;
+export const PLANT_CAP = 14;
+
+export function plantStage(age) {
+  if (age < 900) return "seed";
+  if (age < 2400) return "sprout";
+  if (age < 3600) return "grown";
+  return "seeding";
+}
+
+export function plantScale(stage) {
+  if (stage === "seed") return 0.16;
+  if (stage === "sprout") return 0.42;
+  return 1;
+}
+
+function canRoot(x, y) {
+  const biome = biomeAt(x, y);
+  return biome === "scrub" || biome === "meadow" || biome === "grove" || biome === "marsh";
+}
+
+function hash01(n) {
+  const x = Math.sin(n * 127.1) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+// Anchors stay. Each one drops a seed on a fixed clock. A seed roots only on living ground,
+// grows through sprout, and the oldest seed gives way when the next one lands.
+export function livingPlants(tick = 0) {
+  const plants = PLANTS.map((plant) => ({ ...plant, age: 1e9, stage: "grown", scale: 1 }));
+  const now = Math.max(0, tick);
+  const generation = Math.floor(now / SEED_EVERY);
+  for (let slot = generation; slot >= Math.max(0, generation - 1); slot -= 1) {
+    for (let i = 0; i < PLANTS.length && plants.length < PLANT_CAP; i += 1) {
+      const parent = PLANTS[i];
+      if (parent.kind === "tuft") continue;
+      const age = now - slot * SEED_EVERY;
+      if (age < 0) continue;
+      const ang = hash01(i * 19 + slot * 7) * Math.PI * 2;
+      const dist = 2.6 + hash01(i * 3 + slot) * 3.8;
+      const x = parent.x + Math.cos(ang) * dist;
+      const y = parent.y + Math.sin(ang) * dist;
+      if (!canRoot(x, y)) continue;
+      const stage = plantStage(age);
+      const biome = biomeAt(x, y);
+      const kind = biome === "grove" ? "tree" : biome === "marsh" ? "tuft" : "bush";
+      plants.push({
+        kind,
+        x,
+        y,
+        color: parent.color || [0.26, 0.4, 0.16, 1],
+        age,
+        stage,
+        scale: plantScale(stage),
+      });
+    }
+  }
+  return plants;
+}
+
 export function floraBoxes() {
   return [];
 }
 
-export function floraParts(nowMs = Date.now()) {
+export function floraParts(nowMs = Date.now(), tick = 0) {
   const parts = [];
-  for (const plant of PLANTS) {
+  for (const plant of livingPlants(tick)) {
     const z = duneHeight(plant.x, plant.y);
-    if (plant.kind === "tree") treeParts(parts, plant.x, plant.y, z, nowMs);
-    else if (plant.kind === "tuft") tuftParts(parts, plant.x, plant.y, z, plant.color, nowMs);
-    else bushParts(parts, plant.x, plant.y, z, plant.color, nowMs);
+    const scale = plant.scale || 1;
+    if (plant.stage === "seed") {
+      parts.push({ at: [plant.x, plant.y, z + 0.05], radius: 0.045, color: [0.42, 0.32, 0.16, 1], tile: "bark" });
+      continue;
+    }
+    if (plant.kind === "tree") treeParts(parts, plant.x, plant.y, z, nowMs, scale);
+    else if (plant.kind === "tuft") tuftParts(parts, plant.x, plant.y, z, plant.color, nowMs, scale);
+    else bushParts(parts, plant.x, plant.y, z, plant.color, nowMs, scale);
+    if (plant.stage === "seeding") {
+      const fall = (plant.age % SEED_EVERY) / SEED_EVERY;
+      for (let s = 0; s < 3; s += 1) {
+        const ang = hash01(plant.x * 0.2 + plant.y * 0.13 + s * 9) * Math.PI * 2;
+        const dist = 0.3 + fall * (1.2 + s * 0.3);
+        parts.push({
+          at: [plant.x + Math.cos(ang) * dist, plant.y + Math.sin(ang) * dist, z + 0.55 * (1 - fall) + 0.06],
+          radius: 0.035,
+          color: [0.46, 0.36, 0.18, 1],
+          tile: "bark",
+        });
+      }
+    }
   }
   return parts;
 }
@@ -336,11 +477,11 @@ export function fauna(nowMs, from, { parts = true } = {}) {
   const skinkYaw = Math.atan2(Math.cos(t * 0.5) * 2.1 * 0.5, Math.cos(t * 0.17) * 1.5 * 0.17);
   const skink = [skinkAt[0], skinkAt[1], duneHeight(skinkAt[0], skinkAt[1]) + 0.02];
   const gull = parts ? gullParts(nowMs) : gullPose(nowMs);
-  const grazed = herd(graze({ stock: 1 }), [12, -150, duneHeight(12, -150)], 3, parts, nowMs);
+  const grazed = herd({ stock: 1, track: true, dead: false }, [12, -150, duneHeight(12, -150)], 3, parts, nowMs);
   return [
-    { kind: "crab", at: crab, radius: 0.12, color: SHELL, ...(parts ? { parts: crabParts(crab, crabYaw, nowMs) } : {}) },
-    { kind: "skink", at: skink, radius: 0.05, color: SCALE, ...(parts ? { parts: skinkParts(skink, skinkYaw, nowMs) } : {}) },
-    { kind: "gull", at: gull.at, radius: 0.1, color: WHITE, ...(parts ? { parts: gull.parts } : {}) },
+    { id: "crab", kind: "crab", at: crab, radius: 0.12, color: SHELL, ...(parts ? { parts: crabParts(crab, crabYaw, nowMs) } : {}) },
+    { id: "skink", kind: "skink", at: skink, radius: 0.05, color: SCALE, ...(parts ? { parts: skinkParts(skink, skinkYaw, nowMs) } : {}) },
+    { id: "gull", kind: "gull", at: gull.at, radius: 0.1, color: WHITE, ...(parts ? { parts: gull.parts } : {}) },
     ...grazed,
   ];
 }

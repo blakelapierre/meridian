@@ -11,6 +11,7 @@ export const DESKTOP_TIPS = [
   ["1 / 3", "line rifle / tool (bit digs, hammer builds) · hold left mouse to use"],
   ["M", "map: small, full, hidden"],
   ["L", "abilities log · I shows the network panel"],
+  ["Comma / Period", "build a helper once you can build · cycle the task it practices"],
 ];
 
 export const TOUCH_TIPS = [
