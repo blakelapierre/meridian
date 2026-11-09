@@ -16,7 +16,7 @@ import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapsh
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
 import { buildScene, pictureCamera } from "../render/scene.js?v=80";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=102";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=103";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -167,9 +167,10 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture } from "./picture.js?v=5";
+import { openPicture, pictureMode } from "./picture.js?v=6";
 
-const canvas = document.querySelector("canvas");
+// `let`: if the picture thread fails, the page swaps in a fresh canvas for the CPU picture.
+let canvas = document.querySelector("canvas");
 const params = new URLSearchParams(location.search);
 const digDemo = params.get("dig") === "1";
 const followId = params.get("follow");
@@ -231,8 +232,10 @@ bootNote("Loading Meridian", 0.08);
 // ?simonly=1 (scale bench thumbnails past the live WebGL budget): no GPU context, no painting;
 // sim, bots and network run as usual. Browsers cap live WebGL contexts per tab (~16).
 const SIM_ONLY = new URLSearchParams(location.search).get("simonly") === "1";
-const opened = SIM_ONLY ? { painter: null, remote: false } : openPicture(canvas, { search: location.search });
-let painter = SIM_ONLY ? null : opened.painter || createGpuPainter(canvas);
+const opened = SIM_ONLY ? { painter: null, remote: false, mode: pictureMode("?gl=cpu") } : openPicture(canvas, { search: location.search });
+// ?debug=1 shows the whole graphics story (caps, compile time, the shader log) on the page.
+const GL_DEBUG = new URLSearchParams(location.search).get("debug") === "1";
+let painter = SIM_ONLY || opened.mode.where === "cpu" ? null : opened.painter || createGpuPainter(canvas, { lite: opened.mode.lite });
 let context = null;
 let viewScale = 0.5;
 const picture = createPicturePace();
@@ -278,20 +281,53 @@ if (painter && !painter.remote) {
   context = canvas.getContext("2d", { alpha: false });
   if (context) context.imageSmoothingEnabled = false;
   canvas.dataset.renderer = SIM_ONLY ? "none" : "cpu";
-  if (!SIM_ONLY) showGlError(canvas.dataset.gpuError || "WebGL2 is not available");
+  if (!SIM_ONLY && opened.mode.where !== "cpu") showGlError(canvas.dataset.gpuError || "WebGL2 is not available");
 }
 // A visible note when the GPU path fails, so a blank screen never looks like a working one.
 function showGlError(reason) {
   const node = document.querySelector("#glerr");
   if (!node) return;
   node.hidden = false;
-  node.textContent = `Graphics: ${String(reason).split("\n")[0].slice(0, 160)}. Using the slower CPU picture.`;
+  const text = String(reason);
+  if (GL_DEBUG) {
+    node.style.whiteSpace = "pre-wrap";
+    node.style.userSelect = "text";
+    node.textContent = `Graphics: ${text.slice(0, 1200)}\n${glFacts()}\nUsing the slower CPU picture.`;
+  } else node.textContent = `Graphics: ${text.split("\n")[0].slice(0, 160)}. Using the slower CPU picture. (Add ?debug=1 for details.)`;
 }
-canvas.addEventListener("webglcontextlost", (event) => {
-  event.preventDefault();
-  canvas.dataset.gpuError = "context lost";
-  showGlError("the GPU context was lost; reload to recover");
-});
+// ?debug=1 on a working picture: the same facts, as a note rather than an error.
+function showGlInfo() {
+  const node = document.querySelector("#glerr");
+  if (!node) return;
+  node.hidden = false;
+  node.style.whiteSpace = "pre-wrap";
+  node.style.userSelect = "text";
+  node.style.background = "#123";
+  node.textContent = `Graphics OK\n${glFacts()}`;
+  setTimeout(() => { node.hidden = true; }, 20000);
+}
+// What we know about the GPU, for ?debug=1 and the curtain.
+function glFacts() {
+  const f = painter?.facts?.() || opened.painter?.facts?.() || {};
+  const d = canvas.dataset;
+  const parts = [
+    `mode ${opened.mode.where}${opened.mode.lite ? " lite" : ""}${opened.mode.mobile ? " (phone)" : ""}`,
+    f.info || d.gpuInfo ? `gpu ${f.info || d.gpuInfo}` : "",
+    f.caps || d.gpuCaps ? `caps ${f.caps || d.gpuCaps}` : "",
+    f.compileMs ? `compile ${f.compileMs} ms` : "",
+    f.buildMs ? `build ${f.buildMs} ms` : "",
+    f.fullError || d.gpuFullError ? `full shader: ${(f.fullError || d.gpuFullError).slice(0, 400)}` : "",
+  ];
+  return parts.filter(Boolean).join("\n");
+}
+function bindCanvasLoss(el) {
+  el.addEventListener("webglcontextlost", (event) => {
+    event.preventDefault();
+    el.dataset.gpuError = "context lost";
+    showGlError("the GPU context was lost; reload to recover");
+  });
+}
+bindCanvasLoss(canvas);
 const width = canvas.width;
 const height = canvas.height;
 const NOTIFY_ON = params.get("notify") !== "0";
@@ -1318,7 +1354,8 @@ addEventListener("keydown", (event) => {
   if (event.code === "Space") event.preventDefault();
 });
 addEventListener("keyup", (event) => keys.delete(event.code));
-canvas.addEventListener("mousedown", (event) => {
+function bindCanvasInput(el) {
+el.addEventListener("mousedown", (event) => {
   if (event.button === 2) {
     rightDown = true;
     rightMoved = false;
@@ -1328,6 +1365,17 @@ canvas.addEventListener("mousedown", (event) => {
   trigger = true;
   if (slot === "line") shotQueued = true;
 });
+el.addEventListener("contextmenu", (event) => event.preventDefault());
+// A click while the cursor is held fires. Esc gives the cursor back.
+el.addEventListener("click", () => {
+  if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
+});
+el.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  turnWheel(Math.sign(event.deltaY) || 1);
+}, { passive: false });
+}
+bindCanvasInput(canvas);
 addEventListener("mouseup", (event) => {
   if (event.button === 0) trigger = false;
   if (event.button !== 2) return;
@@ -1336,15 +1384,6 @@ addEventListener("mouseup", (event) => {
   if (orbiting) return;
   useRightClick();
 });
-canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-// A click while the cursor is held fires. Esc gives the cursor back.
-canvas.addEventListener("click", () => {
-  if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
-});
-canvas.addEventListener("wheel", (event) => {
-  event.preventDefault();
-  turnWheel(Math.sign(event.deltaY) || 1);
-}, { passive: false });
 addEventListener("mousemove", (event) => {
   if (document.pointerLockElement !== canvas) return;
   if (rightDown) {
@@ -3475,12 +3514,45 @@ if (painter?.remote) {
     }
   };
   bootNote("Waking the picture", 0.66);
+  const wakeStart = Date.now();
+  painter.onStage = (stage) => bootNote(`Waking the picture: ${stage}${opened.mode.mobile ? " (a phone can take a minute)" : ""}`, 0.7);
   pictureUp = await painter.ready;
   if (!pictureUp) {
-    showGlError(painter.failReason() || "the picture thread did not start");
-    bootNote("The picture did not start. Reload the page.", 0.66);
-  } else painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
-} else if (painter) fitCanvas(canvas, viewScale);
+    // No dead stop: drop the thread and draw on the CPU instead, and say why.
+    const reason = painter.failReason() || "the picture thread did not start";
+    fallBackToCpu(reason, Date.now() - wakeStart);
+    pictureUp = true;
+  } else {
+    painter.resize(canvas.clientWidth || window.innerWidth || 960, canvas.clientHeight || window.innerHeight || 540);
+    if (GL_DEBUG) showGlInfo();
+  }
+} else if (painter) {
+  if (GL_DEBUG) showGlInfo();
+  fitCanvas(canvas, viewScale);
+  // The crowd variant of the trace compiles once the first picture is up.
+  setTimeout(() => { try { painter?.warm?.(); } catch {} }, 3000);
+}
+// The canvas went to the picture thread and cannot be drawn here again, so a fresh one takes its
+// place (same attributes, same input), and the CPU picture draws on it.
+function fallBackToCpu(reason, waitedMs) {
+  const failed = painter;
+  failed?.close?.();
+  painter = null;
+  const fresh = canvas.cloneNode(false);
+  fresh.width = 160;
+  fresh.height = 90;
+  Object.assign(fresh.dataset, { gpuError: String(reason).slice(0, 300), renderer: "cpu", picture: "cpu" });
+  canvas.replaceWith(fresh);
+  canvas = fresh;
+  bindCanvasLoss(canvas);
+  bindCanvasInput(canvas);
+  context = canvas.getContext("2d", { alpha: false });
+  if (context) context.imageSmoothingEnabled = false;
+  canvas.dataset.renderer = context ? "cpu" : "none";
+  canvas.dataset.gpuWaitMs = String(waitedMs);
+  showGlError(reason);
+  bootNote(`The traced picture did not start (${String(reason).split("\n")[0].slice(0, 90)}). Using the CPU picture.`, 0.8);
+}
 if (pictureUp) {
   bootNote("Drawing the beach", 0.9);
   await yieldToUi();
