@@ -3,15 +3,24 @@
 // identity) and a seeded wander bot. Thumbnails paint at 1 fps (sim and net stay full speed);
 // the large pane paints at full speed. Click a thumbnail to promote it.
 //
-// URL: ?max=50&settle=8&budget=2.5&lighthouse=ws://...&auto=1&expect=net|move
+// URL: ?max=50&settle=8&budget=2.5&minhz=20&minfps=5&lighthouse=bc:|off|wss://...&auto=1&expect=net|move
+// Fully static (runs on GitHub Pages): with no ?lighthouse= the clients signal through an in-tab
+// lighthouse this page hosts (src/net/localhub.js, `bc:<room>`) and connect over real WebRTC.
+import { summarize } from "./summary.js?v=1";
 // window.benchResult holds the report when done (tools/scale/run.mjs reads it).
 
 const params = new URLSearchParams(location.search);
-const MAX = Math.max(2, Math.min(50, Number(params.get("max")) || 50));
+let MAX = Math.max(2, Math.min(50, Number(params.get("max")) || 50));
 const SETTLE_S = Number(params.get("settle")) || 8;
 const BUDGET_M = Number(params.get("budget")) || 2.5;
 const LINK_CAP = 8;
-const lighthouse = params.get("lighthouse") || "";
+const MIN_HZ = Number(params.get("minhz")) || 20;
+const MIN_FPS = Number(params.get("minfps") ?? 5) || 0;
+const askedLh = params.get("lighthouse") || "bc:";
+const solo = askedLh === "off" || askedLh === "none";
+// The in-tab hub lives here; a fresh room per page load keeps old runs out.
+const lighthouse = solo ? "" : askedLh === "bc:" ? `bc:scale-${Date.now().toString(36)}` : askedLh;
+window.meridianLocalHubs = window.meridianLocalHubs || {};
 // "net" also checks remote poses; it needs a lighthouse and working WebRTC.
 const expectNet = (params.get("expect") || (lighthouse ? "net" : "move")) === "net";
 const stage = document.querySelector("#stage");
@@ -21,7 +30,7 @@ const clients = [];
 let primary = 0;
 let running = false;
 let mainBot = true;
-const report = { started: new Date().toISOString(), max: MAX, settleS: SETTLE_S, budgetM: BUDGET_M, expectNet, lighthouse: lighthouse ? "custom" : "none", levels: [], ignoredErrors: { count: 0, samples: [] }, result: "running" };
+const report = { started: new Date().toISOString(), max: MAX, settleS: SETTLE_S, budgetM: BUDGET_M, expectNet, lighthouse: !lighthouse ? "none" : lighthouse.startsWith("bc:") ? "in-tab" : "custom", minHz: MIN_HZ, minFps: MIN_FPS, levels: [], ignoredErrors: { count: 0, samples: [] }, result: "running" };
 window.benchResult = null;
 
 const log = (line) => {
@@ -34,7 +43,7 @@ const probe = (client) => {
 };
 
 function clientUrl(i) {
-  const q = new URLSearchParams({ ns: `scale${i}`, bot: String(1000 + i * 7919), paintfps: i === primary ? "0" : "1", touch: "0" });
+  const q = new URLSearchParams({ ns: `scale${i}`, bot: String(1000 + i * 7919), paintfps: i === primary ? "0" : "1", touch: "0", fresh: "1" });
   if (lighthouse) q.set("lighthouse", lighthouse);
   else q.set("lighthouse", "off");
   return `../view/index.html?${q}`;
@@ -91,7 +100,8 @@ function addClient() {
 async function waitReady(timeoutMs = 60000) {
   const t0 = performance.now();
   while (performance.now() - t0 < timeoutMs) {
-    if (clients.every((c) => probe(c) && probe(c).fps() > 0)) return true;
+    // A stalled (unpainted) client still counts once its sim is stepping.
+    if (clients.every((c) => probe(c) && (probe(c).fps() > 0 || (probe(c).tick?.() || 0) > 30))) return true;
     await sleep(250);
   }
   return false;
@@ -102,7 +112,7 @@ function checkLevel(n) {
   const snap = clients.map((c) => {
     const p = probe(c);
     if (!p) return { index: c.index, missing: true };
-    return { index: c.index, id: p.id(), pose: p.pose(), remotes: p.remotes(), links: p.links().length, bot: p.bot(), fps: p.fps(), errors: p.errors(), ignoredErrors: p.ignoredErrors?.() || { count: 0, samples: [] }, gpuError: p.gpuError() };
+    return { index: c.index, tick: p.tick?.() || 0, id: p.id(), pose: p.pose(), remotes: p.remotes(), links: p.links().length, bot: p.bot(), fps: p.fps(), errors: p.errors(), ignoredErrors: p.ignoredErrors?.() || { count: 0, samples: [] }, gpuError: p.gpuError() };
   });
   const byId = new Map(snap.filter((s) => s.id).map((s) => [s.id, s]));
   let worst = 0;
@@ -113,6 +123,11 @@ function checkLevel(n) {
     c.lastMoved = s.bot?.moved || 0;
     s.movedThisLevel = Math.round(moved * 100) / 100;
     if (moved < 1) failures.push(`#${s.index} not moving (${moved.toFixed(2)} m)`);
+    const hz = ((s.tick || 0) - (c.lastTick || 0)) / c.span;
+    c.lastTick = s.tick || 0;
+    s.simHz = Math.round(hz * 10) / 10;
+    if (hz < MIN_HZ) failures.push(`#${s.index} sim ${s.simHz} Hz < ${MIN_HZ}`);
+    if (s.index === primary && MIN_FPS && s.fps < MIN_FPS) failures.push(`#${s.index} (main pane) ${Math.round(s.fps)} fps < ${MIN_FPS}`);
     if (s.errors.length) failures.push(`#${s.index} errors: ${s.errors[0]}`);
     if (expectNet) {
       const want = Math.min(n - 1, LINK_CAP);
@@ -136,8 +151,10 @@ function checkLevel(n) {
 
 async function run() {
   if (running) return;
+  MAX = Math.max(2, Math.min(50, Number(document.querySelector("#max").value) || 50));
+  report.max = MAX;
   running = true;
-  log(`start: 2 → ${MAX} clients, settle ${SETTLE_S}s, pose budget ${BUDGET_M} m, net ${expectNet ? "on" : "off"}`);
+  log(`start: 2 → ${MAX} clients, settle ${SETTLE_S}s, pose budget ${BUDGET_M} m, sim ≥ ${MIN_HZ} Hz, main ≥ ${MIN_FPS} fps, signaling ${report.lighthouse}, net ${expectNet ? "on" : "off"}`);
   while (clients.length < 2) addClient();
   for (let n = 2; n <= MAX && running; n += 1) {
     while (clients.length < n) addClient();
@@ -146,9 +163,11 @@ async function run() {
       report.levels.push({ clients: n, ok: false, failures: ["clients did not start in 60 s"] });
       break;
     }
-    for (const c of clients) c.lastMoved = probe(c)?.bot()?.moved || 0;
+    const t0 = performance.now();
+    for (const c of clients) { c.lastMoved = probe(c)?.bot()?.moved || 0; c.lastTick = probe(c)?.tick?.() || 0; }
     statusBox.textContent = `level ${n}: settling ${SETTLE_S}s`;
     await sleep(SETTLE_S * 1000);
+    for (const c of clients) c.span = (performance.now() - t0) / 1000;
     const level = checkLevel(n);
     report.levels.push(level);
     log(`level ${n}: ${level.ok ? "pass" : "FAIL"}${level.ok ? "" : ` · ${level.failures.slice(0, 3).join("; ")}`}`);
@@ -162,6 +181,8 @@ async function run() {
   report.finished = new Date().toISOString();
   statusBox.textContent = `${report.result}: ${report.maxPassed} clients passed${last?.ok ? "" : `, failed at ${last?.clients}`}`;
   log(statusBox.textContent);
+  const box = document.querySelector("#summary");
+  if (box) { box.innerHTML = summarize(report); box.hidden = false; }
   window.benchResult = report;
   running = false;
 }

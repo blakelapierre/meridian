@@ -122,6 +122,19 @@ export function trySalvage(yard, cell) {
     yard.spoil = Math.max(0, (yard.spoil || 0) - 3);
     return { ok: true, metal: yard.metal, fallen: 0 };
   }
+  const bow = yard.pieces.findIndex((piece) => piece.id === "bow" && sameCell(piece.at, cell));
+  if (bow >= 0) {
+    yard.pieces.splice(bow, 1);
+    yard.metal += 4;
+    return { ok: true, metal: yard.metal, fallen: 0 };
+  }
+  const carcass = yard.pieces.findIndex((piece) => piece.id === "carcass" && sameCell(piece.at, cell));
+  if (carcass >= 0) {
+    const metal = yard.pieces[carcass].metal || 1;
+    yard.pieces.splice(carcass, 1);
+    yard.metal += metal;
+    return { ok: true, metal: yard.metal, fallen: 0 };
+  }
   const wreck = yard.pieces.findIndex((piece) => piece.id === "wreck" && sameCell(piece.at, cell));
   if (wreck < 0) return { ok: false, reason: "none" };
   yard.pieces.splice(wreck, 1);
@@ -157,6 +170,17 @@ export function tryPlacePost(yard, cell) {
   if (!floored && !support(yard.pieces, cell)) return { ok: false, reason: "support" };
   yard.metal -= 2;
   yard.pieces.push({ id: "post", at: cell.slice(), anchors: false });
+  return { ok: true, metal: yard.metal };
+}
+
+export function tryPlaceBow(yard, cell) {
+  if (!cell) return { ok: false, reason: "aim" };
+  if ((yard.metal || 0) < 8) return { ok: false, reason: "metal" };
+  if (yard.pieces.some((piece) => sameCell(piece.at, cell) && piece.id !== "floor")) return { ok: false, reason: "occupied" };
+  const floored = yard.pieces.some((piece) => piece.id === "floor" && sameCell(piece.at, cell));
+  if (!floored && !support(yard.pieces, cell)) return { ok: false, reason: "support" };
+  yard.metal -= 8;
+  yard.pieces.push({ id: "bow", at: cell.slice(), anchors: false, cool: 0 });
   return { ok: true, metal: yard.metal };
 }
 
@@ -319,7 +343,13 @@ export function roadForks(pieces, cell) {
 }
 
 export function pieceBoxes(pieces) {
-  return pieces.map((piece) => {
+  return pieces.flatMap((piece) => {
+    const made = pieceBox(piece);
+    return Array.isArray(made) ? made : [made];
+  });
+}
+
+function pieceBox(piece) {
     const x = piece.at[0] * 0.5;
     const y = piece.at[1] * 0.5;
     if (piece.id === "footing") {
@@ -437,6 +467,42 @@ export function pieceBoxes(pieces) {
         piece: piece.id,
       };
     }
+    if (piece.id === "bow") {
+      return [
+        {
+          type: "box",
+          min: [x - 0.06, y - 0.06, 0],
+          max: [x + 0.06, y + 0.06, 0.9],
+          color: WOOD,
+          reflectivity: 0.08,
+          piece: piece.id,
+          id: "bow",
+          name: "Crossbow",
+        },
+        {
+          type: "box",
+          min: [x - 0.04, y - 0.32, 0.74],
+          max: [x + 0.04, y + 0.32, 0.86],
+          color: [0.28, 0.2, 0.14, 1],
+          reflectivity: 0.1,
+          piece: piece.id,
+          id: "bow",
+          name: "Crossbow",
+        },
+      ];
+    }
+    if (piece.id === "carcass") {
+      return {
+        type: "box",
+        min: [x - 0.34, y - 0.16, 0],
+        max: [x + 0.34, y + 0.16, 0.18],
+        color: [0.36, 0.22, 0.14, 1],
+        reflectivity: 0.06,
+        piece: piece.id,
+        id: piece.id,
+        name: "Carcass",
+      };
+    }
     if (piece.id === "wreck") {
       return {
         type: "box",
@@ -467,5 +533,4 @@ export function pieceBoxes(pieces) {
       reflectivity: 0.12,
       piece: piece.id,
     };
-  });
 }

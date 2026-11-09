@@ -67,5 +67,5 @@ test("main.js uses the min-fps budget for motion, not vsync", () => {
   const main = readFileSync(new URL("../src/app/main.js", import.meta.url), "utf8");
   assert.match(main, /motionRes\.step\(\{ gap: decision\.gap, start: stillShownScale \}\)/);
   assert.match(main, /settled \? STILL_FRAME_MS : motionRes\.budget/);
-  assert.match(main, /pace\.js\?v=90/);
+  assert.match(main, /pace\.js\?v=91/);
 });
