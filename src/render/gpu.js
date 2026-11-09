@@ -198,6 +198,37 @@ export function gpuCapsProblem(caps) {
   return "";
 }
 export function readGpuCaps(gl) {
+  const high = gl.getShaderPrecisionFormat?.(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+  return {
+    textureUnits: gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS),
+    textureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+    fragmentVectors: gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
+    highpBits: high ? high.precision : null,
+    parallel: Boolean(gl.getExtension("KHR_parallel_shader_compile")),
+  };
+}
+
+// options.lite compiles the trace without the heavy volcano, cave and ice effects (heat shimmer,
+// plume and ash, cave lights, gem sparkle, ice refraction): a much smaller shader for phones. The
+// castle and cave rock still draw. A full shader that fails to compile retries as lite.
+export function createGpuPainter(canvas, options = {}) {
+  let lite = Boolean(options.lite);
+  let gl;
+  try {
+    gl = canvas.getContext("webgl2", {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      preserveDrawingBuffer: true,
+    });
+  } catch {
+    return null;
+  }
+  if (!gl) return fail(canvas, "no WebGL2 context");
+  // GLES checks: the trace needs highp floats in the fragment stage, 16 texture units, data
+  // textures 1024 wide and a few hundred fragment uniform vectors (gpuCapsProblem). Data textures
+  // are RGBA32F sampled NEAREST; every render target is RGBA8/R8, so EXT_color_buffer_float is a bonus.
   const caps = readGpuCaps(gl);
   canvas.dataset.gpuCaps = `units ${caps.textureUnits}, tex ${caps.textureSize}, fvec ${caps.fragmentVectors}, highp ${caps.highpBits}${caps.parallel ? ", parallel" : ""}`;
   const capsProblem = gpuCapsProblem(caps);
