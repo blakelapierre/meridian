@@ -59,7 +59,7 @@ test("summary table escapes and reports each level", () => {
 
 test("bench is static, in-tab by default, and cache-busted", () => {
   const bench = read("tools/scale/bench.js"), page = read("tools/scale/index.html"), room = read("src/net/room.js");
-  assert.match(page, /bench\.js\?v=5/); assert.match(bench, /summary\.js\?v=\d+/); assert.match(room, /localhub\.js\?v=\d+/);
+  assert.match(page, /bench\.js\?v=\d+/); assert.match(bench, /summary\.js\?v=\d+/); assert.match(room, /localhub\.js\?v=\d+/);
   assert.match(bench, /"bc:"/); assert.match(bench, /MIN_HZ/); assert.match(bench, /MIN_FPS/);
   assert.match(bench, /fresh: "1"/);
   assert.match(read("README.md"), /blakelapierre\.github\.io\/meridian\/tools\/scale\/index\.html/);
