@@ -2,10 +2,18 @@ import { cameraBasis } from "../engine/cast.js";
 import { GPU_TREE_AT, MAX_GPU_NODES, MAX_SHAPE_BODIES, MAX_SHAPE_NODES, gpuNodeCount, gpuNodeData, packGpuNodes, packShapeTree, shapeIndexData, shapeNodeCount, shapeNodeData } from "../engine/octree.js";
 import { VOXEL_M } from "../sim/crust.js";
 import { LAND_H, LAND_NX, LAND_NY, LAND_TOP, LAND_W, LAND_X0, LAND_Y0, MOUNTAIN, PINE_CELL, landTexels } from "../sim/land.js?v=2";
-import { land } from "../sim/life.js?v=82";
+import { land, volcano } from "../sim/life.js?v=83";
+import { LAVA_LEVEL, MAX_BOMBS, PLUME_TOP, VOLCANO, VOLC_N, VOLC_W, VOLC_X0, VOLC_Y0, WIND, volcanoTexels } from "../sim/volcano.js?v=1";
 import { ATLAS, BARK_TILE, CLOTH_TILE, FEATHER_TILE, GRASS_TILE, HAIR_TILE, HIDE_TILE, HORN_TILE, LEAF_TILE, METAL_TILE, ROCK_TILE, SAND_TILE, SCALE_TILE, SHAPE_TILE, SKIN_TILE, WOOD_TILE, barkTexture, blitTexture, clothTexture, featherTexture, grassTexture, hairTexture, hideTexture, hornTexture, leafTexture, metalTexture, rectFor, rockTexture, sandTexture, scaleTexture, skinTexture, woodTexture } from "./texture.js?v=64";
 
 const MAX_SPHERES = 384;
+// The air the volcano heats and fills with ash: its grid plus the reach of the plume and ash downwind.
+const AIR_X0 = Math.min(VOLC_X0, VOLCANO.x + WIND.x * 150 - 50);
+const AIR_Y0 = Math.min(VOLC_Y0, VOLCANO.y + WIND.y * 150 - 50);
+const AIR_X1 = Math.max(VOLC_X0 + VOLC_W, VOLCANO.x + WIND.x * 150 + 50);
+const AIR_Y1 = Math.max(VOLC_Y0 + VOLC_W, VOLCANO.y + WIND.y * 150 + 50);
+const AIR_TOP = LAVA_LEVEL + PLUME_TOP;
+const glf = (v) => Number(v).toFixed(4);
 const MAX_SHAPES = MAX_SHAPE_BODIES;
 const SHAPE_LINEAR = 80;
 const MAX_BOXES = 32;
@@ -238,6 +246,13 @@ uniform float uFog;
 uniform vec4 uFogBank[6];
 uniform vec4 uFogBox;
 uniform float uFogTop;
+uniform sampler2D uVolc;
+uniform vec4 uVolcBox;
+uniform float uVolcano;
+uniform float uHeat;
+uniform int uBombCount;
+uniform vec4 uBombs[${MAX_BOMBS}];
+uniform vec4 uBombVel[${MAX_BOMBS}];
 uniform float uFrame;
 uniform float uFull;
 ${FOVEA_GLSL}
@@ -357,6 +372,22 @@ vec4 landAt(vec2 p) {
   if (!inLandBox(p)) return vec4(0.0, -1000.0, 0.0, 0.0);
   return texture(uLand, (p - uLandBox.xy) / uLandBox.zw);
 }
+// The volcano (src/sim/volcano.js): its own 0.5 m grid. R ground over the dunes, G lava cover,
+// B meters along the lava, A heat of the ground.
+const vec2 VCENTER = vec2(${glf(VOLCANO.x)}, ${glf(VOLCANO.y)});
+const float LAVA_LEVEL = ${glf(LAVA_LEVEL)};
+const float PLUME_TOP = ${glf(PLUME_TOP)};
+const vec2 WIND = vec2(${glf(WIND.x)}, ${glf(WIND.y)});
+const vec3 AIR_MIN = vec3(${glf(AIR_X0)}, ${glf(AIR_Y0)}, 0.0);
+const vec3 AIR_MAX = vec3(${glf(AIR_X1)}, ${glf(AIR_Y1)}, ${glf(AIR_TOP)});
+bool inVolcBox(vec2 p) {
+  vec2 q = p - uVolcBox.xy;
+  return q.x >= 0.0 && q.y >= 0.0 && q.x < uVolcBox.z && q.y < uVolcBox.w;
+}
+vec4 volcAt(vec2 p) {
+  if (!inVolcBox(p)) return vec4(0.0);
+  return texture(uVolc, (p - uVolcBox.xy) / uVolcBox.zw);
+}
 // The same bits as hashU in src/sim/land.js.
 uint hashU(int i, int j, uint seed) {
   uint h = (uint(i) * 0x27d4eb2du) ^ (uint(j) * 0x165667b1u) ^ seed;
@@ -404,13 +435,13 @@ float pineTop(vec2 p, float g, float dens, out vec3 info) {
 }
 // Ground only: dunes plus the land's offset. What the feet stand on.
 float groundHeight(vec2 p) {
-  float h = duneBase(p);
+  float h = duneBase(p) + volcAt(p).r;
   if (!inLandBox(p)) return h;
   return h + landAt(p).r;
 }
 // What a ray meets: ground, water over it, and pines on it.
 float duneHeight(vec2 p) {
-  float h = duneBase(p);
+  float h = duneBase(p) + volcAt(p).r;
   if (!inLandBox(p)) return h;
   vec4 L = landAt(p);
   float g = h + L.r;
@@ -473,6 +504,15 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
     rgb = mix(rgb, lush, smoothstep(0.1, 0.6, L.a) * 0.7);
     float line = L.g - g;
     rgb = mix(rgb, vec3(0.25, 0.21, 0.15), smoothstep(-0.22, 0.02, line) * 0.75);
+  }
+  if (inVolcBox(p)) {
+    // The cone: dark basalt with drifts of grey ash on the gentler slopes.
+    vec4 V = volcAt(p);
+    float steepV = 1.0 - clamp(n.z, 0.0, 1.0);
+    vec3 basalt = vec3(0.13, 0.115, 0.11) * (0.72 + valueNoise(p * 0.9) * 0.5);
+    vec3 ashC = vec3(0.34, 0.32, 0.31) * (0.8 + valueNoise(p * 0.33 + 3.0) * 0.35);
+    vec3 cone = mix(basalt, ashC, smoothstep(0.4, 0.75, valueNoise(p * 0.06 + 1.7)) * (1.0 - smoothstep(0.25, 0.55, steepV)));
+    rgb = mix(rgb, cone, smoothstep(0.3, 2.5, V.r));
   }
   return withWear(rgb, p);
 }
@@ -1104,7 +1144,7 @@ float wetAt(vec3 p) {
 }
 // Mountain shade: a short march toward the sun over the land (canopy level of detail).
 float landShadow(vec3 p, vec3 sun) {
-  if (sun.z <= 0.02 || !inLandBox(p.xy)) return 1.0;
+  if (sun.z <= 0.02 || (!inLandBox(p.xy) && !inVolcBox(p.xy))) return 1.0;
   float keep = gStep;
   gStep = 4.0;
   float t = 0.6;
@@ -1219,6 +1259,183 @@ vec3 withFog(vec3 ro, vec3 rd, float tHit, vec3 color) {
   return mix(fogC, color, T);
 }
 
+// Lava: a glowing surface that crusts over as it runs and cools, plates drifting down the flow
+// (along the B channel's gradient) and the crater lake churning. Returns light it gives off; the
+// rock around lava (A, heat) takes an orange glow. ?volcano=0 leaves it a still, dull crust.
+vec3 volcSurface(vec3 p, inout vec3 rgb, inout float ref) {
+  if (!inVolcBox(p.xy)) return vec3(0.0);
+  vec4 V = volcAt(p.xy);
+  float live = uVolcano;
+  vec3 glow = vec3(0.0);
+  if (V.g > 0.02) {
+    float e = 0.8;
+    vec2 grad = vec2(volcAt(p.xy + vec2(e, 0.0)).b - volcAt(p.xy - vec2(e, 0.0)).b, volcAt(p.xy + vec2(0.0, e)).b - volcAt(p.xy - vec2(0.0, e)).b) / (2.0 * e);
+    float gl = length(grad);
+    vec2 flow = gl > 0.2 ? grad / gl : vec2(0.0);
+    float speed = gl > 0.2 ? 0.8 : 0.12;
+    vec2 q = p.xy * 0.55 - flow * uTime * speed * live;
+    float churn = valueNoise(p.xy * 0.3 + vec2(uTime * 0.05, -uTime * 0.04) * live);
+    float plates = valueNoise(q) * 0.65 + valueNoise(q * 2.3 + 7.0) * 0.35;
+    float cool = clamp(V.b / 70.0, 0.0, 1.0);
+    float crust = clamp(smoothstep(0.42, 0.64, plates + (churn - 0.5) * 0.35) + cool * 0.3, 0.0, 1.0);
+    if (live < 0.5) crust = max(crust, 0.88);
+    float cracks = 1.0 - smoothstep(0.0, 0.07, abs(plates - 0.5));
+    vec3 hotC = mix(vec3(1.0, 0.82, 0.3), vec3(0.95, 0.3, 0.05), smoothstep(0.0, 0.6, crust));
+    rgb = mix(rgb, vec3(0.08, 0.065, 0.06), V.g);
+    glow = V.g * mix(hotC * 2.4, vec3(0.9, 0.2, 0.03) * (0.15 + cracks * 1.3), crust);
+    ref = 0.02;
+  }
+  glow += rgb * vec3(1.0, 0.42, 0.12) * V.a * V.a * 1.2 * (0.35 + 0.65 * live);
+  return glow;
+}
+bool rayBox(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float t0, out float t1) {
+  vec3 inv = 1.0 / vec3(abs(rd.x) > 1.0e-6 ? rd.x : 1.0e-6, abs(rd.y) > 1.0e-6 ? rd.y : 1.0e-6, abs(rd.z) > 1.0e-6 ? rd.z : 1.0e-6);
+  vec3 ta = (bmin - ro) * inv;
+  vec3 tb = (bmax - ro) * inv;
+  vec3 lo = min(ta, tb);
+  vec3 hi = max(ta, tb);
+  t0 = max(max(lo.x, lo.y), max(lo.z, 0.0));
+  t1 = min(min(hi.x, hi.y), hi.z);
+  return t1 > t0;
+}
+// The crater's plume: it rises and leans downwind (plumeShape in volcano.js).
+float plumeShape(vec3 q) {
+  float dz = q.z - LAVA_LEVEL;
+  if (dz < -1.0 || dz > PLUME_TOP) return 0.0;
+  float lean = max(dz, 0.0) * 0.35;
+  vec2 o = q.xy - (VCENTER + WIND * lean);
+  float w = 5.0 + max(dz, 0.0) * 0.22;
+  return exp(-dot(o, o) / (w * w)) * (1.0 - dz / PLUME_TOP);
+}
+// Hot air, 0..1 (heatAt in volcano.js): over hot ground and in the plume, zero elsewhere.
+float heatField(vec3 q) {
+  float h = 0.0;
+  if (inVolcBox(q.xy)) {
+    vec4 V = volcAt(q.xy);
+    float up = q.z - (duneBase(q.xy) + V.r);
+    if (V.a > 0.02 && up > -0.5) h += V.a * exp(-max(up, 0.0) / 7.0);
+  }
+  h = min(1.0, h + 0.9 * plumeShape(q));
+  return h < 0.02 ? 0.0 : h;
+}
+// Ash and cinders in the air (ashDensity in volcano.js).
+float ashDensity(vec3 q) {
+  vec2 o = q.xy - VCENTER;
+  float down = dot(o, WIND);
+  float side = -o.x * WIND.y + o.y * WIND.x;
+  if (q.z < 0.0 || q.z > LAVA_LEVEL + 60.0) return 0.0;
+  float along = max(0.0, down + 20.0);
+  float spread = 14.0 + along * 0.4;
+  float d = exp(-(side * side) / (spread * spread)) * exp(-along / 110.0) * smoothstep(-25.0, 0.0, down);
+  d *= smoothstep(LAVA_LEVEL + 60.0, LAVA_LEVEL + 20.0, q.z);
+  return d < 0.02 ? 0.0 : d;
+}
+// Heat shimmer: the primary ray bends a little where it crosses hot air. The bend follows the
+// gradient of a noise that rises with the convection (z minus time), weighted by how hot the air is
+// along the ray, so the view behind lava and the plume wobbles upward. ?heat=0 skips it.
+vec3 heatShimmer(vec3 ro, vec3 rd) {
+  if (uVolcano < 0.5 || uHeat < 0.5) return rd;
+  float t0;
+  float t1;
+  if (!rayBox(ro, rd, AIR_MIN, AIR_MAX, t0, t1)) return rd;
+  t1 = min(t1, t0 + 280.0);
+  float dt = (t1 - t0) / 8.0;
+  vec2 bend = vec2(0.0);
+  for (int i = 0; i < 8; i++) {
+    vec3 q = ro + rd * (t0 + (float(i) + 0.5) * dt);
+    float h = heatField(q);
+    if (h <= 0.0) continue;
+    vec2 w = vec2(dot(q, uRight) * 1.5, (q.z - uTime * 2.6) * 1.2);
+    float n0 = valueNoise(w);
+    float nx = valueNoise(w + vec2(0.3, 0.0));
+    float ny = valueNoise(w + vec2(0.0, 0.3));
+    bend += vec2(n0 - nx, n0 - ny) * h * min(dt, 8.0);
+  }
+  bend *= 0.0032;
+  float bl = length(bend);
+  if (bl > 0.012) bend *= 0.012 / bl;
+  return normalize(rd + uRight * bend.x + uUp * bend.y);
+}
+// Smoke and steam over the crater, lit orange from below; cinders and ash falling downwind; the
+// glowing trails of lava bombs. Only on the primary ray, and only when it crosses the volcano's air.
+vec3 withVolcanoAir(vec3 ro, vec3 rd, float tHit, vec3 color) {
+  if (uVolcano < 0.5) return color;
+  float t0;
+  float t1;
+  if (!rayBox(ro, rd, AIR_MIN, AIR_MAX, t0, t1)) return color;
+  float tEnd = min(t1, tHit);
+  vec3 sun = normalize(uSun);
+  float day = smoothstep(-0.05, 0.25, sun.z);
+  if (tEnd > t0) {
+    float span = min(tEnd, t0 + 320.0) - t0;
+    float dt = span / 10.0;
+    float jitter = ign(gl_FragCoord.xy + 2.1 * mod(uFrame, 32.0));
+    float optical = 0.0;
+    float lit = 0.0;
+    for (int i = 0; i < 10; i++) {
+      vec3 q = ro + rd * (t0 + (float(i) + jitter) * dt);
+      float ps = plumeShape(q);
+      if (ps < 0.01) continue;
+      float rise = q.z - uTime * 1.8;
+      float n = valueNoise(q.xy * 0.09 + vec2(0.0, rise * 0.09)) * 0.6 + valueNoise(vec2(dot(q.xy, vec2(0.7, -0.7)) * 0.21, (q.z - uTime * 2.6) * 0.21) + 3.0) * 0.4;
+      float d = ps * smoothstep(0.25, 0.7, n) * 1.5;
+      optical += d * dt;
+      lit += d * dt * exp(-max(q.z - LAVA_LEVEL, 0.0) / 9.0) * exp(-0.09 * optical);
+    }
+    float T = exp(-0.09 * optical);
+    vec3 smoke = mix(vec3(0.07, 0.065, 0.065), vec3(0.5, 0.49, 0.48), day);
+    color = mix(smoke, color, T) + vec3(1.0, 0.36, 0.08) * lit * 0.1;
+    for (int k = 0; k < 12; k++) {
+      float d = 2.0 + float(k * k) * 0.9;
+      if (d < t0 || d > tEnd) continue;
+      vec3 q = ro + rd * d;
+      float dens = ashDensity(q);
+      if (dens <= 0.0) continue;
+      float cs = 1.6 + d * 0.035;
+      vec3 shift = vec3(-WIND * uTime * 2.2, uTime * 1.3);
+      vec3 a = q + shift;
+      vec3 c = floor(a / cs);
+      uint h = hashU(int(c.x) + int(c.z) * 4111, int(c.y), 0x51u);
+      float r0 = float(h & 1023u) / 1023.0;
+      if (r0 > dens * 0.85) continue;
+      vec3 jit = vec3(float((h >> 10u) & 255u), float((h >> 18u) & 255u), float((h >> 24u) & 255u)) / 255.0;
+      vec3 P = (c + 0.2 + 0.6 * jit) * cs - shift;
+      vec3 o = P - ro;
+      float along = dot(o, rd);
+      if (along <= 0.0 || along > tHit) continue;
+      float dist = length(o - rd * along);
+      float size = 0.03 + along * 0.0019;
+      float m = smoothstep(size, size * 0.3, dist);
+      if (m <= 0.0) continue;
+      if (((h >> 5u) & 3u) == 0u) color += vec3(1.0, 0.45, 0.1) * m * (1.3 + 0.7 * sin(uTime * 9.0 + r0 * 40.0));
+      else color = mix(color, vec3(0.19, 0.18, 0.17), m * 0.8);
+    }
+  }
+  for (int i = 0; i < ${MAX_BOMBS}; i++) {
+    if (i >= uBombCount) break;
+    vec4 vel = uBombVel[i];
+    if (dot(vel.xyz, vel.xyz) < 0.01) continue;
+    vec3 b = uBombs[i].xyz;
+    vec3 a = b - vel.xyz * 0.45;
+    vec3 u = b - a;
+    vec3 w0 = ro - a;
+    float B = dot(rd, u);
+    float C = dot(u, u);
+    float D = dot(rd, w0);
+    float E = dot(u, w0);
+    float den = C - B * B;
+    float tc = den > 1.0e-6 ? clamp((E - B * D) / den, 0.0, 1.0) : 1.0;
+    vec3 on = a + u * tc;
+    float sc = dot(on - ro, rd);
+    if (sc <= 0.0 || sc > tHit) continue;
+    float dist = length(ro + rd * sc - on);
+    float width = uBombs[i].w * 0.6 * (0.3 + 0.7 * tc) + sc * 0.0015;
+    float g = exp(-(dist * dist) / (width * width)) * (0.15 + 0.85 * tc) * vel.w;
+    color += vec3(1.0, 0.5, 0.14) * g * 1.6;
+  }
+  return color;
+}
+
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);
   float day = smoothstep(0.0, 0.2, sun.z);
@@ -1263,6 +1480,7 @@ void main() {
   float py = (1.0 - vv * 2.0) * halfAngle;
   vec3 rd = normalize(uRight * px + uUp * py + uForward * uPlane);
   vec3 ro = uOrigin;
+  rd = heatShimmer(ro, rd);
   vec3 rd0 = rd;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
@@ -1374,6 +1592,28 @@ void main() {
         found = true;
       }
     }
+    // Lava bombs (bombsAt in volcano.js, on the shared clock): dark crusted rock with glowing cracks.
+    int bombHit = -1;
+    if (uVolcano > 0.5) {
+      for (int i = 0; i < ${MAX_BOMBS}; i++) {
+        if (i >= uBombCount) break;
+        if (!sphereHit(ro, rd, uBombs[i], t) || t <= 0.02 || t >= bestT) continue;
+        bestT = t;
+        bestP = ro + rd * t;
+        bestN = normalize(bestP - uBombs[i].xyz);
+        bestRgb = vec3(0.08, 0.065, 0.06);
+        bestRef = 0.02;
+        found = true;
+        bombHit = i;
+      }
+    }
+    vec3 bestGlow = vec3(0.0);
+    if (found && sand && bestT == sandT) bestGlow = volcSurface(bestP, bestRgb, bestRef);
+    if (bombHit >= 0) {
+      vec3 local = bestN * 3.1 + uBombs[bombHit].xyz * 0.37;
+      float seam = valueNoise(local.xy + local.z) * 0.6 + valueNoise(local.yz * 1.7) * 0.4;
+      bestGlow = vec3(1.0, 0.42, 0.09) * uBombVel[bombHit].w * (0.5 + 2.2 * (1.0 - smoothstep(0.0, 0.12, abs(seam - 0.5))));
+    }
     float workT = 1.0e30;
     if (bounce == 0 && uWork.w > 0.5) {
       float rise = max(uWork.z, 0.08);
@@ -1406,6 +1646,7 @@ void main() {
         float nd = max(dot(bestN, normalize(uSun)), 0.0);
         bestRgb *= vec3(0.20, 0.22, 0.28) + vec3(1.08, 0.98, 0.86) * nd;
       }
+      bestRgb += bestGlow;
       if (bounce == 0) {
         float low = exp(-max(bestP.z, 0.0) * 0.11);
         float fog = (1.0 - exp(-bestT * 0.0011)) * mix(0.35, 1.0, low);
@@ -1459,6 +1700,7 @@ void main() {
     ro = bestP + bestN * 0.05;
   }
   accum = withFog(uOrigin, rd0, firstT, accum);
+  accum = withVolcanoAir(uOrigin, rd0, firstT, accum);
   // Rain you can see: under a thick deck (uRain from src/sim/cloud.js) thin falling streaks dim and
   // grey the view. Streak columns are hashed, and each falls at its own pace on tick time.
   // Under a roof (anything solid straight above the camera) the near streaks and grey stop.
@@ -1621,6 +1863,24 @@ void main() {
   } catch {
     landTex = null;
   }
+  // The volcano grid (src/sim/volcano.js) on unit 11, rebound every trace draw (the resolve pass uses 11 too).
+  let volcTex = null;
+  try {
+    volcTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE11);
+    gl.bindTexture(gl.TEXTURE_2D, volcTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, VOLC_N, VOLC_N, 0, gl.RGBA, gl.FLOAT, volcanoTexels(volcano()));
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  } catch {
+    volcTex = null;
+  }
+  const bombPos = new Float32Array(MAX_BOMBS * 4);
+  const bombVel = new Float32Array(MAX_BOMBS * 4);
   const landField = land();
   const fogBank = new Float32Array(24);
   let fogX0 = Infinity;
@@ -2056,6 +2316,23 @@ void main() {
       gl.uniform4fv(u("uFogBank[0]"), fogBank);
       gl.uniform4f(u("uFogBox"), fogX0, fogY0, fogX1, fogY1);
       gl.uniform1f(u("uFogTop"), fogTop);
+      gl.activeTexture(gl.TEXTURE11);
+      gl.bindTexture(gl.TEXTURE_2D, volcTex);
+      gl.uniform1i(u("uVolc"), 11);
+      gl.uniform4f(u("uVolcBox"), VOLC_X0, VOLC_Y0, volcTex ? VOLC_W : 0, volcTex ? VOLC_W : 0);
+      const vol = scene.volcano || null;
+      gl.uniform1f(u("uVolcano"), vol ? vol.on : 0);
+      gl.uniform1f(u("uHeat"), vol ? vol.heat : 0);
+      const bombs = vol && vol.on ? (vol.bombs || []).slice(0, MAX_BOMBS) : [];
+      bombPos.fill(0);
+      bombVel.fill(0);
+      bombs.forEach((b, i) => {
+        bombPos.set([b.x, b.y, b.z, b.r], i * 4);
+        bombVel.set([b.vx, b.vy, b.vz, Math.max(0, b.heat)], i * 4);
+      });
+      gl.uniform1i(u("uBombCount"), bombs.length);
+      gl.uniform4fv(u("uBombs[0]"), bombPos);
+      gl.uniform4fv(u("uBombVel[0]"), bombVel);
       setFovea(prog, fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, refine: 0 }, scene.camera, !fovea || forceFull);
       gl.uniform1f(u("uExposure"), exposureFor(sun));
       const halfTan = Math.tan(((scene.camera.fov || 70) * Math.PI) / 360);
