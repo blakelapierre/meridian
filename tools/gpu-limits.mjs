@@ -19,9 +19,15 @@ const patches = {
 };
 patches.slowfull = `(() => { const P = WebGL2RenderingContext.prototype; const full = new WeakSet(); const ss = P.shaderSource; P.shaderSource = function (s, t) { if (t.includes("const bool LITE = false")) full.add(s); return ss.call(this, s, t); }; const c = P.compileShader; P.compileShader = function (s) { if (full.has(s)) { const t = Date.now(); while (Date.now() - t < 20000) {} } return c.call(this, s); }; })();`;
 patches.parallel = `(() => { const P = WebGL2RenderingContext.prototype; const EXT = { COMPLETION_STATUS_KHR: 0x91B1, MAX_SHADER_COMPILER_THREADS_KHR: 0x91B0 }; const ge = P.getExtension; P.getExtension = function (n) { return n === "KHR_parallel_shader_compile" ? EXT : ge.call(this, n); }; const full = new WeakSet(); const ss = P.shaderSource; P.shaderSource = function (s, t) { if (t.includes("const bool LITE = false")) full.add(s); return ss.call(this, s, t); }; const shaders = new WeakMap(); const at = P.attachShader; P.attachShader = function (p, s) { if (full.has(s)) shaders.set(p, true); return at.call(this, p, s); }; const linked = new WeakMap(); const lp = P.linkProgram; P.linkProgram = function (p) { linked.set(p, Date.now()); return lp.call(this, p); }; const gp = P.getProgramParameter; P.getProgramParameter = function (p, k) { if (k === 0x91B1) return !shaders.get(p) || Date.now() - linked.get(p) > 20000; return gp.call(this, p, k); }; })();`;
+patches.nowebgl2 = `(() => { if (self.HTMLCanvasElement) { const g = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (k, o) { return k === "webgl2" ? null : g.call(this, k, o); }; } if (self.OffscreenCanvas) { const og = OffscreenCanvas.prototype.getContext; OffscreenCanvas.prototype.getContext = function (k, o) { return k === "webgl2" ? null : og.call(this, k, o); }; } })();`;
+patches.nooffscreen = `(() => { try { delete HTMLCanvasElement.prototype.transferControlToOffscreen; } catch {} try { delete self.OffscreenCanvas; } catch {} })();`;
+patches.noworkermodule = `(() => { if (!self.Worker) return; const W = self.Worker; self.Worker = function (url, opts) { if (opts && opts.type === "module") throw new TypeError("Module scripts are not supported on DedicatedWorker yet"); return new W(url, opts); }; })();`;
+patches.badworker = `(() => { if (!self.Worker) return; const W = self.Worker; self.Worker = function (url, opts) { return new W(String(url).replace(/render-worker\.js/, "render-worker-missing.js"), opts); }; })();`;
+patches.badmodule = "";
 const patch = patches[scenario];
-const { createStaticServer } = await import(join(root, "tools/serve.js"));
-const site = await createStaticServer(root);
+// root may be a live site URL (e.g. https://…/meridian/) instead of a checkout.
+const live = /^https?:/.test(root);
+const site = live ? { toString: () => root, close: () => {} } : await (await import(join(root, "tools/serve.js"))).createStaticServer(root);
 const url = `${String(site).replace(/\/$/, "")}/tools/view/index.html?${query}`;
 const dir = await mkdtemp(join(tmpdir(), "m27r-"));
 const child = spawn("/usr/bin/google-chrome", ["--headless=new", "--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--window-size=412,800", "--no-first-run", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${dir}`, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
@@ -45,12 +51,22 @@ try {
   await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
   if (patch) await send("Page.addScriptToEvaluateOnNewDocument", { source: patch });
   await send("Page.enable");
+  await send("Runtime.enable");
+  ws.addEventListener("message", (ev) => {
+    const m = JSON.parse(String(ev.data));
+    if (m.method === "Runtime.exceptionThrown") console.log("EXCEPTION", (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text || "").slice(0, 300));
+    if (m.method === "Runtime.consoleAPICalled" && /error|warn/.test(m.params.type)) console.log("CONSOLE", m.params.type, m.params.args.map((a) => a.value ?? a.description ?? "").join(" ").slice(0, 300));
+    if (m.method === "Log.entryAdded" && m.params.entry.level === "error") console.log("LOG", m.params.entry.text.slice(0, 300), m.params.entry.url || "");
+  });
+  await send("Log.enable");
+  if (scenario === "badmodule") await send("Fetch.enable", { patterns: [{ urlPattern: "*src/app/picture.js*" }] });
+  ws.addEventListener("message", (ev) => { const m = JSON.parse(String(ev.data)); if (m.method === "Fetch.requestPaused") send("Fetch.failRequest", { requestId: m.params.requestId, errorReason: "Failed" }); });
   await send("Page.navigate", { url });
   const t0 = Date.now();
   let last = "";
   while (Date.now() - t0 < waitMs) {
     await new Promise((r) => setTimeout(r, 1000));
-    const r = await send("Runtime.evaluate", { returnByValue: true, expression: `JSON.stringify({ boot: document.querySelector("#boot [data-boot-line]")?.textContent, bootHidden: document.querySelector("#boot")?.hidden, fx: document.querySelector("#fxnote")?.textContent || "", glerr: document.querySelector("#glerr")?.hidden ? "" : document.querySelector("#glerr")?.textContent, ds: Object.fromEntries(Object.entries(document.querySelector("canvas")?.dataset || {}).filter(([k]) => /renderer|picture|gpu|ready|center/.test(k))) })` });
+    const r = await Promise.race([new Promise((r) => setTimeout(() => r({ result: { result: { value: "(page busy: no answer in 5 s)" } } }), 5000)), send("Runtime.evaluate", { returnByValue: true, expression: `JSON.stringify({ q: location.search, boot: document.querySelector("#boot [data-boot-line]")?.textContent, bootHidden: document.querySelector("#boot")?.hidden, fx: document.querySelector("#fxnote")?.textContent || "", glerr: document.querySelector("#glerr")?.hidden ? "" : document.querySelector("#glerr")?.textContent, ds: Object.fromEntries(Object.entries(document.querySelector("canvas")?.dataset || {}).filter(([k]) => /renderer|picture|gpu|ready|center/.test(k))) })` })]);
     const v = r.result?.result?.value || "";
     if (v !== last) { console.log(`${Math.round((Date.now() - t0) / 1000)}s`, v.slice(0, 1400)); last = v; }
   }

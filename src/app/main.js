@@ -167,7 +167,7 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture, pictureMode } from "./picture.js?v=7";
+import { openPicture, pictureMode } from "./picture.js?v=8";
 
 // `let`: if the picture thread fails, the page swaps in a fresh canvas for the CPU picture.
 let canvas = document.querySelector("canvas");
@@ -229,6 +229,8 @@ if (keepSlot) {
   else if (params.get("who") === "new") dropCharacter(keptStore, keepSlot);
 }
 bootNote("Loading Meridian", 0.08);
+// The page's inline guard (index.html) watches for this: the modules loaded and the page runs.
+globalThis.__meridianRunning = true;
 // ?simonly=1 (scale bench thumbnails past the live WebGL budget): no GPU context, no painting;
 // sim, bots and network run as usual. Browsers cap live WebGL contexts per tab (~16).
 const SIM_ONLY = new URLSearchParams(location.search).get("simonly") === "1";
@@ -338,7 +340,7 @@ function glFacts() {
   const f = painter?.facts?.() || opened.painter?.facts?.() || {};
   const d = canvas.dataset;
   const parts = [
-    `mode ${opened.mode.where}${opened.mode.mobile ? " (phone)" : ""}`,
+    `mode ${opened.mode.where}${opened.mode.why ? ` (${opened.mode.why})` : ""}${opened.mode.mobile ? " (phone)" : ""}`,
     `effects ${effectsText(painter?.effects?.() || {}) || (d.gpuEffects || "")}`,
     f.info || d.gpuInfo ? `gpu ${f.info || d.gpuInfo}` : "",
     f.caps || d.gpuCaps ? `caps ${f.caps || d.gpuCaps}` : "",
@@ -389,10 +391,17 @@ const keys = new Set();
 // see a transient "Failed to fetch" in headless Chrome, which used to kill the whole page.
 async function fetchRetry(url, options, tries = 5) {
   for (let i = 1; ; i += 1) {
-    try { return await fetch(url, options); } catch (error) {
+    // A 5xx from the CDN (GitHub Pages answers 503 now and then) is retried like a network error.
+    try {
+      const response = await fetch(url, options);
+      if (response.ok || response.status < 500 || i >= tries) {
+        if (!response.ok) throw new Error(`${response.status} for ${String(url).split("/").pop()}`);
+        return response;
+      }
+    } catch (error) {
       if (i >= tries) throw error;
-      await new Promise((done) => setTimeout(done, 150 * i));
     }
+    await new Promise((done) => setTimeout(done, 300 * i));
   }
 }
 bootNote("Reading the island", 0.28);

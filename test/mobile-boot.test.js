@@ -11,6 +11,7 @@ const DESK = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Ge
 function fakeWorker() {
   const made = [];
   class FakeWorker {
+    static moduleProbe = true;
     constructor(url) {
       this.url = String(url);
       this.sent = [];

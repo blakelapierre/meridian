@@ -101,3 +101,21 @@ refraction) in the background, swapping it in the moment it links — no reload,
 - `?gl=full`: full shader from the start (old behaviour). `?gl=lite`: stay lite.
 - `tools/gpu-limits.mjs` scenarios: `parallel` (fake parallel compile that finishes 20 s after
   link), `slowfull` (a 20 s blocking full compile), `bigfail` (full compile fails).
+
+## Boot guard and stale pages (Batch 28)
+
+- `tools/view/index.html` runs a classic inline guard before the game module. It catches window
+  errors (capture phase, so a script that fails to load counts too) and unhandled rejections, and
+  writes the real text on the curtain (and `#glerr`, with the build and user agent). If the game
+  code has not started after 30 s it says so. `<script nomodule>` names a browser too old for modules.
+- **Stale HTML.** GitHub Pages serves the HTML with `max-age=600`, so for up to 10 minutes after a
+  deploy a browser can keep the old page and therefore the old `?v=` modules. The guard fetches
+  `tools/view/build.txt` with `no-store`. If that number differs from the page's `BUILD`, it moves
+  once to the same URL plus `&build=<n>`, a new URL the cache does not hold. `build.txt`, `BUILD` and
+  `main.js?v=` must agree (test/boot-guard.test.js). Bump all three together.
+- No module workers (older browsers) or no OffscreenCanvas: the trace runs on the page thread
+  (`mode main (why)` in `?debug=1`). A thread that fails to load falls back to the CPU picture.
+- Content fetches retry a CDN 5xx (GitHub Pages answered 503 for `atoll.json` once in testing) rather
+  than parsing its error page.
+- `tools/gpu-limits.mjs` takes a live URL as root. New scenarios: `nowebgl2`, `nooffscreen`,
+  `noworkermodule`, `badworker`, `badmodule`.

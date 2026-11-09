@@ -19,21 +19,39 @@ export function pictureMode(search = "", ua = "", mobileHint = null) {
 // phone may need most of a minute to compile; past this the page falls back to the CPU picture.
 export const PICTURE_DEADLINE_MS = 90000;
 
+// Module workers (Chrome 80+, Safari 15+, Firefox 114+): an older browser ignores `type` and would
+// load the thread as a classic script, which fails on its first import. The options getter is the
+// standard probe: it is only read when the browser knows the option.
+export function moduleWorkers(WorkerImpl = globalThis.Worker) {
+  if (WorkerImpl && WorkerImpl.moduleProbe != null) return Boolean(WorkerImpl.moduleProbe);
+  let known = false;
+  try {
+    const url = typeof Blob === "function" && globalThis.URL?.createObjectURL ? URL.createObjectURL(new Blob([""], { type: "text/javascript" })) : "data:text/javascript,";
+    const probe = new WorkerImpl(url, { get type() { known = true; return "module"; } });
+    probe.terminate?.();
+    if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+  } catch {}
+  return known;
+}
+
 export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worker, ua = globalThis.navigator?.userAgent || "", mobile = globalThis.navigator?.userAgentData?.mobile ?? null, deadlineMs = PICTURE_DEADLINE_MS } = {}) {
   const mode = pictureMode(search, ua, mobile);
-  if (mode.where !== "worker" || !canvas || typeof canvas.transferControlToOffscreen !== "function" || typeof WorkerImpl !== "function") {
-    return { painter: null, remote: false, mode };
-  }
+  // No picture thread possible (no OffscreenCanvas, no module workers, or it throws): trace on the
+  // page thread instead. `mode` is always returned, since the page reads it.
+  const onPage = (why) => ({ painter: null, remote: false, mode: { ...mode, where: "main", why } });
+  if (mode.where !== "worker") return { painter: null, remote: false, mode };
+  if (!canvas || typeof canvas.transferControlToOffscreen !== "function") return onPage("no OffscreenCanvas");
+  if (typeof WorkerImpl !== "function" || !moduleWorkers(WorkerImpl)) return onPage("no module workers");
   let thread;
   try {
     thread = new WorkerImpl(new URL("./render-worker.js?v=10", import.meta.url), { type: "module" });
-  } catch {
-    return { painter: null, remote: false };
+  } catch (error) {
+    return onPage(`worker: ${error?.message || error}`);
   }
   let offscreen;
-  try { offscreen = canvas.transferControlToOffscreen(); } catch {
+  try { offscreen = canvas.transferControlToOffscreen(); } catch (error) {
     thread.terminate?.();
-    return { painter: null, remote: false };
+    return onPage(`offscreen: ${error?.message || error}`);
   }
   let reason = "";
   let settled = false;
