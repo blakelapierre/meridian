@@ -15,8 +15,8 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene, pictureCamera } from "../render/scene.js?v=76";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=98";
+import { buildScene, pictureCamera } from "../render/scene.js?v=77";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=99";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -144,7 +144,8 @@ import { craftHelper, cycleHelperTask, dismissHelper, helperLine, nearestHelper,
 import { stepBows } from "../sim/bow.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { duneHeight, fauna, graze, groundLook, herdPrints, standHeight } from "../sim/life.js?v=80";
+import { duneHeight, fauna, graze, groundLook, herdPrints, land, standHeight } from "../sim/life.js?v=81";
+import { fogLevel, landView } from "../sim/land.js?v=1";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
 import { createVein, tapVein } from "../sim/vein.js";
 import { separate } from "../sim/separate.js";
@@ -163,7 +164,7 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture } from "./picture.js";
+import { openPicture } from "./picture.js?v=2";
 
 const canvas = document.querySelector("canvas");
 const params = new URLSearchParams(location.search);
@@ -350,8 +351,12 @@ const tourWanted = (demo || params.get("tour") === "1") && params.get("tour") !=
 const tourSeen = params.get("tour") === "1" ? [] : (() => { try { return JSON.parse(localStorage.getItem(TOUR_KEY) || "[]"); } catch { return []; } })();
 // A brand-new player with no demo link starts a few steps from the marker, facing it.
 const tourSpawn = tourWanted && !tourSeen.length && !home && !peer && !params.get("gate") && !params.get("look") && !digDemo;
+// ?look=mountain stands on the lake shore facing the mountain; ?look=spring stands up the stream below the spring.
+const landLook = params.get("look") === "mountain" || params.get("look") === "spring" ? landView(land(), params.get("look")) : null;
 const spawn = home
   ? { x: home[0] * 100, y: home[1] * 100, z: 0 }
+  : landLook
+  ? { x: Math.round(landLook.x * 100), y: Math.round(landLook.y * 100), z: 0 }
   : params.get("gate") === "1"
   ? { x: 0, y: -10900, z: 0 }
   : tourSpawn
@@ -432,8 +437,10 @@ let tourArmed = -2;
 let tourTurn = null;
 let tourLast = null;
 let shotFlash = { text: "", until: 0 };
-let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : tourSpawn ? TOUR_START.yaw : 0);
-let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : 0);
+let yaw = params.get("autobit") === "1" || digDemo ? 0 : (params.get("look") === "dummy" ? Math.PI / 2 : landLook ? landLook.yaw : tourSpawn ? TOUR_START.yaw : 0);
+let pitch = params.get("autobit") === "1" || digDemo ? -1.2 : (params.get("look") === "dummy" ? -0.075 : landLook ? landLook.pitch : 0);
+// ?fog=0 turns the valley and lake fog off, 2 thickens it. Bot clients (?bot=) default to off.
+const fogParam = fogLevel(params.get("fog"), Boolean(params.get("bot")));
 let view = params.get("view") === "first" || params.get("look") === "dummy" ? "first" : "third";
 // ?phase=<radians> sets the starting sun angle (0.87 is mid-morning, ~2.9 dusk, ~4.6 night) for repeatable screenshots.
 // ?clock= speeds the day, the weather, and plant growth. Walking stays at real time. 1 is the default.
@@ -2625,6 +2632,7 @@ function stageFor(sample, width, height, scene) {
     work,
     time: scene.time,
     rain: scene.rain,
+    fog: fogParam,
     gaze: scene.gaze,
     fovea: scene.fovea,
     inEyes: zoom.blend >= 1 || (view === "first" && zoom.blend === 0),
@@ -2704,6 +2712,7 @@ function paint(sample, width = canvas.width, height = canvas.height) {
   scene.work = work;
   scene.time = envTick() / 30;
   scene.rain = rainForced >= 0 ? rainForced : rainAt(player.position[0], player.position[1], envTick());
+  scene.fog = fogParam;
   scene.gaze = gazeFor(
     scene.camera,
     eyeOf(sample),

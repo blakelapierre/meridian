@@ -4,7 +4,7 @@ import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=57";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js?v=2";
 import { dummyTexture } from "./texture.js";
-import { duneHeight, fauna, floraParts } from "../sim/life.js?v=80";
+import { bankParts, duneHeight, fauna, floraParts } from "../sim/life.js?v=81";
 import { PEOPLE } from "../sim/people.js?v=2";
 import { helperParts } from "../sim/helper.js?v=1";
 
@@ -148,6 +148,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick
   }
   if (!sparse) {
     for (const part of floraParts(tick * 1000 / 30, sunTick == null ? tick : sunTick)) objects.push(drawnPart(part, "flora"));
+    for (const part of bankParts(feet, tick * 1000 / 30)) objects.push(drawnPart(part, "flora"));
   }
   for (const animal of fauna(Date.now(), feet, { parts: !sparse })) {
     if (animal.id && down.includes(animal.id)) continue;
