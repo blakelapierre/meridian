@@ -1,8 +1,10 @@
 import { spanShape, triShape } from "./form.js?v=1";
+import { LAKE, MOUNTAIN, bakeLand, bankPlants, inLand, landBank, landDelta, landPineDensity, landWater, mountainHeight } from "./land.js?v=2";
 
 export const HILL = 5.4;
 
-export function duneHeight(x, y) {
+// The rolling dunes alone. The mountain, lake and river ride on top of these (land.js).
+export function baseDune(x, y) {
   const roll = 0.5 * Math.sin(x * 0.15) + 0.5 * Math.cos(y * 0.13);
   const wash = 0.5 * Math.sin((x + y) * 0.17 + 1.3) + 0.5;
   const n = Math.max(0, Math.min(1, 0.55 * roll + 0.45 * wash));
@@ -14,6 +16,29 @@ export function duneHeight(x, y) {
   h = Math.min(HILL, h + ridge * 1.6);
   return Math.max(0, h);
 }
+
+let landField = null;
+export function land() {
+  if (!landField) landField = bakeLand(baseDune);
+  return landField;
+}
+
+// Ground height: the dunes, plus the north mountain, the lake basin, and the channel the water cut.
+export function duneHeight(x, y) {
+  const h = baseDune(x, y);
+  if (!inLand(x, y)) return h;
+  return h + landDelta(land(), x, y);
+}
+
+// Water surface over this point, or null where it is dry.
+export function waterAt(x, y) {
+  if (!inLand(x, y)) return null;
+  const w = landWater(land(), x, y);
+  return w > duneHeight(x, y) + 0.01 ? w : null;
+}
+
+// Deep water floats you: the feet never sit more than WADE under the surface, so the head stays out.
+export const WADE = 1.25;
 
 export function graze(patch) {
   const stock = Math.max(0, (patch?.stock || 0) - 1);
@@ -86,7 +111,9 @@ export function herd(patch, at = [12, -150, 0], count = 3, parts = true, nowMs =
 
 export function standHeight(x, y, dug = 0) {
   if (dug < -0.01) return dug;
-  return duneHeight(x, y);
+  const h = duneHeight(x, y);
+  const w = waterAt(x, y);
+  return w == null ? h : Math.max(h, w - WADE);
 }
 
 function smoothstep(edge0, edge1, value) {
@@ -105,6 +132,15 @@ function slopeAt(x, y) {
 // Beach, scrub, meadow, marsh, grove, and ridge. The kind on the chart stays sand, grass, or rock.
 export function biomeAt(x, y) {
   const h = duneHeight(x, y);
+  if (inLand(x, y)) {
+    const field = land();
+    if (waterAt(x, y) != null) return Math.hypot(x - LAKE.x, y - LAKE.y) < LAKE.radius * 1.5 ? "lake" : "river";
+    if (landBank(field, x, y) > 0.35) return "bank";
+    const m = mountainHeight(x, y, field.seedHash);
+    if (m > 2 && h > MOUNTAIN.height * 0.72) return "summit";
+    if (landPineDensity(field, x, y) > 0.15) return "pines";
+    if (m > 2) return "slope";
+  }
   const marsh = Math.exp(-(((x - 36) ** 2) + ((y + 96) ** 2)) / 2200);
   if (marsh > 0.42 && h < 1.6) return "marsh";
   const grove = Math.exp(-(((x + 16) ** 2) + ((y + 128) ** 2)) / 2600);
@@ -123,6 +159,17 @@ export function groundLook(x, y) {
   let grassW = (1 - rockW) * smoothstep(0.1, 0.34, crest) * (1 - smoothstep(0.58, 0.86, crest));
   grassW *= 1 - smoothstep(0.16, 0.46, slope);
   const biome = biomeAt(x, y);
+  if (biome === "lake" || biome === "river" || biome === "bank" || biome === "summit" || biome === "pines" || biome === "slope") {
+    const look = {
+      lake: ["sand", [70, 92, 96]],
+      river: ["sand", [78, 98, 100]],
+      bank: ["grass", [62, 118, 52]],
+      summit: ["rock", [150, 148, 146]],
+      pines: ["grass", [52, 82, 44]],
+      slope: [rockW > 0.45 ? "rock" : "grass", rockW > 0.45 ? [124, 118, 108] : [96, 124, 62]],
+    }[biome];
+    return { kind: look[0], biome, color: [...look[1], 255], crest, grassW, rockW };
+  }
   const sand = biome === "marsh" ? [118, 124, 86] : [196, 168, 112];
   const grass = biome === "grove" ? [48, 110, 42] : biome === "meadow" ? [86, 150, 58] : biome === "marsh" ? [64, 108, 62] : [92, 124, 48];
   const rock = biome === "ridge" ? [132, 126, 116] : [142, 136, 124];
@@ -367,6 +414,49 @@ export function livingPlants(tick = 0) {
     }
   }
   return plants;
+}
+
+function reedParts(parts, x, y, z, nowMs, size = 1) {
+  const stem = [0.36, 0.5, 0.22, 1];
+  const head = [0.36, 0.24, 0.12, 1];
+  for (let i = 0; i < 3; i += 1) {
+    const ang = i * 2.1 + x * 0.7;
+    const sway = Math.sin(nowMs / 650 + i * 1.7 + y) * 0.06;
+    const tall = (0.9 + 0.25 * i) * size;
+    const root = [x + Math.cos(ang) * 0.08, y + Math.sin(ang) * 0.08, z];
+    const tip = [root[0] + sway + Math.cos(ang) * 0.06, root[1] + Math.sin(ang) * 0.06, z + tall];
+    parts.push(spanShape("capsule", root, tip, 0.016 * size, stem, { tile: "leaf" }));
+    if (i < 2) parts.push(spanShape("capsule", [tip[0], tip[1], tip[2] - 0.2 * size], tip, 0.035 * size, head, { tile: "hide" }));
+  }
+}
+
+// Reeds and bushes on the stream, lake and river banks near the viewer. Fixed positions (land.js),
+// nearest first, capped so the picture budget stays for the people and the yard.
+export const BANK_REEDS = 18;
+export const BANK_BUSHES = 6;
+export function bankParts(feet, nowMs = 0, reach = 42) {
+  if (!feet) return [];
+  const fx = feet[0];
+  const fy = feet[1];
+  if (fy < 24 - reach) return [];
+  const near = bankPlants(land())
+    .map((plant) => ({ plant, d: Math.hypot(plant.x - fx, plant.y - fy) }))
+    .filter((entry) => entry.d < reach)
+    .sort((a, b) => a.d - b.d);
+  const parts = [];
+  let reeds = 0;
+  let bushes = 0;
+  for (const { plant } of near) {
+    const z = duneHeight(plant.x, plant.y);
+    if (plant.kind === "reed" && reeds < BANK_REEDS) {
+      reeds += 1;
+      reedParts(parts, plant.x, plant.y, z, nowMs, plant.size);
+    } else if (plant.kind === "bush" && bushes < BANK_BUSHES) {
+      bushes += 1;
+      bushParts(parts, plant.x, plant.y, z, [0.2, 0.42, 0.16, 1], nowMs, plant.size * 1.4);
+    }
+  }
+  return parts;
 }
 
 export function floraBoxes() {

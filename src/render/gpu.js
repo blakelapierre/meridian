@@ -1,6 +1,8 @@
 import { cameraBasis } from "../engine/cast.js";
 import { GPU_TREE_AT, MAX_GPU_NODES, MAX_SHAPE_BODIES, MAX_SHAPE_NODES, gpuNodeCount, gpuNodeData, packGpuNodes, packShapeTree, shapeIndexData, shapeNodeCount, shapeNodeData } from "../engine/octree.js";
 import { VOXEL_M } from "../sim/crust.js";
+import { LAND_H, LAND_NX, LAND_NY, LAND_TOP, LAND_W, LAND_X0, LAND_Y0, MOUNTAIN, PINE_CELL, landTexels } from "../sim/land.js?v=2";
+import { land } from "../sim/life.js?v=82";
 import { ATLAS, BARK_TILE, CLOTH_TILE, FEATHER_TILE, GRASS_TILE, HAIR_TILE, HIDE_TILE, HORN_TILE, LEAF_TILE, METAL_TILE, ROCK_TILE, SAND_TILE, SCALE_TILE, SHAPE_TILE, SKIN_TILE, WOOD_TILE, barkTexture, blitTexture, clothTexture, featherTexture, grassTexture, hairTexture, hideTexture, hornTexture, leafTexture, metalTexture, rectFor, rockTexture, sandTexture, scaleTexture, skinTexture, woodTexture } from "./texture.js?v=64";
 
 const MAX_SPHERES = 384;
@@ -229,6 +231,13 @@ uniform int uPrints;
 uniform vec4 uWork;
 uniform float uTime;
 uniform float uRain;
+uniform sampler2D uLand;
+uniform vec4 uLandBox;
+uniform uint uPineSeed;
+uniform float uFog;
+uniform vec4 uFogBank[6];
+uniform vec4 uFogBox;
+uniform float uFogTop;
 uniform float uFrame;
 uniform float uFull;
 ${FOVEA_GLSL}
@@ -319,7 +328,7 @@ float cloudShade(vec3 rd) {
   return cloudShadeAt(uOrigin, rd);
 }
 
-float duneHeight(vec2 p) {
+float duneBase(vec2 p) {
   float roll = 0.5 * sin(p.x * 0.15) + 0.5 * cos(p.y * 0.13);
   float wash = 0.5 * sin((p.x + p.y) * 0.17 + 1.3) + 0.5;
   float n = clamp(0.55 * roll + 0.45 * wash, 0.0, 1.0);
@@ -329,6 +338,85 @@ float duneHeight(vec2 p) {
   h *= 1.0 - marsh * 0.55;
   float ridge = exp(-((p.x + 24.0) * (p.x + 24.0)) / 520.0) * max(cos(p.y * 0.02), 0.0);
   return clamp(h + ridge * 1.6, 0.0, 5.4);
+}
+
+// The north land (src/sim/land.js): a baked 0.5 m grid. R ground over the dunes, G water surface,
+// B pine density, A bank wetness. Outside the grid it reads as no change and no water.
+const float LAND_TOP = ${LAND_TOP.toFixed(1)};
+const float PINE_CELL = ${PINE_CELL.toFixed(2)};
+const float PEAK = ${MOUNTAIN.height.toFixed(1)};
+// March step in meters for the current ray. Past PINE_LOD the pines read as a smooth canopy.
+float gStep = 0.0;
+const float PINE_LOD = 1.35;
+const float PINE_NEAR = 26.0;
+bool inLandBox(vec2 p) {
+  vec2 q = p - uLandBox.xy;
+  return q.x >= 0.0 && q.y >= 0.0 && q.x < uLandBox.z && q.y < uLandBox.w;
+}
+vec4 landAt(vec2 p) {
+  if (!inLandBox(p)) return vec4(0.0, -1000.0, 0.0, 0.0);
+  return texture(uLand, (p - uLandBox.xy) / uLandBox.zw);
+}
+// The same bits as hashU in src/sim/land.js.
+uint hashU(int i, int j, uint seed) {
+  uint h = (uint(i) * 0x27d4eb2du) ^ (uint(j) * 0x165667b1u) ^ seed;
+  h = (h ^ (h >> 15u)) * 0x85ebca6bu;
+  h = (h ^ (h >> 13u)) * 0xc2b2ae35u;
+  return h ^ (h >> 16u);
+}
+// One pine per cell at most (pineInCell in land.js): three stacked skirts riding the ground.
+// Returns the canopy top over p, or -1000. info: xy trunk center, z skirt slope (0 on the skirt wall).
+// The pine in p's cell, if any: xy center, z radius, w height (pineInCell in land.js).
+bool pineCell(vec2 p, out vec4 tree) {
+  tree = vec4(0.0);
+  vec2 cell = floor(p / PINE_CELL);
+  uint h = hashU(int(cell.x), int(cell.y), uPineSeed);
+  float roll = float(h >> 8u) / 16777216.0;
+  if (roll >= 0.9) return false;
+  vec2 c = (cell + 0.5) * PINE_CELL + vec2(float(h & 255u) / 255.0 - 0.5, float((h >> 24u) & 255u) / 255.0 - 0.5) * 1.2;
+  float size = float((h >> 16u) & 255u) / 255.0;
+  tree = vec4(c, 1.25 + 0.4 * size, 4.2 + 3.6 * size);
+  if (length(p - c) >= tree.z) return false;
+  return roll < landAt((cell + 0.5) * PINE_CELL).b * 0.9;
+}
+float pineTop(vec2 p, float g, float dens, out vec3 info) {
+  info = vec3(0.0);
+  if (gStep > PINE_LOD) return dens > 0.02 ? g + dens * 2.6 : -1000.0;
+  vec4 tree;
+  if (!pineCell(p, tree)) return -1000.0;
+  float R = tree.z;
+  float H = tree.w;
+  float r = length(p - tree.xy);
+  float top = -1000.0;
+  for (int k = 0; k < 3; k++) {
+    float fk = float(k);
+    float Rk = R * (1.0 - 0.29 * fk);
+    if (r >= Rk) continue;
+    float lo = H * (0.06 + 0.32 * fk);
+    float hi = H * (0.46 + 0.27 * fk);
+    float z = g + lo + (hi - lo) * (1.0 - r / Rk);
+    if (z > top) {
+      top = z;
+      info = vec3(tree.xy, (hi - lo) / Rk);
+    }
+  }
+  return top;
+}
+// Ground only: dunes plus the land's offset. What the feet stand on.
+float groundHeight(vec2 p) {
+  float h = duneBase(p);
+  if (!inLandBox(p)) return h;
+  return h + landAt(p).r;
+}
+// What a ray meets: ground, water over it, and pines on it.
+float duneHeight(vec2 p) {
+  float h = duneBase(p);
+  if (!inLandBox(p)) return h;
+  vec4 L = landAt(p);
+  float g = h + L.r;
+  float s = max(g, L.g);
+  vec3 info;
+  return max(s, pineTop(p, g, L.b, info));
 }
 
 vec3 duneNormal(vec2 p) {
@@ -371,6 +459,21 @@ vec3 groundAlbedo(vec2 p, vec3 n) {
   grassC *= 0.86 + valueNoise(p * 0.31 + 4.0) * 0.26;
   rockC *= 0.84 + valueNoise(p * 0.19 + 9.0) * 0.28;
   vec3 rgb = mix(mix(sandC, grassC, grassW), rockC, rockW);
+  if (inLandBox(p)) {
+    vec4 L = landAt(p);
+    float g = duneBase(p) + L.r;
+    float steep = 1.0 - clamp(n.z, 0.0, 1.0);
+    vec3 needles = vec3(0.19, 0.23, 0.13) * (0.8 + valueNoise(p * 0.7) * 0.4);
+    vec3 mtn = mix(grassC * vec3(0.92, 1.04, 0.86), needles, smoothstep(0.05, 0.4, L.b));
+    mtn = mix(mtn, rockC * 1.05, clamp(smoothstep(0.28, 0.6, steep) + smoothstep(PEAK * 0.7, PEAK * 0.86, g), 0.0, 1.0));
+    float snow = smoothstep(PEAK * 0.91, PEAK * 1.0, g + (valueNoise(p * 0.21) - 0.5) * 3.0) * (1.0 - smoothstep(0.55, 0.8, steep));
+    mtn = mix(mtn, vec3(0.9, 0.92, 0.95), snow);
+    rgb = mix(rgb, mtn, smoothstep(0.3, 2.0, L.r));
+    vec3 lush = vec3(0.21, 0.36, 0.15) * (0.82 + valueNoise(p * 1.3) * 0.36);
+    rgb = mix(rgb, lush, smoothstep(0.1, 0.6, L.a) * 0.7);
+    float line = L.g - g;
+    rgb = mix(rgb, vec3(0.25, 0.21, 0.15), smoothstep(-0.22, 0.02, line) * 0.75);
+  }
   return withWear(rgb, p);
 }
 
@@ -405,7 +508,8 @@ float islandExit(vec3 ro, vec3 rd) {
 }
 
 bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
-  if (dot(ro.xy, ro.xy) <= 65536.0 && ro.z < duneHeight(ro.xy) + 0.02) {
+  gStep = 0.0;
+  if (dot(ro.xy, ro.xy) <= 65536.0 && ro.z < groundHeight(ro.xy) + 0.02) {
     t = 0.02;
     p = ro + rd * t;
     p.z = duneHeight(p.xy);
@@ -414,9 +518,13 @@ bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   float tFar = islandExit(ro, rd);
   float tNear = 0.02;
   if (rd.z < -1.0e-4) {
-    if (ro.z > 5.6) tNear = max(tNear, (5.6 - ro.z) / rd.z);
+    if (ro.z > LAND_TOP) tNear = max(tNear, (LAND_TOP - ro.z) / rd.z);
     float tGround = max(-ro.z / rd.z, tNear + 8.0);
     tFar = min(tFar, tGround);
+  }
+  if (rd.z > 1.0e-4) {
+    if (ro.z >= LAND_TOP) tFar = 0.0;
+    else tFar = min(tFar, (LAND_TOP - ro.z) / rd.z);
   }
   tFar = clamp(tFar, tNear, 8000.0);
   if (limit > 0.0) tFar = min(tFar, limit);
@@ -428,10 +536,17 @@ bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
   float hi = prevT;
   float budget = limit > 0.0 ? clamp(limit * 1.6, 28.0, 56.0) : 80.0;
   float advance = max((tFar - prevT) / budget, 0.12);
+  // Near the land the first PINE_NEAR meters march finer, so a pine or the stream is not stepped over.
+  vec2 lq = ro.xy - uLandBox.xy;
+  bool nearLand = lq.x > -PINE_NEAR && lq.y > -PINE_NEAR && lq.x < uLandBox.z + PINE_NEAR && lq.y < uLandBox.w + PINE_NEAR;
+  if (nearLand) budget += 44.0;
+  gStep = advance;
   t = prevT;
-  for (int i = 0; i < 80; i++) {
+  for (int i = 0; i < 124; i++) {
     if (float(i) >= budget || t >= tFar) break;
-    t += advance;
+    float stepNow = nearLand && t < PINE_NEAR ? min(advance, 0.25 + t * 0.04) : advance;
+    gStep = stepNow;
+    t += stepNow;
     vec3 q = ro + rd * t;
     float dist = q.z - duneHeight(q.xy);
     bool cross = !hit && prevDist > 0.0 && dist <= 0.02;
@@ -464,15 +579,17 @@ bool sandPlane(vec3 ro, vec3 rd, float limit, out float t, out vec3 p) {
 bool sandCoarse(vec3 ro, vec3 rd, out float t, out vec3 p) {
   t = 0.0;
   p = ro;
-  if (rd.z > 0.05 && ro.z > 5.6) return false;
+  if (rd.z > 0.05 && ro.z > LAND_TOP) return false;
   float tFar = islandExit(ro, rd);
   if (rd.z < -1.0e-4) tFar = min(tFar, max(-ro.z / rd.z, 0.0) + 4.0);
   tFar = clamp(tFar, 0.0, 160.0);
-  if (rd.z >= 0.0 && ro.z > 5.6) return false;
+  if (rd.z >= 0.0 && ro.z > LAND_TOP) return false;
+  if (rd.z > 1.0e-4) tFar = min(tFar, (LAND_TOP - ro.z) / rd.z);
   float lo = 0.02;
   float prev = ro.z - duneHeight(ro.xy);
   if (prev <= 0.0) return false;
   float stride = max(tFar / 16.0, 0.25);
+  gStep = max(stride, PINE_LOD + 0.1);
   float hi = -1.0;
   for (int i = 1; i <= 16; i++) {
     float s = float(i) * stride;
@@ -985,12 +1102,130 @@ float wetAt(vec3 p) {
   if (wet > 0.0 && blocked(p + vec3(0.0, 0.0, 0.08), vec3(0.0, 0.0, 1.0))) return 0.0;
   return wet;
 }
+// Mountain shade: a short march toward the sun over the land (canopy level of detail).
+float landShadow(vec3 p, vec3 sun) {
+  if (sun.z <= 0.02 || !inLandBox(p.xy)) return 1.0;
+  float keep = gStep;
+  gStep = 4.0;
+  float t = 0.6;
+  float lit = 1.0;
+  for (int i = 0; i < 14; i++) {
+    vec3 q = p + sun * t;
+    if (q.z > LAND_TOP) break;
+    if (q.z < duneHeight(q.xy) - 0.05) { lit = 0.32; break; }
+    t += 0.8 + t * 0.35;
+  }
+  gStep = keep;
+  return lit;
+}
+
+// A hit on the land: pine, water, or ground. Ground keeps the albedo it was given.
+void landSurface(vec3 p, vec3 rd, inout vec3 n, inout vec3 rgb, inout float ref) {
+  if (!inLandBox(p.xy)) return;
+  vec4 L = landAt(p.xy);
+  float g = duneBase(p.xy) + L.r;
+  float wet = max(g, L.g);
+  vec3 info;
+  float pz = pineTop(p.xy, g, L.b, info);
+  if (pz > wet + 0.04 && p.z > wet + 0.04) {
+    vec3 needle = mix(vec3(0.13, 0.25, 0.12), vec3(0.22, 0.36, 0.17), valueNoise(p.xy * 3.7 + p.z * 2.3));
+    if (gStep > PINE_LOD) {
+      // Far canopy: crowns on the same cell grid as the near pines, dark between them.
+      vec4 tree;
+      bool here = pineCell(p.xy, tree);
+      vec2 f = (p.xy - tree.xy) / max(tree.z, 0.5);
+      float crown = here ? 1.0 - length(f) : -0.2;
+      n = normalize(n + (here ? vec3(f * 0.9, 0.6) : vec3(0.0, 0.0, 0.4)));
+      rgb = needle * (0.5 + 0.5 * smoothstep(-0.1, 0.6, crown) * (0.75 + 0.25 * tree.w / 9.0));
+      ref = 0.02;
+      return;
+    } else if (p.z < pz - 0.08) {
+      vec2 o = p.xy - info.xy;
+      n = normalize(vec3(o, 0.0001));
+    } else {
+      vec2 o = normalize(p.xy - info.xy + vec2(1.0e-4));
+      n = normalize(vec3(o * info.z, 1.0));
+    }
+    rgb = tiled(${LEAF_TILE}, vec2(atan(p.y - info.y, p.x - info.x) * 0.6, p.z * 1.1), 0.5, needle) * (0.65 + 0.35 * smoothstep(0.0, 6.0, p.z - g));
+    ref = 0.02;
+    return;
+  }
+  if (L.g > g + 0.01 && p.z <= L.g + 0.03) {
+    float depth = L.g - g;
+    float e = 1.0;
+    float wx = landAt(p.xy + vec2(e, 0.0)).g - landAt(p.xy - vec2(e, 0.0)).g;
+    float wy = landAt(p.xy + vec2(0.0, e)).g - landAt(p.xy - vec2(0.0, e)).g;
+    vec2 down = -vec2(wx, wy) / (2.0 * e);
+    float fall = length(down);
+    vec2 flow = fall > 1.0e-4 ? down / fall : vec2(0.0);
+    float speed = clamp(fall * 5.0, 0.0, 1.0);
+    vec2 q = p.xy * 1.6 - flow * uTime * (0.35 + 2.4 * speed);
+    float n0 = valueNoise(q);
+    float nx = valueNoise(q + vec2(0.35, 0.0));
+    float ny = valueNoise(q + vec2(0.0, 0.35));
+    float lapping = valueNoise(p.xy * 0.7 + vec2(uTime * 0.11, -uTime * 0.07));
+    float amp = 0.35 + 0.9 * speed + 0.25 * lapping;
+    n = normalize(vec3((n0 - nx) * amp, (n0 - ny) * amp, 1.0));
+    vec3 deep = vec3(0.05, 0.19, 0.24);
+    vec3 shallow = mix(rgb * 0.7, vec3(0.16, 0.34, 0.36), 0.45);
+    rgb = mix(shallow, deep, 1.0 - exp(-depth * 1.6));
+    float foam = smoothstep(0.66, 0.84, valueNoise(q * 2.3 + 5.0)) * speed * 0.35;
+    rgb = mix(rgb, vec3(0.86, 0.9, 0.9), foam);
+    ref = 0.32 * (1.0 - foam);
+  }
+}
+
+// Fog banks (fogBanks in src/sim/land.js) that sit low in the valley and over the lake and roll with
+// the wind. A few samples along the primary ray inside the banks' box; ?fog=0 skips it, ?fog=2 doubles it.
+float fogDensity(vec3 q) {
+  float d = 0.0;
+  for (int k = 0; k < 6; k++) {
+    vec4 b = uFogBank[k];
+    if (b.z <= 0.0) continue;
+    vec2 o = q.xy - b.xy;
+    float rise = q.z - b.w;
+    d += exp(-dot(o, o) / (b.z * b.z)) * smoothstep(-0.6, 0.4, rise) * exp(-max(rise, 0.0) / 2.0);
+  }
+  if (d < 0.01) return 0.0;
+  vec2 drift = vec2(uTime * 0.6, uTime * 0.21);
+  float roll = valueNoise(q.xy * 0.05 + drift * 0.05 + vec2(q.z * 0.12)) * 0.65 + valueNoise(q.xy * 0.13 - drift * 0.09) * 0.35;
+  return d * smoothstep(0.42, 0.78, roll);
+}
+vec3 withFog(vec3 ro, vec3 rd, float tHit, vec3 color) {
+  if (uFog < 0.5) return color;
+  vec3 bmin = vec3(uFogBox.xy, -1.0);
+  vec3 bmax = vec3(uFogBox.zw, uFogTop);
+  vec3 inv = 1.0 / vec3(abs(rd.x) > 1.0e-6 ? rd.x : 1.0e-6, abs(rd.y) > 1.0e-6 ? rd.y : 1.0e-6, abs(rd.z) > 1.0e-6 ? rd.z : 1.0e-6);
+  vec3 ta = (bmin - ro) * inv;
+  vec3 tb = (bmax - ro) * inv;
+  vec3 lo = min(ta, tb);
+  vec3 hi = max(ta, tb);
+  float t0 = max(max(lo.x, lo.y), max(lo.z, 0.0));
+  float t1 = min(min(hi.x, hi.y), min(hi.z, min(tHit, 600.0)));
+  if (t1 <= t0) return color;
+  int steps = uFog > 1.5 ? 14 : 7;
+  float dt = (t1 - t0) / float(steps);
+  float jitter = ign(gl_FragCoord.xy + 3.7 * mod(uFrame, 32.0));
+  float sigma = uFog > 1.5 ? 0.1 : 0.06;
+  float optical = 0.0;
+  for (int i = 0; i < 14; i++) {
+    if (i >= steps) break;
+    optical += fogDensity(ro + rd * (t0 + (float(i) + jitter) * dt)) * dt;
+  }
+  float T = exp(-sigma * optical);
+  vec3 sun = normalize(uSun);
+  float day = smoothstep(-0.05, 0.25, sun.z);
+  vec3 fogC = mix(vec3(0.24, 0.27, 0.32), vec3(0.84, 0.86, 0.88), day) + vec3(1.0, 0.92, 0.75) * pow(max(dot(rd, sun), 0.0), 8.0) * 0.18 * day;
+  return mix(fogC, color, T);
+}
+
 vec3 sunLit(vec3 p, vec3 n, vec3 albedo) {
   vec3 sun = normalize(uSun);
   float day = smoothstep(0.0, 0.2, sun.z);
   float ndotl = max(dot(n, sun), 0.0);
   float direct = ndotl * day;
   if (direct > 0.0 && blocked(p + n * 0.06 + sun * 0.05, sun)) direct *= 0.28;
+  if (direct > 0.0) direct *= landShadow(p + n * 0.08, sun);
   // A cloud's shadow on the ground: the same deck the fin reads (src/sim/cloud.js).
   if (direct > 0.0) direct *= 1.0 - 0.75 * cloudShadeAt(p, sun);
   // Wet ground: where the deck overhead rains (the same rule as rainAt in src/sim/cloud.js),
@@ -1028,6 +1263,7 @@ void main() {
   float py = (1.0 - vv * 2.0) * halfAngle;
   vec3 rd = normalize(uRight * px + uUp * py + uForward * uPlane);
   vec3 ro = uOrigin;
+  vec3 rd0 = rd;
   vec3 accum = vec3(0.0);
   float thru = 1.0;
   float firstT = 4000.0;
@@ -1089,6 +1325,7 @@ void main() {
       bestN = duneNormal(sandP.xy);
       bestRgb = withPrints(groundAlbedo(sandP.xy, bestN), sandP.xy, bounce);
       bestRef = 0.02;
+      landSurface(sandP, rd, bestN, bestRgb, bestRef);
       found = true;
     }
     for (int i = 0; i < ${MAX_BOXES}; i++) {
@@ -1221,6 +1458,7 @@ void main() {
     rd = normalize(reflect(rd, bestN));
     ro = bestP + bestN * 0.05;
   }
+  accum = withFog(uOrigin, rd0, firstT, accum);
   // Rain you can see: under a thick deck (uRain from src/sim/cloud.js) thin falling streaks dim and
   // grey the view. Streak columns are hashed, and each falls at its own pace on tick time.
   // Under a roof (anything solid straight above the camera) the near streaks and grey stop.
@@ -1368,6 +1606,36 @@ void main() {
   } catch {
     return null;
   }
+  // The north land grid (src/sim/land.js), half floats so LINEAR filtering is core WebGL2.
+  let landTex = null;
+  try {
+    landTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE10);
+    gl.bindTexture(gl.TEXTURE_2D, landTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, LAND_NX, LAND_NY, 0, gl.RGBA, gl.FLOAT, landTexels(land()));
+  } catch {
+    landTex = null;
+  }
+  const landField = land();
+  const fogBank = new Float32Array(24);
+  let fogX0 = Infinity;
+  let fogY0 = Infinity;
+  let fogX1 = -Infinity;
+  let fogY1 = -Infinity;
+  let fogTop = 0;
+  landField.fogBanks.slice(0, 6).forEach((bank, i) => {
+    fogBank.set([bank.x, bank.y, bank.radius, bank.z], i * 4);
+    fogX0 = Math.min(fogX0, bank.x - bank.radius * 2);
+    fogY0 = Math.min(fogY0, bank.y - bank.radius * 2);
+    fogX1 = Math.max(fogX1, bank.x + bank.radius * 2);
+    fogY1 = Math.max(fogY1, bank.y + bank.radius * 2);
+    fogTop = Math.max(fogTop, bank.z + 9);
+  });
   const loc = (name) => gl.getUniformLocation(program, name);
   gl.useProgram(program);
   gl.uniform1i(loc("uSphereTex"), 0);
@@ -1778,6 +2046,16 @@ void main() {
       gl.uniform4f(u("uWork"), work ? work.x : 0, work ? work.y : 0, work ? work.height : 0, work ? work.mode : 0);
       gl.uniform1f(u("uTime"), scene.time || 0);
       gl.uniform1f(u("uFrame"), frame);
+      // Unit 10 is shared with the blit pass, so the land grid is rebound every trace draw.
+      gl.activeTexture(gl.TEXTURE10);
+      gl.bindTexture(gl.TEXTURE_2D, landTex);
+      gl.uniform1i(u("uLand"), 10);
+      gl.uniform4f(u("uLandBox"), LAND_X0, LAND_Y0, landTex ? LAND_W : 0, landTex ? LAND_H : 0);
+      gl.uniform1ui(u("uPineSeed"), (landField.seedHash ^ 0x9172) >>> 0);
+      gl.uniform1f(u("uFog"), scene.fog ?? 1);
+      gl.uniform4fv(u("uFogBank[0]"), fogBank);
+      gl.uniform4f(u("uFogBox"), fogX0, fogY0, fogX1, fogY1);
+      gl.uniform1f(u("uFogTop"), fogTop);
       setFovea(prog, fovea || { x: 0.5, y: 0.5, fovea: 3.2, falloff: 1, period: 1, block: 0, refine: 0 }, scene.camera, !fovea || forceFull);
       gl.uniform1f(u("uExposure"), exposureFor(sun));
       const halfTan = Math.tan(((scene.camera.fov || 70) * Math.PI) / 360);

@@ -16,6 +16,14 @@ The edge drops the second bounce. Past the middle of the fovea fade, a mirror hi
 
 The sharp area is now a circle on the screen: the gaze-to-pixel offset on the image plane, aspect corrected, read as an angle. It matches the old angle at the gaze and no longer stretches toward the screen edges.
 
+## This pass (land, Batch 24)
+
+The terrain march starts under the land's top (64 m, room for the fractal ridges) instead of the 5.6 m dune cap, and an upward ray stops at that top. Near the north land the first 26 m march finer so a pine or the stream is not stepped over. Past that step size a pine reads as canopy: the same crowns on the same cell grid, flat-shaded. The mountain shades the ground behind it with a short march toward the sun.
+
+Fog banks sit low in the valley, over the lake and along the river (`fogBanks` in `src/sim/land.js`) and roll with the wind on the cloud clock. The primary ray takes 7 samples inside the banks' box, or none when it misses the box. `?fog=0` turns it off, `?fog=2` takes 14 samples and thickens it. Bot clients (`?bot=`) default to off so the scale bench stays lean.
+
+`?sky=<m>` puts the camera at that height above the feet, looking along the `?at` yaw and pitch. It is for overhead shots of the land; the body still walks below.
+
 ## Next
 
 A circle that follows a tap: the gaze follows the body's look (`gazeFor`), but a tap on the phone does not move the focus. Not in this build.
