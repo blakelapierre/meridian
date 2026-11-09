@@ -1,6 +1,6 @@
 // A picture snapshot the page can post. The island mesh is built on the picture thread.
 import { Crust } from "../sim/crust.js";
-import { buildScene } from "./scene.js?v=79";
+import { buildScene } from "./scene.js?v=80";
 
 export function sceneFromStage(stage, atoll) {
   const field = new Crust(stage.seed || atoll.worldSeed, stage.cell || atoll.cellId);
@@ -43,6 +43,7 @@ export function sceneFromStage(stage, atoll) {
   scene.rain = stage.rain || 0;
   scene.fog = stage.fog ?? 1;
   scene.volcano = stage.volcano || null;
+  scene.caves = stage.caves || null;
   scene.gaze = stage.gaze || null;
   scene.fovea = stage.fovea || null;
   return scene;
