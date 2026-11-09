@@ -1,3 +1,4 @@
+import { rad } from "./radius.js?v=1";
 import { abilityLine, formatFix } from "../sim/map.js";
 import { placeOnView, plateViewRect } from "../sim/plate.js";
 
@@ -57,7 +58,7 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
   ctx.clearRect(0, 0, size, size);
   ctx.save();
   ctx.beginPath();
-  ctx.arc(half, half, half - 1, 0, Math.PI * 2);
+  ctx.arc(half, half, rad(half - 1), 0, Math.PI * 2);
   ctx.clip();
   ctx.fillStyle = "rgba(8, 14, 18, 0.94)";
   ctx.fillRect(0, 0, size, size);
@@ -69,7 +70,7 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
   if (contours?.length) {
     ctx.save();
     ctx.beginPath();
-    ctx.arc(half, half, half - 2, 0, Math.PI * 2);
+    ctx.arc(half, half, rad(half - 2), 0, Math.PI * 2);
     ctx.clip();
     for (const line of contours) {
       const pa = placeOnView(here, line.a, across, size);
@@ -87,7 +88,7 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
   ctx.strokeStyle = "#3d6a7a";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(half, half, half - 1, 0, Math.PI * 2);
+  ctx.arc(half, half, rad(half - 1), 0, Math.PI * 2);
   ctx.stroke();
   ctx.strokeStyle = "rgba(120, 170, 180, 0.25)";
   ctx.lineWidth = 1;
@@ -128,7 +129,7 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
       ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, mark.alpha ?? 0.6))})`;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(at.x, at.y, 3 + (1 - (mark.alpha ?? 0.6)) * 6, 0, Math.PI * 2);
+      ctx.arc(at.x, at.y, rad(3 + (1 - (mark.alpha ?? 0.6)) * 6), 0, Math.PI * 2);
       ctx.stroke();
     } else if (mark.kind === "object") {
       if (!at.inside) continue;
@@ -147,7 +148,7 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
       } else {
         ctx.fillStyle = ink;
         ctx.beginPath();
-        ctx.arc(at.x, at.y, mark.kind === "mover" ? 3 : 4, 0, Math.PI * 2);
+        ctx.arc(at.x, at.y, rad(mark.kind === "mover" ? 3 : 4), 0, Math.PI * 2);
         ctx.fill();
       }
       if (mark.name && slop < 3) {
@@ -159,7 +160,7 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
       ctx.strokeStyle = "#9f9";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(at.x, at.y, at.inside ? 6 : 4, 0, Math.PI * 2);
+      ctx.arc(at.x, at.y, rad(at.inside ? 6 : 4), 0, Math.PI * 2);
       ctx.stroke();
     } else if (mark.kind === "order" || mark.kind === "graze") {
       if (!at.inside) continue;
@@ -179,23 +180,23 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
     ctx.strokeStyle = "rgba(180, 210, 190, 0.45)";
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.arc(you.x, you.y, ring, 0, Math.PI * 2);
+    ctx.arc(you.x, you.y, rad(ring), 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(you.x, you.y, inner, 0, Math.PI * 2);
+    ctx.arc(you.x, you.y, rad(inner), 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.save();
     ctx.beginPath();
-    ctx.arc(you.x, you.y, ring, 0, Math.PI * 2);
-    ctx.arc(you.x, you.y, inner, 0, Math.PI * 2, true);
+    ctx.arc(you.x, you.y, rad(ring), 0, Math.PI * 2);
+    ctx.arc(you.x, you.y, rad(inner), 0, Math.PI * 2, true);
     ctx.fillStyle = "rgba(64, 82, 42, 0.32)";
     ctx.fill("evenodd");
     ctx.restore();
     ctx.save();
     ctx.beginPath();
-    ctx.arc(half, half, half - 1, 0, Math.PI * 2);
-    ctx.arc(you.x, you.y, ring, 0, Math.PI * 2, true);
+    ctx.arc(half, half, rad(half - 1), 0, Math.PI * 2);
+    ctx.arc(you.x, you.y, rad(ring), 0, Math.PI * 2, true);
     ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
     ctx.fill("evenodd");
     ctx.restore();
@@ -205,7 +206,7 @@ export function paintChart(canvas, read, { self, yaw, skill, marks, radius, sigh
     ctx.strokeStyle = "rgba(156, 204, 255, 0.55)";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(you.x, you.y, (sight / across) * size, 0, Math.PI * 2);
+    ctx.arc(you.x, you.y, rad((sight / across) * size), 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.save();

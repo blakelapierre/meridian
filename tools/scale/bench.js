@@ -6,7 +6,7 @@
 // URL: ?max=50&settle=8&budget=2.5&minhz=20&minfps=5&lighthouse=bc:|off|wss://...&auto=1&expect=net|move
 // Fully static (runs on GitHub Pages): with no ?lighthouse= the clients signal through an in-tab
 // lighthouse this page hosts (src/net/localhub.js, `bc:<room>`) and connect over real WebRTC.
-import { summarize } from "./summary.js?v=1";
+import { summarize } from "./summary.js?v=2";
 // window.benchResult holds the report when done (tools/scale/run.mjs reads it).
 
 const params = new URLSearchParams(location.search);
@@ -14,6 +14,10 @@ let MAX = Math.max(2, Math.min(50, Number(params.get("max")) || 50));
 const SETTLE_S = Number(params.get("settle")) || 8;
 const BUDGET_M = Number(params.get("budget")) || 2.5;
 const LINK_CAP = 8;
+// Browsers keep ~16 live WebGL contexts per tab; past this many, thumbnails run sim-only
+// (?simonly=1: no GPU context, no painting; sim, bot and network as usual).
+const LIVE_GL = Math.max(1, Number(params.get("livegl")) || 12);
+const simOnly = (i) => i >= LIVE_GL;
 const MIN_HZ = Number(params.get("minhz")) || 20;
 const MIN_FPS = Number(params.get("minfps") ?? 5) || 0;
 const askedLh = params.get("lighthouse") || "bc:";
@@ -30,7 +34,7 @@ const clients = [];
 let primary = 0;
 let running = false;
 let mainBot = true;
-const report = { started: new Date().toISOString(), max: MAX, settleS: SETTLE_S, budgetM: BUDGET_M, expectNet, lighthouse: !lighthouse ? "none" : lighthouse.startsWith("bc:") ? "in-tab" : "custom", minHz: MIN_HZ, minFps: MIN_FPS, levels: [], ignoredErrors: { count: 0, samples: [] }, result: "running" };
+const report = { started: new Date().toISOString(), liveGl: LIVE_GL, max: MAX, settleS: SETTLE_S, budgetM: BUDGET_M, expectNet, lighthouse: !lighthouse ? "none" : lighthouse.startsWith("bc:") ? "in-tab" : "custom", minHz: MIN_HZ, minFps: MIN_FPS, levels: [], ignoredErrors: { count: 0, samples: [] }, result: "running" };
 window.benchResult = null;
 
 const log = (line) => {
@@ -46,6 +50,7 @@ function clientUrl(i) {
   const q = new URLSearchParams({ ns: `scale${i}`, bot: String(1000 + i * 7919), paintfps: i === primary ? "0" : "1", touch: "0", fresh: "1" });
   if (lighthouse) q.set("lighthouse", lighthouse);
   else q.set("lighthouse", "off");
+  if (simOnly(i)) q.set("simonly", "1");
   return `../view/index.html?${q}`;
 }
 
@@ -72,6 +77,7 @@ function layout() {
 
 // Promote: the old primary drops to 1 fps, the new one paints at full speed. No reload.
 function promote(index) {
+  if (simOnly(index)) { log(`#${index} is sim-only (no GPU context past ${LIVE_GL} live views)`); return; }
   const old = clients[primary];
   primary = index;
   probe(old)?.setPaintFps(1);
@@ -90,7 +96,7 @@ function addClient() {
   frame.src = clientUrl(index);
   const shield = document.createElement("div");
   shield.className = "shield";
-  shield.innerHTML = `<span>#${index}</span>`;
+  shield.innerHTML = `<span>#${index}${simOnly(index) ? " sim" : ""}</span>`;
   shield.addEventListener("click", () => promote(index));
   stage.append(frame, shield);
   clients.push({ index, frame, shield, lastMoved: 0 });
@@ -146,7 +152,12 @@ function checkLevel(n) {
   for (const s of snap) for (const m of s.ignoredErrors?.samples || []) if (ignoredErrors.samples.length < 10) ignoredErrors.samples.push(`#${s.index} ${m}`);
   for (const s of snap) ignoredErrors.count += s.ignoredErrors?.count || 0;
   report.ignoredErrors = ignoredErrors;
-  return { clients: n, ok: failures.length === 0, ignoredErrors, failures, worstPoseErrorM: Math.round(worst * 100) / 100, net: expectNet ? "checked" : "not checked (no lighthouse)", snap: snap.map(({ remotes, ...rest }) => ({ ...rest, remotes: remotes?.length ?? 0 })) };
+  // Errors from meridian's own files still fail the level; counts are reported either way.
+  const errorCount = snap.reduce((n, s) => n + (s.errors?.length || 0), 0);
+  const erroredClients = snap.filter((s) => s.errors?.length).length;
+  // A lost GPU context only blanks that view; it is a warning, not a failure.
+  const warnings = snap.filter((s) => s.gpuError).map((s) => `#${s.index} gpu: ${s.gpuError}`);
+  return { clients: n, ok: failures.length === 0, ignoredErrors, errorCount, erroredClients, warnings, simOnly: snap.filter((s) => simOnly(s.index)).length, failures, worstPoseErrorM: Math.round(worst * 100) / 100, net: expectNet ? "checked" : "not checked (no lighthouse)", snap: snap.map(({ remotes, ...rest }) => ({ ...rest, remotes: remotes?.length ?? 0 })) };
 }
 
 async function run() {
