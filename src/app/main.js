@@ -15,8 +15,8 @@ import { skillLabel, tooltipFor } from "./skill-text.js";
 import { createLog, createNoticeQueue, detectCrossings, relativeTime, tierSnapshot } from "./abilities.js";
 import { createNotes, offerNotes, pickupPaper, takeTold, writeNote } from "../sim/notes.js";
 import { cast, project, worldToScreen } from "../engine/cast.js";
-import { buildScene, pictureCamera } from "../render/scene.js?v=80";
-import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=106";
+import { buildScene, pictureCamera } from "../render/scene.js?v=81";
+import { createGpuPainter, fitCanvas, WEAR_GRID } from "../render/gpu.js?v=107";
 import { smoothingFrom, canvasRendering } from "../render/aa.js?v=1";
 import { angleBetween, foveaUniforms, perceivedDetail, perceptionFrom, refreshDue, senseReach, tracedFraction, withFocus } from "../sim/perception.js?v=6";
 import { createFps } from "../render/fps.js";
@@ -49,8 +49,8 @@ import { createPlayer, createPlayerWorld, createStamina, TANGENT_GRAVITY } from 
 import { clockScale, dayWord, DAY_TICKS } from "../sim/sun.js?v=2";
 import { columnFloor, acceptCertifiedSlump, bitMode, certifySlump } from "../sim/crust.js";
 import { bitAim, crustFeet } from "../sim/bit.js?v=2";
-import { toolAim } from "../sim/aim.js";
-import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceBoxes, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceBow, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js";
+import { toolAim } from "../sim/aim.js?v=4";
+import { adoptSalvage, adoptWall, addFire, braceBonus, breakFin, createYard, pieceBoxes, pieceIntegrity, placeTicks, raiseSail, repairFin, rollCart, slipChecks, toggleDoor, toggleGate, tryPlaceBeam, tryPlaceBow, tryPlaceCart, tryPlaceDoor, tryPlaceFloor, tryPlacePost, tryPlaceRoad, tryPlaceRoof, digStone, tryPlaceWall, trySalvage, turnFin, turnKey, turnWall } from "../sim/build.js?v=3";
 import {
   adoptPiece,
   bindHearth,
@@ -77,9 +77,10 @@ import {
   bleed,
   bloodDrop,
   trackFin,
-} from "../sim/hearth.js";
+} from "../sim/hearth.js?v=3";
 import { finCloud, rainAt, rainWord, splashes, wetAt } from "../sim/cloud.js?v=5";
 import { haltFeet } from "../sim/town.js?v=1";
+import { ledgeProps } from "../sim/ledge.js?v=1";
 import { PEOPLE, speakTo, targetPlate } from "../sim/people.js?v=2";
 import { attachPlanet, looseBodies, settleLoose, throwStone } from "../sim/planet.js?v=1";
 import { lookDirection, moveIntent, readStance, rollSpeed, stanceDue, stanceMessage, startRoll, stepHands } from "../sim/hands.js?v=60";
@@ -145,15 +146,15 @@ import { craftHelper, cycleHelperTask, dismissHelper, helperLine, nearestHelper,
 import { stepBows } from "../sim/bow.js?v=1";
 import { cellId, castVote, inInterest, sameCell, tallyStored, voteLine } from "../sim/cell.js";
 import { clearVoucher, giveOrder, maySit, orderMessage, readOrderMessage, refuseOrder, sitOrder, writeVoucher } from "../sim/command.js";
-import { blockedAt, duneHeight, eruptionAt, fauna, graze, groundLook, herdPrints, inCave, land, standAt, standHeight, under, volcano } from "../sim/life.js?v=84";
+import { blockedAt, duneHeight, eruptionAt, fauna, graze, groundLook, herdPrints, inCave, land, standAt, standHeight, under, volcano } from "../sim/life.js?v=85";
 import { cavesLevel, underView } from "../sim/under.js?v=1";
 import { heatLevel, volcanoClock, volcanoLevel, volcanoView } from "../sim/volcano.js?v=1";
 import { fogLevel, landView } from "../sim/land.js?v=2";
 import { beachAnswer, raiseSpore, sporeMetal, spreadSpore, stepSwarm, swarmPoint } from "../sim/litho.js";
-import { createVein, tapVein } from "../sim/vein.js";
+import { createVein, tapVein } from "../sim/vein.js?v=2";
 import { separate } from "../sim/separate.js";
 import { shellDrop, shellTilt } from "../sim/shell.js";
-import { createTerrain } from "../net/terrain.js";
+import { createTerrain } from "../net/terrain.js?v=3";
 import { connectPeer, createRoom, startRoom } from "../net/room.js?v=3";
 import { createTorrentRoom, trackersFrom } from "../net/signal-torrent.js?v=1";
 import { PLAYER_DEGREE, ringNeighbors } from "../net/mesh.js?v=1";
@@ -167,7 +168,7 @@ import { decodeBlock } from "../net/blocks.js";
 import { createErrorLog, errorInfoFromEvent, siteBase } from "./errsource.js";
 import { bootDone, bootNote, shouldPaint, shouldSimStep, yieldToUi } from "./boot.js";
 import { createCores } from "./cores.js";
-import { openPicture, pictureMode } from "./picture.js?v=10";
+import { openPicture, pictureMode } from "./picture.js?v=11";
 
 // `let`: if the picture thread fails, the page swaps in a fresh canvas for the CPU picture.
 let canvas = document.querySelector("canvas");
@@ -445,6 +446,7 @@ const [atoll, atollBytes, catalogBytes, lighthouseConfig] = await Promise.all([
     .then((response) => (response.ok ? response.json() : null))
     .catch(() => null),
 ]);
+atoll.props.push(...ledgeProps());
 bootNote("Checking the catalog", 0.48);
 const catalogHex = await cores.run("hash", { parts: [new Uint8Array(atollBytes), new Uint8Array(catalogBytes)] })
   .catch(() => bytesHash([new Uint8Array(atollBytes), new Uint8Array(catalogBytes)]));
@@ -507,7 +509,9 @@ const bonds = new Map();
 const orders = new Map();
 const bolts = [];
 const deedKeys = new Set();
-const vein = createVein([8, -148]);
+// Batch 18: 12 metal (was 6). The hearth spends the 20 you start with and the fin needs 8, so a
+// 6-metal vein left the fin (and everything it pays for) out of reach.
+const vein = createVein([8, -148], 12);
 const WIND = [0.6, 0.1, 0];
 const terrain = createTerrain({
   identity,
@@ -578,8 +582,10 @@ let view = params.get("view") === "first" || params.get("look") === "dummy" ? "f
 // ?phase=<radians> sets the starting sun angle (0.87 is mid-morning, ~2.9 dusk, ~4.6 night) for repeatable screenshots.
 // ?clock= speeds the day, the weather, and plant growth. Walking stays at real time. 1 is the default.
 const phaseParam = Number(params.get("phase"));
+// Whole ticks (Batch 18): a fractional start made every `tick % N === 0` clock (upkeep, fin flux,
+// rain on pools) never fire.
 const dayRate = clockScale(params.get("clock"));
-let tick = ((Number.isFinite(phaseParam) && params.get("phase") !== null ? phaseParam : 0.87) / (Math.PI * 2)) * DAY_TICKS;
+let tick = Math.round(((Number.isFinite(phaseParam) && params.get("phase") !== null ? phaseParam : 0.87) / (Math.PI * 2)) * DAY_TICKS);
 const envTick = () => tick * dayRate;
 let trigger = false;
 let shotQueued = false;
@@ -1264,7 +1270,7 @@ addEventListener("keydown", (event) => {
     }
   }
   if (turnKey(event.code) && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     if (mark.kind === "wall" || mark.kind === "fin") {
       const turned = mark.kind === "fin" ? turnFin(yard, mark.cell) : turnWall(yard, mark.cell);
       if (turned.ok && mark.kind === "wall") {
@@ -1315,7 +1321,7 @@ addEventListener("keydown", (event) => {
     }
   }
   if (event.code === "KeyF" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     const placed = tryPlaceFloor(yard, mark.cell);
     report = placed.ok ? "floor" : placed.reason;
   }
@@ -1331,30 +1337,36 @@ addEventListener("keydown", (event) => {
     }
   }
   if (event.code === "KeyJ" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     const placed = tryPlaceCart(yard, mark.cell);
     report = placed.ok ? "cart" : placed.reason;
   }
   if (event.code === "KeyT" && !event.repeat) {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     if (mark.cell) {
       yard.pieces.push({ id: "mission", at: mark.cell.slice(), anchors: true });
       report = "mission";
     }
   }
-  if (event.code === "KeyP" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+  // Shift+P with the hammer raises a roof on a beam (Batch 18); plain P is still a post.
+  if (event.code === "KeyP" && event.shiftKey && !event.repeat && slot === "hammer") {
+    const mark = refreshAim();
+    const placed = tryPlaceRoof(yard, mark.cell);
+    report = placed.ok ? "roof" : placed.reason;
+  }
+  if (event.code === "KeyP" && !event.shiftKey && !event.repeat && slot === "hammer") {
+    const mark = refreshAim();
     const placed = tryPlacePost(yard, mark.cell);
     report = placed.ok ? "post" : placed.reason;
   }
   if (event.code === "KeyL" && !event.repeat && slot !== "hammer") toggleLog();
   if (event.code === "KeyL" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     const placed = tryPlaceRoad(yard, mark.cell);
     report = placed.ok ? "road" : placed.reason;
   }
   if (event.code === "KeyM" && !event.repeat && slot === "hammer") {
-    const mark = refreshAim(input());
+    const mark = refreshAim();
     const placed = tryPlaceDoor(yard, mark.cell);
     report = placed.ok ? "door" : placed.reason;
   }
@@ -1889,6 +1901,13 @@ function sceneFor(sample, width, height) {
   });
 }
 
+function hammerSnap(state) {
+  const has = (id) => state.pieces.some((piece) => piece.id === id);
+  if (!has("hearth")) return ["footing"];
+  if ((state.fins || 0) > 0 && !has("fin")) return ["hearth"];
+  return [];
+}
+
 function wornFor(hand) {
   const tool = hand === "line" ? "long" : hand === "hammer" ? "hammer" : "bit";
   return ["cloth", tool];
@@ -1911,7 +1930,10 @@ function refreshAim(sample = {}) {
     radius: 0.35,
     body: "dummy",
   });
-  return toolAim("hammer", eye, dir, objects, yard.pieces);
+  // Aim from crust space like the bit (#25): on a dune crest the eye sits above the scene's ground.
+  const feet = bitFeet();
+  const hammerEye = [feet[0], feet[1], feet[2] + (sample?.crouch ? 1.1 : 1.65)];
+  return toolAim(slot, hammerEye, dir, objects, yard.pieces, hammerSnap(yard));
 }
 
 function adoptTarget(subject) {
@@ -2188,6 +2210,18 @@ function cycle(step, kind) {
 }
 
 function identify(sample) {
+  // Batch 18: with the hammer out, E picks the hearth the hammer is aimed at (same crust-space aim
+  // and snap as building), so binding does not depend on where the chase camera happens to sit.
+  if (slot === "hammer" && yard.pieces.some((piece) => piece.id === "hearth")) {
+    const feet = bitFeet();
+    const eye = [feet[0], feet[1], feet[2] + (sample?.crouch ? 1.1 : 1.65)];
+    const mark = toolAim("hammer", eye, lookDirection(sample?.yaw ?? yaw, sample?.pitch ?? pitch), [], yard.pieces, ["hearth"]);
+    const hearth = mark.inRange && yard.pieces.find((piece) => piece.id === "hearth" && piece.at[0] === mark.cell[0] && piece.at[1] === mark.cell[1]);
+    if (hearth) {
+      adoptTarget({ name: "Hearth", material: "your stone", action: "bind with E", detail: "", difficulty: 0, kind: "hearth", cell: hearth.at.slice(), point: [hearth.at[0] * 0.5, hearth.at[1] * 0.5, feet[2]] });
+      return;
+    }
+  }
   const scene = sceneFor(sample, 16, 9);
   const dir = project(0.5, 0.5, scene.camera);
   const hit = cast(scene.camera.origin, dir, scene.objects.filter((object) => !object.self), scene.miss);
@@ -3779,6 +3813,45 @@ globalThis.meridianProbe = {
     return { before, after: terrainKey(), changed: before !== terrainKey() };
   },
   reset: () => resetEverything({ confirm: () => true, hold: () => { holdKeep = true; } }),
+  // Playthrough hooks (Batch 18, tools/playthrough): drive the same input paths a player does.
+  look(newYaw, newPitch) { yaw = newYaw; pitch = newPitch; return { yaw, pitch }; },
+  teleport(x, y) {
+    player.position[0] = x;
+    player.position[1] = y;
+    player.position[2] = standHeight(x, y, columnFloor(terrain.log.crust, x, y));
+    player.velocity[0] = player.velocity[1] = player.velocity[2] = 0;
+    return [...player.position];
+  },
+  hold(on) { trigger = Boolean(on); return trigger; },
+  key(code, { shift = false, up = true } = {}) {
+    dispatchEvent(new KeyboardEvent("keydown", { code, key: code, shiftKey: shift }));
+    if (up) dispatchEvent(new KeyboardEvent("keyup", { code, key: code, shiftKey: shift }));
+    return report;
+  },
+  slot(name) {
+    for (let i = 0; i < 6 && slot !== name; i += 1) playerPress("Digit3");
+    return slot;
+  },
+  aim: () => { const mark = refreshAim(); return mark ? { inRange: mark.inRange, kind: mark.kind, cell: mark.cell || null } : null; },
+  tick: () => tick,
+  skipTicks(n) { tick += Math.max(0, n | 0); return tick; },
+  state: () => ({
+    slot,
+    report,
+    metal: yard.metal,
+    stone: yard.stone ?? 0,
+    fiber: yard.fiber ?? 0,
+    fins: yard.fins ?? 0,
+    spoil: yard.spoil ?? 0,
+    finMetal: yard.finMetal ?? 0,
+    upkeeps: yard.upkeeps ?? 0,
+    bound: yard.bound ? yard.bound.slice() : null,
+    selection: selection ? { kind: selection.kind, cell: selection.cell || null } : null,
+    integrity: vitals.integrity,
+    pieces: yard.pieces.map((piece) => `${piece.id}@${piece.at[0]},${piece.at[1]}`),
+    deed: yard.bound ? Boolean(deedVolume(yard.bound, meId)) : false,
+    pose: [...player.position],
+  }),
 };
 if (agent) {
   const note = document.querySelector("#agenda");
@@ -4316,6 +4389,7 @@ if (params.get("still") !== "1") {
         }
       } else awayTicks = 0;
       if (tick > 0 && tick % 1800 === 0 && yard.bound) {
+        yard.upkeeps = (yard.upkeeps || 0) + 1;
         if (yard.metal >= 1) {
           yard.metal -= 1;
           report = "upkeep";
@@ -4545,14 +4619,17 @@ if (params.get("still") !== "1") {
           } else if (brush === "fill" && (yard.spoil || 0) < 1) {
             report = "spoil";
           } else {
-            terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush, cell: cellId(player.position[1]) });
+            const dugVoxels = terrain.dig(aim.eye, aim.aim, { peer: witnessed(), mode: brush, cell: cellId(player.position[1]) }) || 0;
             const floor = columnFloor(terrain.log.crust, player.position[0], player.position[1]);
-            if (brush === "fill") {
+            if (!dugVoxels) {
+              // The brush is still saving up volume (or hit air): no crust moved, so no spoil.
+            } else if (brush === "fill") {
               yard.spoil = Math.max(0, (yard.spoil || 0) - 1);
               drainPool(pools, { x: player.position[0], y: player.position[1], floor });
             } else if (brush === "dig") {
               yard.spoil = (yard.spoil || 0) + 1;
               digs += 1;
+              yard.stone = (yard.stone || 0) + digStone(digs);
               yard.answer = beachAnswer(player.position[1] >= -190, digs) || yard.answer;
               notePool(pools, { x: player.position[0], y: player.position[1], floor });
               const found = tapVein(vein, player.position[0], player.position[1]);

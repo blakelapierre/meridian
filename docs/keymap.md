@@ -56,6 +56,7 @@ Handled by the walk today but outside the slice table above.
 | T | Drop a mission marker at the aim |
 | J | Place a cart (hammer) |
 | P | Place a post (hammer) |
+| Shift+P | Raise a roof on a beam (hammer; 2 fiber or 2 metal) |
 | X | Drag or let go of the selected player |
 | N | Pin your last note as a slip |
 | Comma | Build a helper once building is at least 4. Costs 8 metal, 4 stone, and 1 fiber. Shift dismisses the nearest and returns half the metal and stone |

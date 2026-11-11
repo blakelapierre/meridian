@@ -156,7 +156,10 @@ export function fluxMetal(tick, yaw = 0, broken = false, shade = 0) {
   if (broken) return 0;
   const gain = yaw ? 0.6 : 1;
   const open = 1 - Math.min(1, Math.max(0, shade || 0));
-  return Math.floor((finOutput(tick) * gain * open) / 10);
+  // Batch 18: /10 paid nothing until the sun was within a whisker of noon (output tops out at
+  // 10), so a fin earned about one metal a day and never covered upkeep. /3 pays 2-3 a period
+  // through the day, less under cloud, nothing at night.
+  return Math.floor((finOutput(tick) * gain * open) / 3);
 }
 
 export function finCredit(metal) {

@@ -85,7 +85,8 @@ export function createTerrain({ identity, leader }) {
   function dig(eye, aim, { peer, mode = "dig", cell = here } = {}) {
     const saved = new Map(log.crust.overrides);
     const writes = brushWrites(log.crust, { eye, aim, ticks: 1, mode });
-    if (!writes.length) return;
+    // Returns how many voxels moved (Batch 18: spoil is only earned for a dig that moved crust).
+    if (!writes.length) return 0;
     const chunk = chunkOf(writes[0]);
     const budget = log.crust.budgetCm3;
     log.crust.overrides = saved;
@@ -108,10 +109,11 @@ export function createTerrain({ identity, leader }) {
     });
     if (!peer) {
       seal(proposal, null, true);
-      return;
+      return writes.length;
     }
     waiting.push(proposal);
     flush();
+    return writes.length;
   }
 
   function flush() {

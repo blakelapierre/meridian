@@ -51,7 +51,7 @@ export function openPicture(canvas, { search = "", WorkerImpl = globalThis.Worke
   if (typeof WorkerImpl !== "function" || !moduleWorkers(WorkerImpl)) return onPage("no module workers");
   let thread;
   try {
-    thread = new WorkerImpl(new URL("./render-worker.js?v=12", import.meta.url), { type: "module" });
+    thread = new WorkerImpl(new URL("./render-worker.js?v=13", import.meta.url), { type: "module" });
   } catch (error) {
     return onPage(`worker: ${error?.message || error}`);
   }

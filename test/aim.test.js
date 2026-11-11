@@ -32,5 +32,7 @@ test("the hammer lights a wall inside 4 m and not one past it", () => {
   assert.equal(hit.inRange, true);
   assert.equal(hit.kind, "wall");
   const missed = toolAim("hammer", [eye[0], eye[1] - 6, eye[2]], toward, world(yard.pieces), yard.pieces);
-  assert.equal(missed.inRange, false);
+  // Batch 18: past reach the hammer proposes the ground 2 m ahead (normal-pitch fix), never the far wall.
+  assert.notEqual(missed.kind, "wall");
+  assert.equal(missed.distance, 2);
 });

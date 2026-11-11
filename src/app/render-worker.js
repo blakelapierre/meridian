@@ -1,5 +1,5 @@
-import { createGpuPainter } from "../render/gpu.js?v=106";
-import { sceneFromStage } from "../render/stage.js?v=6";
+import { createGpuPainter } from "../render/gpu.js?v=107";
+import { sceneFromStage } from "../render/stage.js?v=7";
 import { cast, project } from "../engine/cast.js";
 
 let painter = null;

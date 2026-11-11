@@ -1,10 +1,10 @@
 import { Crust } from "../sim/crust.js";
-import { pieceBoxes } from "../sim/build.js";
+import { pieceBoxes } from "../sim/build.js?v=3";
 import { chaseOrigin, dummyParts, playerParts } from "../sim/body.js?v=57";
 import { lookDirection } from "../sim/hands.js";
 import { sunDirection } from "../sim/sun.js?v=2";
 import { dummyTexture } from "./texture.js";
-import { bankParts, duneHeight, fauna, floraParts } from "../sim/life.js?v=84";
+import { bankParts, duneHeight, fauna, floraParts, standHeight } from "../sim/life.js?v=85";
 import { PEOPLE } from "../sim/people.js?v=2";
 import { helperParts } from "../sim/helper.js?v=1";
 
@@ -230,7 +230,7 @@ export function buildScene({ feet, yaw, pitch, crouch = false, tick = 0, sunTick
   }
   for (const helper of helpers) {
     if (helper?.x == null || helper?.y == null) continue;
-    const z = duneHeight(helper.x, helper.y);
+    const z = standHeight(helper.x, helper.y);
     for (const part of helperParts(helper, z)) objects.push(part);
   }
   if (view === "third" && self) {
