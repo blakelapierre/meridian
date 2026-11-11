@@ -170,7 +170,7 @@ export function AshenHold() {
               <p className="text-xs tracking-widest text-brass uppercase">Vale of the free company</p>
               <h1 className="font-display text-4xl text-parchment md:text-5xl">Ashen Hold</h1>
               <p className="text-pretty text-parchment-dim">
-                A free company on a world-moon. Gravity keeps every knight, spear, and wolf standing on the globe.
+                A free company on a world-moon. The globe spins as it falls around its star, and gravity keeps every knight, spear, and wolf standing on the curve.
                 Ravens and a pigeon carry notes and sketched maps between the hold, the mill, the loom, the camp, and any captain still linked.
                 Hold the keep, then command from the war table or fight in the flesh.
               </p>
@@ -236,7 +236,7 @@ export function AshenHold() {
                 <p className="text-pretty text-sm text-mist">
                   Captains connect directly, browser to browser, over WebRTC. One of you is Warden: that tab runs the
                   bandits, the spears, and the payroll. A tiny herald only introduces you. Gameplay never waits on a
-                  throne server. The vale is a globe, raytraced in the browser — primary rays, sun shadows, and water that
+                  throne server. The vale is a globe of bricks turned toward its heart, raytraced in the browser — primary rays, a sun that crosses the sky, and water that
                   reflects along the curve. Voxels are small, so the curtain wall and the tree line read as masonry and
                   timber. Pause to set the ray resolution. Experience deepens your gifts; chat travels with the peer link.
                   If the Warden’s browser closes, the watch passes to the next captain still linked.

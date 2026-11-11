@@ -1,12 +1,12 @@
 import { tangentFrame, vadd, vlen, vnorm, vscale, type V3 } from "./math";
 
-/** Cubic lattice. Voxels stay person-scale; the shell is a wide globe. */
-export const N = 208;
+/** Cubic lattice. Person-scale voxels on a globe twice the previous vale. */
+export const N = 400;
 export const WORLD_W = N;
 export const WORLD_H = N;
 export const WORLD_D = N;
 export const CENTER = N * 0.5;
-export const SEA = 88;
+export const SEA = 176;
 
 export const AIR = 0;
 export const GRASS = 1;
@@ -187,14 +187,29 @@ function rotY(d: V3, ang: number): V3 {
 
 export function generateWorld(): World {
   const vox = new Uint8Array(N * N * N);
+  const rHi = SEA + 10;
+  const rLo = SEA - 14;
+  const rHi2 = rHi * rHi;
+  const rLo2 = rLo * rLo;
   for (let z = 0; z < N; z++) {
+    const dz = z + 0.5 - CENTER;
+    const dz2 = dz * dz;
+    if (dz2 > rHi2) continue;
     for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
+      const dy = y + 0.5 - CENTER;
+      const dyz = dz2 + dy * dy;
+      if (dyz > rHi2) continue;
+      const span = Math.sqrt(rHi2 - dyz);
+      let x0 = Math.floor(CENTER - span);
+      let x1 = Math.ceil(CENTER + span);
+      if (x0 < 0) x0 = 0;
+      if (x1 > N - 1) x1 = N - 1;
+      const hole = dyz < rLo2 ? Math.sqrt(rLo2 - dyz) : 0;
+      for (let x = x0; x <= x1; x++) {
         const dx = x + 0.5 - CENTER;
-        const dy = y + 0.5 - CENTER;
-        const dz = z + 0.5 - CENTER;
+        if (hole > 0 && dx > -hole && dx < hole) continue;
         const r = Math.hypot(dx, dy, dz);
-        if (r > SEA + 10 || r < SEA - 14) continue;
+        if (r > SEA + 4.5 || r < SEA - 9.3) continue;
         const h = SEA + relief(dx, dy, dz);
         if (r > h || r < h - 5.2) continue;
         const depth = h - r;
@@ -321,8 +336,8 @@ export function generateWorld(): World {
   // Scatter trees on dry grass, away from the hold and the outlying roofs.
   const holdP = at(0, 2, 0);
   let trees = 0;
-  for (let i = 0; i < 900 && trees < 220; i++) {
-    const dir = fib(i, 900);
+  for (let i = 0; i < 1400 && trees < 360; i++) {
+    const dir = fib(i, 1400);
     const h = SEA + relief(dir.x, dir.y, dir.z);
     if (h < SEA + 0.9 || h > SEA + 4.4) continue;
     const p = vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(dir, h));

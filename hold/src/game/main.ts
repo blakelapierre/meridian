@@ -407,11 +407,11 @@ export function startGame(opts: {
 
   function updateCamera() {
     if (!sim.playing || sim.waiting) {
-      const ang = reduce ? 0.6 : 0.6 + sim.time * 0.08;
+      const ang = reduce ? 0.55 : sim.time * ((Math.PI * 2) / 28);
       const hold = sim.world.spawn;
       const up = upOf(hold.x, hold.y, hold.z);
       const { east, north } = tangentFrame(up);
-      const pos = add(add(add(hold, scale(up, 26)), scale(north, 10)), scale(east, Math.sin(ang) * 16));
+      const pos = add(add(add(hold, scale(up, 22)), scale(north, Math.cos(ang) * 36)), scale(east, Math.sin(ang) * 36));
       cam = lookAt(pos, add(hold, scale(up, 3)), up);
       return;
     }
@@ -937,6 +937,7 @@ export function startGame(opts: {
     }
     updateCamera();
     const t0 = performance.now();
+    if (renderer.ok) renderer.setSun(sim.sun);
     renderer.draw(cam, buildDraw(), sim.time);
     const frameMs = performance.now() - t0;
     if (qualityLock === null) {
@@ -990,6 +991,7 @@ export function startGame(opts: {
 
   emitHud();
   updateCamera();
+  if (renderer.ok) renderer.setSun(sim.sun);
   renderer.draw(cam, buildDraw(), sim.time);
   raf = requestAnimationFrame(frame);
 

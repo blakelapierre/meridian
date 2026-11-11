@@ -1,3 +1,4 @@
+import { createHoldCosmos, pullInward, stepCosmos, sunOf, SURFACE_G, type HoldCosmos } from "./cosmos";
 import { approach, clamp, dampAngle, dot3, forwardYaw, rightYaw, tangentFrame, vnorm, yawOfDir, type V3 } from "./math";
 import {
   bodyClear,
@@ -161,6 +162,7 @@ function nid(prefix: string): string {
 
 export function createSim(selfId: string, selfName: string) {
   const world: World = generateWorld();
+  const cosmos: HoldCosmos = createHoldCosmos();
   const ents: Ent[] = [];
   const gold: Record<string, number> = {};
   const floaters: Floater[] = [];
@@ -357,7 +359,8 @@ export function createSim(selfId: string, selfName: string) {
     const r0 = radialOf(posOf(e));
     const rg = radialOf(g);
     const gap = r0 - rg;
-    e.fall = Math.min(48, e.fall + 38 * dt);
+    const inward = pullInward(cosmos, e.x, e.y, e.z);
+    e.fall = Math.min(56, e.fall + inward * dt);
     if (gap <= 0.22 && e.fall >= 0) {
       if (bodyClear(world, g)) {
         e.x = g.x;
@@ -394,7 +397,7 @@ export function createSim(selfId: string, selfName: string) {
     const g = snapFeet(world, e.x, e.y, e.z);
     if (!g) return;
     if (radialOf(posOf(e)) > radialOf(g) + 0.45) return;
-    e.fall = -16.5;
+    e.fall = -Math.sqrt(2 * SURFACE_G * 3.5);
   }
 
   function living(e: Ent): boolean {
@@ -1605,6 +1608,9 @@ export function createSim(selfId: string, selfName: string) {
     get time() {
       return time;
     },
+    get sun() {
+      return sunOf(cosmos);
+    },
     get playing() {
       return playing;
     },
@@ -1705,6 +1711,7 @@ export function createSim(selfId: string, selfName: string) {
     },
     step(dt: number, held: (code: string) => boolean, vx: number, vy: number, sprintHeld: boolean) {
       time += dt;
+      stepCosmos(cosmos, dt);
       const axes = axesFrom(held, vx, vy, sprintHeld);
       if (playing && !waiting) stepPlayer(dt, axes);
       if (isWarden) {

@@ -1,0 +1,332 @@
+// Port of meridian src/engine/physics.js (nbody-raycaster@6506c5e).
+// Below 1000 bodies the pairwise pass predicts the separation.
+// At 1000 or more, gravity is the exact pair formula on current positions.
+// One tick advances 1/ticksPerStep seconds. acceleration is control;
+// gravity is only the pairwise pass.
+
+const EXACT_FORCE_AT = 1000;
+
+type Vec3 = [number, number, number];
+
+const scratch = {
+  dd: [0, 0, 0] as Vec3,
+  oldp1: [0, 0, 0] as Vec3,
+  oldp2: [0, 0, 0] as Vec3,
+};
+
+export class Mass {
+  color: number[];
+  position: Vec3;
+  velocity: Vec3;
+  acceleration: Vec3;
+  gravity: Vec3;
+  charge = 0;
+  policy = "merge";
+  pinned = false;
+  home: Vec3 | null = null;
+  _visual: number | null = null;
+  _collision: number | null = null;
+  _mass = 0;
+  _densityRadius = 0;
+
+  constructor(mass = 0, color = [255, 255, 255, 255], position: number[] = [0, 0, 0], velocity: number[] = [0, 0, 0]) {
+    this.color = color.slice();
+    this.position = [position[0] ?? 0, position[1] ?? 0, position[2] ?? 0];
+    this.velocity = [velocity[0] ?? 0, velocity[1] ?? 0, velocity[2] ?? 0];
+    this.acceleration = [0, 0, 0];
+    this.gravity = [0, 0, 0];
+    this.mass = mass;
+  }
+
+  set mass(value: number) {
+    this._mass = value;
+    this._densityRadius = Math.cbrt((3 / (4 * Math.PI)) * Math.max(value, 0));
+  }
+
+  get mass() {
+    return this._mass;
+  }
+
+  get size() {
+    return this._visual ?? this._densityRadius;
+  }
+
+  set size(value: number) {
+    this._visual = value;
+  }
+
+  get collisionSize() {
+    return this._collision ?? this.size;
+  }
+
+  set collisionSize(value: number) {
+    this._collision = value;
+  }
+}
+
+export type Universe = {
+  universe: Mass[];
+  currentTick: number;
+  ticksPerStep: number;
+  stepsPerSecond: number;
+  gravityConstant: number;
+  coulombConstant: number;
+  speedlimit: number;
+  events: unknown[];
+  collisionList: Mass[][];
+};
+
+export function createUniverse(
+  bodies: Mass[],
+  options: {
+    ticksPerStep?: number;
+    stepsPerSecond?: number;
+    gravityConstant?: number;
+    coulombConstant?: number;
+    speedlimit?: number;
+  } = {},
+): Universe {
+  return {
+    universe: bodies.slice(),
+    currentTick: 0,
+    ticksPerStep: options.ticksPerStep ?? 60,
+    stepsPerSecond: options.stepsPerSecond ?? 1,
+    gravityConstant: options.gravityConstant ?? 6.67408e-7,
+    coulombConstant: options.coulombConstant ?? 0,
+    speedlimit: options.speedlimit ?? 300000,
+    events: [],
+    collisionList: [],
+  };
+}
+
+function predict(out: Vec3, position: Vec3, velocity: Vec3, acceleration: Vec3, o: number): Vec3 {
+  const dd = scratch.dd;
+  dd[0] = acceleration[0] * o;
+  dd[1] = acceleration[1] * o;
+  dd[2] = acceleration[2] * o;
+  dd[0] = velocity[0] + dd[0] * 0.5;
+  dd[1] = velocity[1] + dd[1] * 0.5;
+  dd[2] = velocity[2] + dd[2] * 0.5;
+  out[0] = position[0] + dd[0] * o;
+  out[1] = position[1] + dd[1] * o;
+  out[2] = position[2] + dd[2] * o;
+  return out;
+}
+
+export function tick(state: Universe): Universe {
+  state.currentTick++;
+  const bodies = state.universe;
+  const ticksPerStep = state.ticksPerStep;
+  const half = 0.5 / ticksPerStep;
+  const dt = 1 / ticksPerStep;
+  const c2 = state.speedlimit * state.speedlimit;
+  const collisionList: Mass[][] = [];
+
+  for (let i = 0; i < bodies.length; i++) {
+    const mass = bodies[i];
+    mass.position[0] += mass.velocity[0] * half;
+    mass.position[1] += mass.velocity[1] * half;
+    mass.position[2] += mass.velocity[2] * half;
+    mass.gravity[0] = 0;
+    mass.gravity[1] = 0;
+    mass.gravity[2] = 0;
+  }
+
+  if (bodies.length >= EXACT_FORCE_AT) exactBodyForces(state, collisionList);
+  else
+    for (let i = 0; i < bodies.length; i++) {
+      const a = bodies[i];
+      for (let j = i + 1; j < bodies.length; j++) {
+        const b = bodies[j];
+        const dx = a.position[0] - b.position[0];
+        const dy = a.position[1] - b.position[1];
+        const dz = a.position[2] - b.position[2];
+        const distance = Math.hypot(dx, dy, dz);
+        const o = -distance / c2 / ticksPerStep;
+        const p1 = predict(scratch.oldp1, a.position, a.velocity, a.acceleration, o);
+        const p2 = predict(scratch.oldp2, b.position, b.velocity, b.acceleration, o);
+        const pv1x = p1[0] - b.position[0];
+        const pv1y = p1[1] - b.position[1];
+        const pv1z = p1[2] - b.position[2];
+        const pv2x = p2[0] - a.position[0];
+        const pv2y = p2[1] - a.position[1];
+        const pv2z = p2[2] - a.position[2];
+        const d1 = pv1x * pv1x + pv1y * pv1y + pv1z * pv1z;
+        const d2 = pv2x * pv2x + pv2y * pv2y + pv2z * pv2z;
+        const scalar =
+          a.mass * b.mass * state.gravityConstant - (state.coulombConstant || 0) * (a.charge || 0) * (b.charge || 0);
+        if (d1 > 0) {
+          const s = scalar / (d1 * Math.sqrt(d1));
+          b.gravity[0] += pv1x * s;
+          b.gravity[1] += pv1y * s;
+          b.gravity[2] += pv1z * s;
+        }
+        if (d2 > 0) {
+          const s = scalar / (d2 * Math.sqrt(d2));
+          a.gravity[0] += pv2x * s;
+          a.gravity[1] += pv2y * s;
+          a.gravity[2] += pv2z * s;
+        }
+        if (distance < a.collisionSize + b.collisionSize) {
+          if (a.mass <= b.mass) collisionList.push([a, b]);
+          else collisionList.push([b, a]);
+        }
+      }
+      if (a.mass !== 0) {
+        a.gravity[0] /= a.mass;
+        a.gravity[1] /= a.mass;
+        a.gravity[2] /= a.mass;
+      }
+    }
+
+  for (let i = 0; i < bodies.length; i++) {
+    const mass = bodies[i];
+    mass.velocity[0] += (mass.acceleration[0] + mass.gravity[0]) * dt;
+    mass.velocity[1] += (mass.acceleration[1] + mass.gravity[1]) * dt;
+    mass.velocity[2] += (mass.acceleration[2] + mass.gravity[2]) * dt;
+    mass.position[0] += mass.velocity[0] * half;
+    mass.position[1] += mass.velocity[1] * half;
+    mass.position[2] += mass.velocity[2] * half;
+  }
+
+  resolveCollisions(state, collisionList);
+  for (let i = 0; i < state.universe.length; i++) {
+    const mass = state.universe[i];
+    if (!mass.pinned || !mass.home) continue;
+    mass.position[0] = mass.home[0];
+    mass.position[1] = mass.home[1];
+    mass.position[2] = mass.home[2];
+    mass.velocity[0] = 0;
+    mass.velocity[1] = 0;
+    mass.velocity[2] = 0;
+  }
+  return state;
+}
+
+function exactBodyForces(state: Universe, collisionList: Mass[][]) {
+  const bodies = state.universe;
+  const n = bodies.length;
+  const G = state.gravityConstant;
+  const K = state.coulombConstant || 0;
+  for (let i = 0; i < n; i++) {
+    const a = bodies[i];
+    const pa = a.position;
+    const ga = a.gravity;
+    const qa = a.charge || 0;
+    const ma = a.mass;
+    const sa = a.collisionSize;
+    for (let j = i + 1; j < n; j++) {
+      const b = bodies[j];
+      const pb = b.position;
+      const dx = pb[0] - pa[0];
+      const dy = pb[1] - pa[1];
+      const dz = pb[2] - pa[2];
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (!(d2 > 1e-8)) continue;
+      const inv = (G * ma * b.mass - K * qa * (b.charge || 0)) / (d2 * Math.sqrt(d2));
+      ga[0] += dx * inv;
+      ga[1] += dy * inv;
+      ga[2] += dz * inv;
+      b.gravity[0] -= dx * inv;
+      b.gravity[1] -= dy * inv;
+      b.gravity[2] -= dz * inv;
+      const reach = sa + b.collisionSize;
+      if (d2 < reach * reach) {
+        if (ma <= b.mass) collisionList.push([a, b]);
+        else collisionList.push([b, a]);
+      }
+    }
+    if (ma !== 0) {
+      const invM = 1 / ma;
+      ga[0] *= invM;
+      ga[1] *= invM;
+      ga[2] *= invM;
+    }
+  }
+}
+
+function resolveCollisions(state: Universe, collisionList: Mass[][]) {
+  const absorbed = new Set<Mass>();
+  for (let i = 0; i < collisionList.length; i++) {
+    const smaller = collisionList[i][0];
+    const greater = collisionList[i][1];
+    if (absorbed.has(smaller) || absorbed.has(greater)) continue;
+    if (!state.universe.includes(smaller) || !state.universe.includes(greater)) continue;
+    const policy = pairPolicy(smaller, greater);
+    if (policy === "merge") merge(state, smaller, greater, absorbed);
+    else if (policy === "event") {
+      state.events.push(["hit", smaller, greater]);
+      removeBody(state, smaller);
+      absorbed.add(smaller);
+    } else separate(smaller, greater);
+  }
+}
+
+function pairPolicy(a: Mass, b: Mass) {
+  if (a.policy === "event" || b.policy === "event") return "event";
+  if (a.policy === "separate" || b.policy === "separate") return "separate";
+  return "merge";
+}
+
+function merge(state: Universe, smaller: Mass, greater: Mass, absorbed: Set<Mass>) {
+  const m1 = greater.mass;
+  const m2 = smaller.mass;
+  const total = m1 + m2;
+  if (!(total > 0)) return;
+  const factor = m1 / total;
+  const ratio = m2 / total;
+  greater.color[0] = greater.color[0] * factor + smaller.color[0] * ratio;
+  greater.color[1] = greater.color[1] * factor + smaller.color[1] * ratio;
+  greater.color[2] = greater.color[2] * factor + smaller.color[2] * ratio;
+  greater.color[3] = greater.color[3] * factor + smaller.color[3] * ratio;
+  greater.velocity[0] = (greater.velocity[0] * m1 + smaller.velocity[0] * m2) / total;
+  greater.velocity[1] = (greater.velocity[1] * m1 + smaller.velocity[1] * m2) / total;
+  greater.velocity[2] = (greater.velocity[2] * m1 + smaller.velocity[2] * m2) / total;
+  greater.mass = total;
+  greater.charge = (greater.charge || 0) + (smaller.charge || 0);
+  absorbed.add(smaller);
+  removeBody(state, smaller);
+  state.events.push(["absorbed", smaller, greater]);
+}
+
+function separate(a: Mass, b: Mass) {
+  let dx = b.position[0] - a.position[0];
+  let dy = b.position[1] - a.position[1];
+  let dz = b.position[2] - a.position[2];
+  let distance = Math.hypot(dx, dy, dz);
+  const need = a.collisionSize + b.collisionSize;
+  if (distance === 0) {
+    dx = 1;
+    dy = 0;
+    dz = 0;
+    distance = 1;
+  }
+  const nx = dx / distance;
+  const ny = dy / distance;
+  const nz = dz / distance;
+  const push = need - distance;
+  if (push > 0) {
+    const halfPush = push / 2;
+    a.position[0] -= nx * halfPush;
+    a.position[1] -= ny * halfPush;
+    a.position[2] -= nz * halfPush;
+    b.position[0] += nx * halfPush;
+    b.position[1] += ny * halfPush;
+    b.position[2] += nz * halfPush;
+  }
+  const rel =
+    (b.velocity[0] - a.velocity[0]) * nx + (b.velocity[1] - a.velocity[1]) * ny + (b.velocity[2] - a.velocity[2]) * nz;
+  if (rel < 0) {
+    a.velocity[0] += rel * nx;
+    a.velocity[1] += rel * ny;
+    a.velocity[2] += rel * nz;
+    b.velocity[0] -= rel * nx;
+    b.velocity[1] -= rel * ny;
+    b.velocity[2] -= rel * nz;
+  }
+}
+
+function removeBody(state: Universe, body: Mass) {
+  const index = state.universe.indexOf(body);
+  if (index >= 0) state.universe.splice(index, 1);
+}

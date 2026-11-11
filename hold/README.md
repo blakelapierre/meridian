@@ -1,6 +1,6 @@
 # Ashen Hold
 
-A playable vale on a voxel globe. This directory is a separate client. It is not the Atoll engine in the repository root, and it does not follow the Atoll picture lock: the frame here is a low-resolution WebGL2 voxel raytrace (one sun shadow, one water bounce), drawn big and left nearest-neighbor.
+The shell is twice the previous vale. Bricks face the planet's heart. The star and the planet are stepped by the n-body integrator from `src/engine` (nbody-raycaster), so the globe spins and the sun crosses the sky. A knight's fall is that same pairwise pull. The ground stays fixed in the planet frame.
 
 Solo works with no one else connected. A shared banner code is a WebRTC room; the browser that hosts the sim can leave, and another peer takes the warden seat. Carrier ravens and one pigeon fly notes and a sketch of the ground you are standing on between the Hold, the Mill, the Loom, the Camp, and captains in the same room.
 

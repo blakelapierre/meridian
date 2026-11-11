@@ -54,6 +54,56 @@ float voxAt(ivec3 p) {
   return floor(texelFetch(uVox, p, 0).r * 255.0 + 0.5);
 }
 
+bool brickOf(ivec3 cell, vec3 ro, vec3 rd, float maxDist, out float tHit, out vec3 nrm) {
+  vec3 center = vec3(cell) + 0.5;
+  vec3 radial = center - kPlanet;
+  float rl = length(radial);
+  if (rl < 1e-3) return false;
+  radial /= rl;
+  vec3 pole = abs(radial.y) > 0.92 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+  vec3 east = cross(pole, radial);
+  float el = length(east);
+  east = el < 1e-4 ? vec3(1.0, 0.0, 0.0) : east / el;
+  vec3 north = normalize(cross(radial, east));
+  const float H = 0.78;
+  vec3 o = vec3(dot(ro - center, east), dot(ro - center, north), dot(ro - center, radial));
+  vec3 w = vec3(dot(rd, east), dot(rd, north), dot(rd, radial));
+  vec3 invW = vec3(
+    abs(w.x) < 1e-6 ? 1e8 : 1.0 / w.x,
+    abs(w.y) < 1e-6 ? 1e8 : 1.0 / w.y,
+    abs(w.z) < 1e-6 ? 1e8 : 1.0 / w.z
+  );
+  vec3 tA = (vec3(-H) - o) * invW;
+  vec3 tB = (vec3(H) - o) * invW;
+  vec3 tsm = min(tA, tB);
+  vec3 tbg = max(tA, tB);
+  float tN = max(max(tsm.x, tsm.y), tsm.z);
+  float tF = min(min(tbg.x, tbg.y), tbg.z);
+  if (tN > tF || tF < 0.02 || tN > maxDist || tN < 0.02) return false;
+  tHit = tN;
+  if (tsm.x >= tsm.y && tsm.x >= tsm.z) nrm = east * (w.x > 0.0 ? -1.0 : 1.0);
+  else if (tsm.y >= tsm.z) nrm = north * (w.y > 0.0 ? -1.0 : 1.0);
+  else nrm = radial * (w.z > 0.0 ? -1.0 : 1.0);
+  return true;
+}
+
+vec3 brickFallback(vec3 axisN, ivec3 cell) {
+  vec3 radial = vec3(cell) + 0.5 - kPlanet;
+  float rl = length(radial);
+  radial = rl < 1e-3 ? vec3(0.0, 1.0, 0.0) : radial / rl;
+  vec3 pole = abs(radial.y) > 0.92 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+  vec3 east = cross(pole, radial);
+  float el = length(east);
+  east = el < 1e-4 ? vec3(1.0, 0.0, 0.0) : east / el;
+  vec3 north = normalize(cross(radial, east));
+  float sr = dot(axisN, radial);
+  float se = dot(axisN, east);
+  float sn = dot(axisN, north);
+  if (abs(sr) >= abs(se) && abs(sr) >= abs(sn)) return radial * (sr < 0.0 ? -1.0 : 1.0);
+  if (abs(se) >= abs(sn)) return east * (se < 0.0 ? -1.0 : 1.0);
+  return north * (sn < 0.0 ? -1.0 : 1.0);
+}
+
 bool dda(vec3 ro, vec3 rd, float maxDist, int maxSteps, out float tHit, out vec3 nrm, out float vid) {
   float t0 = 0.0;
   vec3 origin = ro;
@@ -98,8 +148,16 @@ bool dda(vec3 ro, vec3 rd, float maxDist, int maxSteps, out float tHit, out vec3
     if (mapPos.x < 0 || mapPos.y < 0 || mapPos.z < 0 || mapPos.x >= ${WORLD_W} || mapPos.y >= ${WORLD_H} || mapPos.z >= ${WORLD_D}) return false;
     float id = voxAt(mapPos);
     if (id > 0.5 && (dist > 0.001 || t0 > 0.0)) {
+      float bt;
+      vec3 bn;
+      if (brickOf(mapPos, ro, rd, maxDist, bt, bn)) {
+        tHit = bt;
+        nrm = bn;
+        vid = id;
+        return true;
+      }
       tHit = dist + t0;
-      nrm = -vec3(stepDir) * mask;
+      nrm = brickFallback(-vec3(stepDir) * mask, mapPos);
       vid = id;
       return true;
     }
@@ -176,14 +234,24 @@ vec3 albedoOf(float id, vec3 pos) {
   return c * (0.90 + 0.12 * n);
 }
 
+float dayAmt() {
+  return smoothstep(-0.12, 0.42, dot(uSun, normalize(uCam - kPlanet)));
+}
+
 vec3 sky(vec3 rd) {
   vec3 away = normalize(uCam - kPlanet);
+  float day = dayAmt();
+  float elev = dot(uSun, away);
   float h = clamp(dot(rd, away) * 0.55 + 0.42, 0.0, 1.0);
-  vec3 zenith = vec3(0.22, 0.34, 0.55);
-  vec3 horizon = vec3(0.93, 0.68, 0.44);
+  vec3 zenith = mix(vec3(0.012, 0.016, 0.04), vec3(0.22, 0.34, 0.55), day);
+  vec3 horizon = mix(vec3(0.05, 0.045, 0.07), vec3(0.93, 0.68, 0.44), day);
+  float dusk = exp(-10.0 * elev * elev) * smoothstep(-0.4, 0.05, elev);
+  horizon = mix(horizon, vec3(0.82, 0.30, 0.12), dusk * 0.85);
   vec3 col = mix(horizon, zenith, pow(h, 0.7));
   float sun = pow(max(dot(rd, uSun), 0.0), 220.0);
-  col += vec3(1.0, 0.86, 0.55) * sun;
+  col += vec3(1.0, 0.86, 0.55) * sun * smoothstep(-0.04, 0.12, elev);
+  float star = step(0.994, fract(sin(dot(floor(rd * 26.0), vec3(27.1, 91.7, 13.3))) * 43758.5));
+  col += vec3(0.75, 0.8, 0.95) * star * (1.0 - day) * step(0.25, h);
   return col;
 }
 
@@ -208,7 +276,9 @@ vec3 shadeVoxel(vec3 pos, vec3 n, float id, vec3 rd) {
   float ao = 0.62 + 0.38 * clamp(dot(n, normalize(pos - kPlanet)) * 0.5 + 0.5, 0.0, 1.0);
   float sh = shadowOf(pos, n);
   float ndl = max(dot(n, uSun), 0.0);
-  vec3 col = alb * ao * (vec3(0.34, 0.30, 0.26) + vec3(1.1, 0.95, 0.72) * ndl * sh);
+  float day = dayAmt();
+  vec3 amb = mix(vec3(0.06, 0.07, 0.1), vec3(0.34, 0.30, 0.26), day);
+  vec3 col = alb * ao * (amb + vec3(1.1, 0.95, 0.72) * ndl * sh);
   if (k == 7) col += alb * 0.35;
   if (k == 6) {
     vec3 refl = reflect(rd, n);
@@ -291,7 +361,9 @@ void main() {
     alb = mix(alb, vec3(1.0), clamp(flash, 0.0, 1.0));
     float sh = kind == 5 ? 1.0 : shadowOf(pos, n);
     float ndl = max(dot(n, uSun), 0.0);
-    col = alb * (vec3(0.32, 0.28, 0.24) + vec3(1.05, 0.9, 0.7) * ndl * sh);
+    float day = dayAmt();
+    vec3 amb = mix(vec3(0.05, 0.06, 0.08), vec3(0.32, 0.28, 0.24), day);
+    col = alb * (amb + vec3(1.05, 0.9, 0.7) * ndl * sh);
     fogT = bestT;
   } else {
     col = sky(rd);
@@ -363,6 +435,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
       draw() {},
       resize() {},
       upload() {},
+      setSun() {},
       dispose() {},
       setLong() {},
       get longSide() {
@@ -378,6 +451,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
       draw() {},
       resize() {},
       upload() {},
+      setSun() {},
       dispose() {},
       setLong() {},
       get longSide() {
@@ -399,6 +473,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
       draw() {},
       resize() {},
       upload() {},
+      setSun() {},
       dispose() {},
       setLong() {},
       get longSide() {
@@ -456,13 +531,21 @@ export function createRenderer(canvas: HTMLCanvasElement) {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, color, 0);
   }
 
+  let sunX = 0.35;
+  let sunY = 0.86;
+  let sunZ = 0.28;
+
+  function setSun(s: V3) {
+    const l = Math.hypot(s.x, s.y, s.z) || 1;
+    sunX = s.x / l;
+    sunY = s.y / l;
+    sunZ = s.z / l;
+  }
+
   function upload(world: World) {
-    const src = world.vox;
-    const rgba = new Uint8Array(src.length * 4);
-    for (let i = 0; i < src.length; i++) rgba[i * 4] = src[i];
     gl.bindTexture(gl.TEXTURE_3D, voxTex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, WORLD_W, WORLD_H, WORLD_D, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8, WORLD_W, WORLD_H, WORLD_D, 0, gl.RED, gl.UNSIGNED_BYTE, world.vox);
   }
 
   function draw(cam: { pos: V3; forward: V3; right: V3; up: V3 }, ents: DrawEnt[], time: number) {
@@ -512,8 +595,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
     gl.uniform3f(loc.up, cam.up.x, cam.up.y, cam.up.z);
     gl.uniform2f(loc.res, tw, th);
     gl.uniform1f(loc.fov, FOV);
-    const sunL = Math.hypot(0.48, 0.78, 0.22);
-    gl.uniform3f(loc.sun, 0.48 / sunL, 0.78 / sunL, 0.22 / sunL);
+    gl.uniform3f(loc.sun, sunX, sunY, sunZ);
     gl.uniform1f(loc.time, time);
     gl.uniform1i(loc.count, count);
     gl.uniform4fv(loc.a, A);
@@ -541,6 +623,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
     error: null as string | null,
     upload,
     draw,
+    setSun,
     resize() {},
     setLong(n: number) {
       longSide = Math.max(96, Math.min(480, Math.round(n)));
