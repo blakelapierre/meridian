@@ -51,4 +51,6 @@ When no lighthouse is set (the public demo today), the page signals through publ
 - `tracker.openwebtorrent.com` relays every addressed answer, so it carries the full handshake.
 - `tracker.webtorrent.dev` routes only one answer per offer it handed out, so it is good for finding peers but cannot carry a whole handshake by itself.
 - Not provided: a world directory, an authoritative roster, TURN. Players behind strict NATs may not connect.
+- `tracker.novage.com.ua` (added Batch 20) relayed offers in a live two-client check.
+- Health and failover (Batch 20): trackers that error, close, or go silent reconnect with backoff; after 3 straight failures one is marked dead and a `?backups=wss://...` tracker opens instead. A Cloudflare Worker lighthouse is prepared in `tools/cf-worker/` (see `docs/cloudflare.md`).
 - `?signal=torrent` forces it even with a lighthouse configured; `?trackers=wss://a,wss://b` replaces the list.
