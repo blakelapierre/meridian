@@ -2,6 +2,8 @@
 
 The shell is twice the previous vale. Bricks face the planet's heart. The star and the planet are stepped by the n-body integrator from `src/engine` (nbody-raycaster), so the globe spins and the sun crosses the sky. A knight's fall is that same pairwise pull. The ground stays fixed in the planet frame.
 
+A snow-capped peak feeds a stream, a lake, and a river. A cave under the peak is veined with gems. A volcano stands on another meridian: ash, a magma throat, and cinders. Clouds drift, rain falls under a thick deck, and fog thickens with the shower. The frame is still the hold raytracer, not the Atoll picture. `?look=peak` and `?look=vent` frame those places from the title.
+
 Solo works with no one else connected. A shared banner code is a WebRTC room; the browser that hosts the sim can leave, and another peer takes the warden seat. Carrier ravens and one pigeon fly notes and a sketch of the ground you are standing on between the Hold, the Mill, the Loom, the Camp, and captains in the same room.
 
 **[Play on GitHub Pages](https://blakelapierre.github.io/meridian/hold/play/).** That copy is the committed static build in `play/`. Enter the Vale there. Hosting a banner will not find anyone, because Pages does not run the herald.

@@ -172,6 +172,7 @@ export function AshenHold() {
               <p className="text-pretty text-parchment-dim">
                 A free company on a world-moon. The globe spins as it falls around its star, and gravity keeps every knight, spear, and wolf standing on the curve.
                 Ravens and a pigeon carry notes and sketched maps between the hold, the mill, the loom, the camp, and any captain still linked.
+                Off those roads: a snow peak and its river, a lake, a cave of gems, and a volcano that throws cinders.
                 Hold the keep, then command from the war table or fight in the flesh.
               </p>
               <label className="flex flex-col gap-1 text-sm text-mist">

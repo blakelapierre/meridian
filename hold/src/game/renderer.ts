@@ -39,6 +39,7 @@ uniform vec3 uUp;
 uniform vec2 uRes;
 uniform float uFov;
 uniform vec3 uSun;
+uniform vec3 uVent;
 uniform float uTime;
 uniform int uCount;
 uniform vec4 uA[24];
@@ -230,6 +231,10 @@ vec3 albedoOf(float id, vec3 pos) {
   else if (k == 12) c = vec3(1.0, 0.42, 0.12);
   else if (k == 13) c = vec3(0.34, 0.40, 0.32);
   else if (k == 14) c = vec3(0.72, 0.62, 0.28);
+  else if (k == 15) c = vec3(0.95, 0.28, 0.05);
+  else if (k == 16) c = vec3(0.22, 0.82, 0.68);
+  else if (k == 17) c = vec3(0.30, 0.28, 0.26);
+  else if (k == 18) c = vec3(0.86, 0.88, 0.92);
   float n = fract(sin(dot(floor(pos), vec3(12.9, 78.2, 45.1))) * 43758.5);
   return c * (0.90 + 0.12 * n);
 }
@@ -252,6 +257,13 @@ vec3 sky(vec3 rd) {
   col += vec3(1.0, 0.86, 0.55) * sun * smoothstep(-0.04, 0.12, elev);
   float star = step(0.994, fract(sin(dot(floor(rd * 26.0), vec3(27.1, 91.7, 13.3))) * 43758.5));
   col += vec3(0.75, 0.8, 0.95) * star * (1.0 - day) * step(0.25, h);
+  vec3 toVent = uVent - uCam;
+  float vl = length(toVent);
+  if (vl > 1.0) {
+    float near = pow(max(dot(rd, toVent / vl), 0.0), 36.0);
+    float spark = step(0.975, fract(sin(dot(floor(rd * 36.0 + vec3(0.0, uTime * 7.0, 0.0)), vec3(3.1, 7.2, 11.4))) * 43758.5));
+    col += vec3(1.0, 0.38, 0.08) * spark * near;
+  }
   return col;
 }
 
@@ -269,12 +281,19 @@ float shadowOf(vec3 pos, vec3 n) {
 vec3 shadeVoxel(vec3 pos, vec3 n, float id, vec3 rd) {
   vec3 alb = albedoOf(id, pos);
   int k = int(id + 0.5);
-  if (k == 12) {
-    float f = 0.75 + 0.25 * sin(uTime * 7.0 + pos.x * 3.0);
-    return alb * (1.6 * f);
+  if (k == 12 || k == 15) {
+    float f = 0.75 + 0.25 * sin(uTime * (k == 15 ? 5.0 : 7.0) + pos.x * 3.0);
+    return alb * (k == 15 ? 2.1 : 1.6) * f;
+  }
+  if (k == 16) {
+    float sp = step(0.78, fract(sin(dot(floor(pos * 2.0), vec3(12.9, 78.2, 45.1)) + uTime * 1.7) * 43758.5));
+    alb += vec3(0.45, 0.95, 0.75) * sp;
   }
   float ao = 0.62 + 0.38 * clamp(dot(n, normalize(pos - kPlanet)) * 0.5 + 0.5, 0.0, 1.0);
   float sh = shadowOf(pos, n);
+  float drift = uTime * 0.35;
+  float cloudN = fract(sin(dot(floor((pos - kPlanet) * 0.07 + vec3(drift, 0.0, drift * 0.45)), vec3(19.1, 7.7, 43.2))) * 43758.5);
+  sh *= mix(1.0, 0.4, smoothstep(0.4, 0.78, cloudN));
   float ndl = max(dot(n, uSun), 0.0);
   float day = dayAmt();
   vec3 amb = mix(vec3(0.06, 0.07, 0.1), vec3(0.34, 0.30, 0.26), day);
@@ -369,7 +388,12 @@ void main() {
     col = sky(rd);
     fogT = 90.0;
   }
-  float fog = 1.0 - exp(-fogT * 0.005);
+  float drift = uTime * 0.35;
+  float over = fract(sin(dot(floor((uCam - kPlanet) * 0.07 + vec3(drift, 0.0, drift * 0.45)), vec3(19.1, 7.7, 43.2))) * 43758.5);
+  float rainAmt = smoothstep(0.58, 0.86, over);
+  float streak = step(0.968, fract(sin(floor(gl_FragCoord.x * 0.45) * 12.9898 + floor(gl_FragCoord.y - uTime * 240.0) * 0.21) * 43758.5));
+  col = mix(col, col * vec3(0.62, 0.7, 0.82) + vec3(0.12, 0.15, 0.2), streak * rainAmt);
+  float fog = 1.0 - exp(-fogT * mix(0.005, 0.011, rainAmt));
   col = mix(col, sky(rd) * 0.92, clamp(fog, 0.0, 1.0));
   fragColor = vec4(col, 1.0);
 }`;
@@ -436,6 +460,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
       resize() {},
       upload() {},
       setSun() {},
+      setVent() {},
       dispose() {},
       setLong() {},
       get longSide() {
@@ -452,6 +477,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
       resize() {},
       upload() {},
       setSun() {},
+      setVent() {},
       dispose() {},
       setLong() {},
       get longSide() {
@@ -474,6 +500,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
       resize() {},
       upload() {},
       setSun() {},
+      setVent() {},
       dispose() {},
       setLong() {},
       get longSide() {
@@ -491,6 +518,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
     res: gl.getUniformLocation(trace, "uRes"),
     fov: gl.getUniformLocation(trace, "uFov"),
     sun: gl.getUniformLocation(trace, "uSun"),
+    vent: gl.getUniformLocation(trace, "uVent"),
     time: gl.getUniformLocation(trace, "uTime"),
     count: gl.getUniformLocation(trace, "uCount"),
     a: gl.getUniformLocation(trace, "uA"),
@@ -535,11 +563,21 @@ export function createRenderer(canvas: HTMLCanvasElement) {
   let sunY = 0.86;
   let sunZ = 0.28;
 
+  let ventX = 0;
+  let ventY = 0;
+  let ventZ = 0;
+
   function setSun(s: V3) {
     const l = Math.hypot(s.x, s.y, s.z) || 1;
     sunX = s.x / l;
     sunY = s.y / l;
     sunZ = s.z / l;
+  }
+
+  function setVent(s: V3) {
+    ventX = s.x;
+    ventY = s.y;
+    ventZ = s.z;
   }
 
   function upload(world: World) {
@@ -596,6 +634,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
     gl.uniform2f(loc.res, tw, th);
     gl.uniform1f(loc.fov, FOV);
     gl.uniform3f(loc.sun, sunX, sunY, sunZ);
+    gl.uniform3f(loc.vent, ventX, ventY, ventZ);
     gl.uniform1f(loc.time, time);
     gl.uniform1i(loc.count, count);
     gl.uniform4fv(loc.a, A);
@@ -624,6 +663,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
     upload,
     draw,
     setSun,
+    setVent,
     resize() {},
     setLong(n: number) {
       longSide = Math.max(96, Math.min(480, Math.round(n)));

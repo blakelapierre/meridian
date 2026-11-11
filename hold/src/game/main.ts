@@ -113,6 +113,7 @@ export function startGame(opts: {
   onError: (message: string | null) => void;
 }) {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const look = new URLSearchParams(window.location.search).get("look");
   const selfId = `p${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
   const audio = createAudio();
   const input = createInput(opts.view);
@@ -121,6 +122,7 @@ export function startGame(opts: {
   if (!renderer.ok) opts.onError(renderer.error);
   else {
     renderer.upload(sim.world);
+    renderer.setVent(sim.world.vent);
     opts.onError(null);
   }
 
@@ -408,7 +410,7 @@ export function startGame(opts: {
   function updateCamera() {
     if (!sim.playing || sim.waiting) {
       const ang = reduce ? 0.55 : sim.time * ((Math.PI * 2) / 28);
-      const hold = sim.world.spawn;
+      const hold = look === "vent" ? sim.world.vent : look === "peak" ? sim.world.peak : sim.world.spawn;
       const up = upOf(hold.x, hold.y, hold.z);
       const { east, north } = tangentFrame(up);
       const pos = add(add(add(hold, scale(up, 22)), scale(north, Math.cos(ang) * 36)), scale(east, Math.sin(ang) * 36));

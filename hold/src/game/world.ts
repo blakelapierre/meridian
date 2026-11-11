@@ -23,6 +23,10 @@ export const SAND = 11;
 export const EMBER = 12;
 export const MOSS = 13;
 export const HAY = 14;
+export const MAGMA = 15;
+export const GEM = 16;
+export const ASH = 17;
+export const SNOW = 18;
 
 export type World = {
   vox: Uint8Array;
@@ -33,6 +37,8 @@ export type World = {
   weaver: V3;
   wolfA: V3;
   wolfB: V3;
+  vent: V3;
+  peak: V3;
   spawnYaw: number;
 };
 
@@ -333,8 +339,21 @@ export function generateWorld(): World {
   const loomP = hamlet(vox, loomDir, "loom");
   const campP = hamlet(vox, campDir, "camp");
 
+  const mtnDir = rotY(SPAWN_DIR, 1.35);
+  const lakeDir = rotY(mtnDir, 0.2);
+  const mouthDir = rotY(mtnDir, 0.4);
+  const ventDir = rotY(SPAWN_DIR, -2.35);
+  raiseMountain(vox, mtnDir);
+  raiseVolcano(vox, ventDir);
+  carvePool(vox, lakeDir, 11, 1.7);
+  carveChannel(vox, rotY(mtnDir, 0.06), lakeDir, 2.4, 18);
+  carveChannel(vox, lakeDir, mouthDir, 3.6, 16);
+  digCave(vox, mtnDir);
+
   // Scatter trees on dry grass, away from the hold and the outlying roofs.
   const holdP = at(0, 2, 0);
+  const mtnP = vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(mtnDir, SEA + 2));
+  const ventP = vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(ventDir, SEA + 4));
   let trees = 0;
   for (let i = 0; i < 1400 && trees < 360; i++) {
     const dir = fib(i, 1400);
@@ -345,6 +364,8 @@ export function generateWorld(): World {
     if (vlen(vadd(p, vscale(campP, -1))) < 14) continue;
     if (vlen(vadd(p, vscale(millP, -1))) < 12) continue;
     if (vlen(vadd(p, vscale(loomP, -1))) < 12) continue;
+    if (vlen(vadd(p, vscale(mtnP, -1))) < 24) continue;
+    if (vlen(vadd(p, vscale(ventP, -1))) < 20) continue;
     const id = getV(vox, p.x, p.y, p.z);
     if (id !== GRASS && id !== MOSS) continue;
     const fr = tangentFrame(dir);
@@ -373,6 +394,8 @@ export function generateWorld(): World {
     weaver: loomP,
     wolfA: at(-16, 1.2, -16),
     wolfB: vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(rotY(SPAWN_DIR, -0.55), SEA + 2)),
+    vent: vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(ventDir, SEA + 6)),
+    peak: surfacePoint(mtnDir, 14),
     spawnYaw: 0,
   };
   const snap = (p: V3) => snapFeet(world, p.x, p.y, p.z) ?? p;
@@ -477,4 +500,142 @@ function fib(i: number, n: number): V3 {
   const r = Math.sqrt(Math.max(0, 1 - y * y));
   const th = i * 2.399963;
   return { x: Math.cos(th) * r, y, z: Math.sin(th) * r };
+}
+
+function surfacePoint(dir: V3, lift: number): V3 {
+  return vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(dir, SEA + lift));
+}
+
+/** Reshape the shell inside a tangent disc. `lift` is height above the sea. */
+function paintShell(
+  vox: Uint8Array,
+  dir: V3,
+  tangR: number,
+  heightAt: (tang: number) => number | null,
+  skin: (lift: number, depth: number) => number,
+) {
+  const c = surfacePoint(dir, 2);
+  forEachNear(c, tangR + 10, (x, y, z) => {
+    const px = x + 0.5 - CENTER;
+    const py = y + 0.5 - CENTER;
+    const pz = z + 0.5 - CENTER;
+    const radial = px * dir.x + py * dir.y + pz * dir.z;
+    const tx = px - dir.x * radial;
+    const ty = py - dir.y * radial;
+    const tz = pz - dir.z * radial;
+    const tang = Math.hypot(tx, ty, tz);
+    if (tang > tangR) return;
+    const lift = heightAt(tang);
+    if (lift === null) return;
+    const h = SEA + lift;
+    const r = Math.hypot(px, py, pz);
+    if (r > h + 0.15 && r < SEA + 6.5) {
+      vox[vidx(x, y, z)] = AIR;
+      return;
+    }
+    if (r > h || r < h - 5.5) return;
+    vox[vidx(x, y, z)] = skin(lift, h - r);
+  });
+}
+
+function raiseMountain(vox: Uint8Array, dir: V3) {
+  const R = 26;
+  const H = 16;
+  paintShell(
+    vox,
+    dir,
+    R,
+    (tang) => {
+      const u = tang / R;
+      return H * (1 - u) * (1 - u) + 0.3;
+    },
+    (lift, depth) => {
+      if (lift > 8) return depth < 1.15 ? SNOW : STONE;
+      if (depth < 1.05) return lift > 4 ? MOSS : GRASS;
+      return STONE;
+    },
+  );
+}
+
+function raiseVolcano(vox: Uint8Array, dir: V3) {
+  const R = 22;
+  const H = 13;
+  paintShell(
+    vox,
+    dir,
+    R,
+    (tang) => {
+      const u = tang / R;
+      const rim = H * (1 - u * u);
+      if (tang < 4.4) return Math.max(0.4, rim - (4.4 - tang) * 1.7);
+      return rim;
+    },
+    (lift, depth) => (depth < 1.15 ? ASH : STONE),
+  );
+  paintShell(vox, dir, 3.5, () => 0.55, () => MAGMA);
+  const fr = tangentFrame(dir);
+  for (let i = 1; i < 16; i++) {
+    const lift = 7.2 - i * 0.42;
+    const p = vadd(
+      vadd(surfacePoint(dir, lift), vscale(fr.north, 3.2 + i * 0.85)),
+      vscale(fr.east, Math.sin(i * 0.65) * 1.3),
+    );
+    setV(vox, p.x, p.y, p.z, MAGMA);
+    if (i % 3 === 0) {
+      const spark = vadd(p, vscale(dir, 1 + (i % 2)));
+      setV(vox, spark.x, spark.y, spark.z, EMBER);
+    }
+  }
+}
+
+function carvePool(vox: Uint8Array, dir: V3, radius: number, depth: number) {
+  paintShell(
+    vox,
+    dir,
+    radius,
+    (tang) => {
+      const u = tang / radius;
+      return -depth * (1 - u * u) - 0.15;
+    },
+    (_lift, d) => (d < 1.25 ? WATER : SAND),
+  );
+}
+
+function carveChannel(vox: Uint8Array, a: V3, b: V3, width: number, steps: number) {
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const dir = vnorm(vadd(vscale(a, 1 - t), vscale(b, t)));
+    paintShell(
+      vox,
+      dir,
+      width,
+      (tang) => -1.15 * (1 - (tang / width) * (tang / width)),
+      (_lift, d) => (d < 1.15 ? WATER : SAND),
+    );
+  }
+}
+
+function digCave(vox: Uint8Array, dir: V3) {
+  const fr = tangentFrame(dir);
+  for (let i = -6; i <= 16; i++) {
+    for (let u = -3; u <= 3; u++) {
+      for (let n = -3; n <= 3; n++) {
+        const bulb = i < -2 ? 2.2 : 0;
+        if (u * u + n * n > 6.5 + bulb) continue;
+        const p = vadd(vadd(vadd(surfacePoint(dir, -7 + u * 0.15), vscale(fr.east, i)), vscale(dir, u)), vscale(fr.north, n));
+        const wall = u * u + n * n > 3.6 + bulb * 0.4;
+        if (!wall) setV(vox, p.x, p.y, p.z, AIR);
+        else if ((i * 3 + n * 5 + u) % 4 === 0) setV(vox, p.x, p.y, p.z, GEM);
+        else setV(vox, p.x, p.y, p.z, STONE);
+      }
+    }
+  }
+  for (let u = 0; u <= 9; u++) {
+    for (let e = -1; e <= 1; e++) {
+      for (let n = -1; n <= 1; n++) {
+        const p = vadd(vadd(surfacePoint(dir, -u), vscale(fr.east, 14 + e * 0.2)), vscale(fr.north, n));
+        setV(vox, p.x, p.y, p.z, AIR);
+      }
+    }
+  }
 }
