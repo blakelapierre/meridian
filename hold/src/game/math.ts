@@ -10,7 +10,7 @@ export function rightYaw(yaw: number): { x: number; z: number } {
   return { x: Math.cos(yaw), z: -Math.sin(yaw) };
 }
 
-/** yaw = 0 looks toward local −north; +yaw turns the nose toward −east (screen-left behind a chase cam). */
+/** yaw = 0 looks toward local −north; +yaw turns the nose toward −east (screen-right). */
 export function yawOfDir(x: number, z: number): number {
   return Math.atan2(-x, -z);
 }

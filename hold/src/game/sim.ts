@@ -183,6 +183,7 @@ export function createSim(selfId: string, selfName: string) {
   let time = 0;
   let lookYaw = world.spawnYaw;
   let lookPitch = 0.04;
+  let spaceWas = false;
   let stamina = 100;
   let stepAcc = 0;
   let mode: "field" | "fps" | "rts" = "field";
@@ -310,8 +311,17 @@ export function createSim(selfId: string, selfName: string) {
     const ny = e.y + w.y;
     const nz = e.z + w.z;
     const landed = snapFeet(world, nx, ny, nz);
-    if (!landed || !bodyClear(world, landed)) return false;
     const r0 = radialOf(posOf(e));
+    const rg = landed ? radialOf(landed) : r0;
+    const airborne = e.fall < -0.4 || r0 > rg + 0.55;
+    if (airborne) {
+      if (!bodyClear(world, { x: nx, y: ny, z: nz })) return false;
+      e.x = nx;
+      e.y = ny;
+      e.z = nz;
+      return true;
+    }
+    if (!landed || !bodyClear(world, landed)) return false;
     const r1 = radialOf(landed);
     if (r1 > r0 + 1.55) return false;
     if (r1 < r0 - 1.15) {
@@ -336,9 +346,19 @@ export function createSim(selfId: string, selfName: string) {
   function gravitate(e: Ent, dt: number) {
     const g = snapFeet(world, e.x, e.y, e.z);
     if (!g) return;
+    const up = upOf(e.x, e.y, e.z);
+    if (e.fall < 0) {
+      const hx = e.x + up.x * (e.height + 0.25);
+      const hy = e.y + up.y * (e.height + 0.25);
+      const hz = e.z + up.z * (e.height + 0.25);
+      const id = voxelAt(world, hx, hy, hz);
+      if (id === 2 || id === 3 || id === 4 || id === 5 || id === 8 || id === 13) e.fall = 0;
+    }
     const r0 = radialOf(posOf(e));
     const rg = radialOf(g);
-    if (r0 <= rg + 0.2) {
+    const gap = r0 - rg;
+    e.fall = Math.min(48, e.fall + 38 * dt);
+    if (gap <= 0.22 && e.fall >= 0) {
       if (bodyClear(world, g)) {
         e.x = g.x;
         e.y = g.y;
@@ -347,12 +367,34 @@ export function createSim(selfId: string, selfName: string) {
       e.fall = 0;
       return;
     }
-    e.fall = Math.min(46, e.fall + 36 * dt);
-    const up = upOf(e.x, e.y, e.z);
-    const drop = Math.min(e.fall * dt, r0 - rg);
-    e.x -= up.x * drop;
-    e.y -= up.y * drop;
-    e.z -= up.z * drop;
+    const drop = e.fall * dt;
+    if (e.fall > 0 && drop >= gap) {
+      if (bodyClear(world, g)) {
+        e.x = g.x;
+        e.y = g.y;
+        e.z = g.z;
+      }
+      e.fall = 0;
+      return;
+    }
+    const nx = e.x - up.x * drop;
+    const ny = e.y - up.y * drop;
+    const nz = e.z - up.z * drop;
+    if (!bodyClear(world, { x: nx, y: ny, z: nz })) {
+      e.fall = Math.max(0, e.fall);
+      return;
+    }
+    e.x = nx;
+    e.y = ny;
+    e.z = nz;
+  }
+
+  function hop(e: Ent) {
+    if (e.state === "down" || e.fall < -0.8) return;
+    const g = snapFeet(world, e.x, e.y, e.z);
+    if (!g) return;
+    if (radialOf(posOf(e)) > radialOf(g) + 0.45) return;
+    e.fall = -16.5;
   }
 
   function living(e: Ent): boolean {
@@ -640,7 +682,7 @@ export function createSim(selfId: string, selfName: string) {
     pushLog(`${name}'s browser closed.`);
   }
 
-  function stepPlayer(dt: number, axes: { x: number; y: number; sprint: boolean }) {
+  function stepPlayer(dt: number, axes: { x: number; y: number; sprint: boolean; jump: boolean }) {
     const e = player();
     if (!playing || waiting) {
       e.vx = 0;
@@ -662,6 +704,7 @@ export function createSim(selfId: string, selfName: string) {
       e.vz *= 0.8;
       return;
     }
+    if (axes.jump) hop(player());
     const f = forwardYaw(lookYaw);
     const r = rightYaw(lookYaw);
     let wx = f.x * axes.y + r.x * axes.x;
@@ -912,13 +955,18 @@ export function createSim(selfId: string, selfName: string) {
     if (held("KeyD") || held("ArrowRight")) x += 1;
     if (held("KeyW") || held("ArrowUp")) y += 1;
     if (held("KeyS") || held("ArrowDown")) y -= 1;
+    const spaceDown = held("Space");
     const m = Math.hypot(x, y);
     if (m > 1) {
       x /= m;
       y /= m;
     }
+    // rightYaw points screen-left, so flip strafe: A and stick-left go screen-left.
+    x = -x;
     const sprint = (held("ShiftLeft") || held("ShiftRight") || sprintHeld) && y > 0;
-    return { x, y, sprint };
+    const jump = spaceDown && !spaceWas;
+    spaceWas = spaceDown;
+    return { x, y, sprint, jump };
   }
 
   function soldiersOf(id: string): Ent[] {
@@ -1646,12 +1694,12 @@ export function createSim(selfId: string, selfName: string) {
     },
     applyLook(dx: number, dy: number) {
       if (!playing || waiting || mode === "rts") {
-        if (mode === "rts") rtsYaw -= dx * 0.0022;
+        if (mode === "rts") rtsYaw += dx * 0.0022;
         return;
       }
       const p = player();
       if (p.state === "down") return;
-      lookYaw -= dx * 0.00215;
+      lookYaw += dx * 0.00215;
       lookPitch = clamp(lookPitch - dy * 0.00215, -0.55, 0.72);
       if (mode === "fps") p.yaw = lookYaw;
     },
@@ -1696,6 +1744,10 @@ export function createSim(selfId: string, selfName: string) {
     cdReady(kind: "swing" | "bow") {
       const e = player();
       return e.cd <= 0 && e.state !== "down";
+    },
+    jump() {
+      if (!playing || waiting || mode === "rts") return;
+      hop(player());
     },
     pose() {
       const e = player();

@@ -16,7 +16,7 @@ npm run dev
 
 Opens on port 8090 so it does not collide with `npm start` at the repository root (the Atoll server, port 8080). Auth is off (`hold/.grok/app-env.json`).
 
-Wasd moves. A turns you one way, D the other, and the body follows the strafe. Enter the Vale from the menu. Pause spends attribute and skill points. The roost button loosens a raven: pick a town or a connected captain, write a note, and pin a map of the ground under you.
+Wasd moves. A turns left, D turns right, and the body follows. Mouse right looks right. Space jumps. Enter the Vale from the menu. Pause spends attribute and skill points. The roost button loosens a raven: pick a town or a connected captain, write a note, and pin a map of the ground under you.
 
 Resolution is in the pause ledger (Auto, or a locked long side from coarse to keen). The sheet is kept in local storage on this device.
 

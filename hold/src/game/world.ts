@@ -1,12 +1,12 @@
 import { tangentFrame, vadd, vlen, vnorm, vscale, type V3 } from "./math";
 
-/** Cubic lattice. Voxels are small relative to a person; the shell is a globe. */
-export const N = 96;
+/** Cubic lattice. Voxels stay person-scale; the shell is a wide globe. */
+export const N = 208;
 export const WORLD_W = N;
 export const WORLD_H = N;
 export const WORLD_D = N;
 export const CENTER = N * 0.5;
-export const SEA = 33.5;
+export const SEA = 88;
 
 export const AIR = 0;
 export const GRASS = 1;
@@ -176,7 +176,7 @@ function getV(vox: Uint8Array, x: number, y: number, z: number): number {
 function relief(dx: number, dy: number, dz: number): number {
   const l = Math.hypot(dx, dy, dz) || 1;
   const n = fbm((dx / l) * 2.35 + 4.2, (dy / l) * 2.35 - 1.7, (dz / l) * 2.35 + 0.4);
-  return (n - 0.48) * 6.4;
+  return (n - 0.48) * 8;
 }
 
 function rotY(d: V3, ang: number): V3 {
@@ -194,6 +194,7 @@ export function generateWorld(): World {
         const dy = y + 0.5 - CENTER;
         const dz = z + 0.5 - CENTER;
         const r = Math.hypot(dx, dy, dz);
+        if (r > SEA + 10 || r < SEA - 14) continue;
         const h = SEA + relief(dx, dy, dz);
         if (r > h || r < h - 5.2) continue;
         const depth = h - r;
@@ -216,22 +217,19 @@ export function generateWorld(): World {
     vadd(vadd(vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(up, flatR + u)), vscale(east, e)), vscale(north, n));
 
   // Flatten a courtyard disc and clear the sky above it.
-  for (let z = 0; z < N; z++) {
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
-        const p = { x: x + 0.5 - CENTER, y: y + 0.5 - CENTER, z: z + 0.5 - CENTER };
-        const radial = p.x * up.x + p.y * up.y + p.z * up.z;
-        const tx = p.x - up.x * radial;
-        const ty = p.y - up.y * radial;
-        const tz = p.z - up.z * radial;
-        const tang = Math.hypot(tx, ty, tz);
-        if (tang > 18 || radial < flatR - 6 || radial > flatR + 14) continue;
-        if (radial < flatR - 1.05) vox[vidx(x, y, z)] = STONE;
-        else if (radial < flatR) vox[vidx(x, y, z)] = tang < 5 || Math.abs(tx) < 1.2 ? PATH : GRASS;
-        else vox[vidx(x, y, z)] = AIR;
-      }
-    }
-  }
+  const yard = { x: CENTER + up.x * flatR, y: CENTER + up.y * flatR, z: CENTER + up.z * flatR };
+  forEachNear(yard, 36, (x, y, z) => {
+    const p = { x: x + 0.5 - CENTER, y: y + 0.5 - CENTER, z: z + 0.5 - CENTER };
+    const radial = p.x * up.x + p.y * up.y + p.z * up.z;
+    const tx = p.x - up.x * radial;
+    const ty = p.y - up.y * radial;
+    const tz = p.z - up.z * radial;
+    const tang = Math.hypot(tx, ty, tz);
+    if (tang > 18 || radial < flatR - 6 || radial > flatR + 14) return;
+    if (radial < flatR - 1.05) vox[vidx(x, y, z)] = STONE;
+    else if (radial < flatR) vox[vidx(x, y, z)] = tang < 5 || Math.abs(tx) < 1.2 ? PATH : GRASS;
+    else vox[vidx(x, y, z)] = AIR;
+  });
 
   function stamp(e: number, u: number, n: number, t: number) {
     const p = at(e, u, n);
@@ -312,38 +310,26 @@ export function generateWorld(): World {
   house(16, 8, 6, 6);
   house(-22, 2, 7, 6);
 
-  // Camp pad on another meridian, then a palisade.
-  const campDir = rotY(SPAWN_DIR, 1.05);
-  flattenPad(vox, campDir, SEA + 0.9, 8);
-  const cFrame = tangentFrame(campDir);
-  const campAt = (e: number, u: number, n: number, t: number) => {
-    const p = vadd(
-      vadd(vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(campDir, SEA + 0.9 + u)), vscale(cFrame.east, e)),
-      vscale(cFrame.north, n),
-    );
-    setV(vox, p.x, p.y, p.z, t);
-  };
-  for (let e = -6; e <= 6; e++) {
-    for (let n = -5; n <= 5; n++) {
-      const edge = Math.abs(e) === 6 || Math.abs(n) === 5;
-      if (!edge) continue;
-      if (e === -6 && n >= -1 && n <= 1) continue;
-      for (let u = 0; u < 4; u++) campAt(e, u, n, (e + n) % 2 === 0 ? TIMBER : HAY);
-    }
-  }
-  for (let u = 0; u < 3; u++) campAt(0, u, 0, EMBER);
+  // Camp, mill, and loom sit on other meridians, a real walk from the keep.
+  const millDir = rotY(SPAWN_DIR, 0.95);
+  const loomDir = rotY(SPAWN_DIR, -1.65);
+  const campDir = rotY(SPAWN_DIR, 2.45);
+  const millP = hamlet(vox, millDir, "mill");
+  const loomP = hamlet(vox, loomDir, "loom");
+  const campP = hamlet(vox, campDir, "camp");
 
-  // Scatter trees on dry grass, away from the hold and the camp.
+  // Scatter trees on dry grass, away from the hold and the outlying roofs.
   const holdP = at(0, 2, 0);
-  const campP = vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(campDir, SEA + 2));
   let trees = 0;
-  for (let i = 0; i < 220 && trees < 70; i++) {
-    const dir = fib(i, 220);
+  for (let i = 0; i < 900 && trees < 220; i++) {
+    const dir = fib(i, 900);
     const h = SEA + relief(dir.x, dir.y, dir.z);
-    if (h < SEA + 0.9 || h > SEA + 3.2) continue;
+    if (h < SEA + 0.9 || h > SEA + 4.4) continue;
     const p = vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(dir, h));
-    if (vlen(vadd(p, vscale(holdP, -1))) < 20) continue;
-    if (vlen(vadd(p, vscale(campP, -1))) < 12) continue;
+    if (vlen(vadd(p, vscale(holdP, -1))) < 22) continue;
+    if (vlen(vadd(p, vscale(campP, -1))) < 14) continue;
+    if (vlen(vadd(p, vscale(millP, -1))) < 12) continue;
+    if (vlen(vadd(p, vscale(loomP, -1))) < 12) continue;
     const id = getV(vox, p.x, p.y, p.z);
     if (id !== GRASS && id !== MOSS) continue;
     const fr = tangentFrame(dir);
@@ -367,11 +353,11 @@ export function generateWorld(): World {
     vox,
     spawn: at(0, 1.2, -6),
     steward: at(0, 1.2, 1.5),
-    camp: vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(campDir, SEA + 2)),
-    miller: at(18, 1.2, 1),
-    weaver: at(-20, 1.2, 4),
+    camp: campP,
+    miller: millP,
+    weaver: loomP,
     wolfA: at(-16, 1.2, -16),
-    wolfB: vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(rotY(SPAWN_DIR, -0.85), SEA + 2)),
+    wolfB: vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(rotY(SPAWN_DIR, -0.55), SEA + 2)),
     spawnYaw: 0,
   };
   const snap = (p: V3) => snapFeet(world, p.x, p.y, p.z) ?? p;
@@ -385,23 +371,90 @@ export function generateWorld(): World {
   return world;
 }
 
-function flattenPad(vox: Uint8Array, dir: V3, radius: number, tangR: number) {
-  for (let z = 0; z < N; z++) {
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
-        const p = { x: x + 0.5 - CENTER, y: y + 0.5 - CENTER, z: z + 0.5 - CENTER };
-        const radial = p.x * dir.x + p.y * dir.y + p.z * dir.z;
-        const tx = p.x - dir.x * radial;
-        const ty = p.y - dir.y * radial;
-        const tz = p.z - dir.z * radial;
-        if (Math.hypot(tx, ty, tz) > tangR) continue;
-        if (radial < radius - 4 || radial > radius + 8) continue;
-        if (radial < radius - 1) vox[vidx(x, y, z)] = STONE;
-        else if (radial < radius) vox[vidx(x, y, z)] = PATH;
-        else vox[vidx(x, y, z)] = AIR;
-      }
+function forEachNear(c: V3, reach: number, fn: (x: number, y: number, z: number) => void) {
+  const x0 = Math.max(1, Math.floor(c.x - reach));
+  const y0 = Math.max(1, Math.floor(c.y - reach));
+  const z0 = Math.max(1, Math.floor(c.z - reach));
+  const x1 = Math.min(N - 2, Math.ceil(c.x + reach));
+  const y1 = Math.min(N - 2, Math.ceil(c.y + reach));
+  const z1 = Math.min(N - 2, Math.ceil(c.z + reach));
+  for (let z = z0; z <= z1; z++) {
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) fn(x, y, z);
     }
   }
+}
+
+function hamlet(vox: Uint8Array, dir: V3, kind: "mill" | "loom" | "camp"): V3 {
+  const base = SEA + (kind === "camp" ? 0.9 : 1.2);
+  flattenPad(vox, dir, base, kind === "camp" ? 9 : 7);
+  const fr = tangentFrame(dir);
+  const stamp = (e: number, u: number, n: number, t: number) => {
+    const p = vadd(
+      vadd(vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(dir, base + u)), vscale(fr.east, e)),
+      vscale(fr.north, n),
+    );
+    setV(vox, p.x, p.y, p.z, t);
+  };
+  if (kind === "camp") {
+    for (let e = -6; e <= 6; e++) {
+      for (let n = -5; n <= 5; n++) {
+        const edge = Math.abs(e) === 6 || Math.abs(n) === 5;
+        if (!edge) continue;
+        if (e === -6 && n >= -1 && n <= 1) continue;
+        for (let u = 0; u < 4; u++) stamp(e, u, n, (e + n) % 2 === 0 ? TIMBER : HAY);
+      }
+    }
+    for (let u = 0; u < 3; u++) stamp(0, u, 0, EMBER);
+  } else if (kind === "mill") {
+    for (let e = -2; e <= 2; e++) {
+      for (let n = -2; n <= 2; n++) {
+        if (Math.abs(e) !== 2 && Math.abs(n) !== 2) continue;
+        const door = n === -2 && e === 0;
+        for (let u = 0; u < 7; u++) {
+          if (door && u < 4) continue;
+          stamp(e, u, n, TIMBER);
+        }
+      }
+    }
+    stamp(0, 7, 0, THATCH);
+    stamp(0, 8, 0, THATCH);
+    stamp(3, 2, 0, TIMBER);
+    stamp(3, 3, 0, TIMBER);
+    stamp(4, 3, 0, TIMBER);
+    stamp(0, 9, 0, BANNER);
+  } else {
+    for (let e = -2; e <= 2; e++) {
+      for (let n = -2; n <= 3; n++) {
+        const edge = e === -2 || e === 2 || n === -2 || n === 3;
+        if (!edge) continue;
+        const door = n === -2 && e === 0;
+        for (let u = 0; u < 5; u++) {
+          if (door && u < 3) continue;
+          stamp(e, u, n, e === -2 || e === 2 ? TIMBER : PLASTER);
+        }
+        stamp(e, 5, n, THATCH);
+      }
+    }
+    stamp(0, 6, 1, BANNER);
+  }
+  return vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(dir, base + 1.4));
+}
+
+function flattenPad(vox: Uint8Array, dir: V3, radius: number, tangR: number) {
+  const c = { x: CENTER + dir.x * radius, y: CENTER + dir.y * radius, z: CENTER + dir.z * radius };
+  forEachNear(c, tangR + 12, (x, y, z) => {
+    const p = { x: x + 0.5 - CENTER, y: y + 0.5 - CENTER, z: z + 0.5 - CENTER };
+    const radial = p.x * dir.x + p.y * dir.y + p.z * dir.z;
+    const tx = p.x - dir.x * radial;
+    const ty = p.y - dir.y * radial;
+    const tz = p.z - dir.z * radial;
+    if (Math.hypot(tx, ty, tz) > tangR) return;
+    if (radial < radius - 4 || radial > radius + 8) return;
+    if (radial < radius - 1) vox[vidx(x, y, z)] = STONE;
+    else if (radial < radius) vox[vidx(x, y, z)] = PATH;
+    else vox[vidx(x, y, z)] = AIR;
+  });
 }
 
 function fib(i: number, n: number): V3 {

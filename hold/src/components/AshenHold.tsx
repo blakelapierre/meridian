@@ -170,7 +170,7 @@ export function AshenHold() {
               <p className="text-xs tracking-widest text-brass uppercase">Vale of the free company</p>
               <h1 className="font-display text-4xl text-parchment md:text-5xl">Ashen Hold</h1>
               <p className="text-pretty text-parchment-dim">
-                A free company on a small world-moon. Gravity keeps every knight, spear, and wolf standing on the globe.
+                A free company on a world-moon. Gravity keeps every knight, spear, and wolf standing on the globe.
                 Ravens and a pigeon carry notes and sketched maps between the hold, the mill, the loom, the camp, and any captain still linked.
                 Hold the keep, then command from the war table or fight in the flesh.
               </p>
@@ -422,7 +422,7 @@ export function AshenHold() {
               </p>
               {!touch && !hud.paused ? (
                 <p className="mt-2 hidden text-xs text-pretty text-mist md:block">
-                  WASD · mouse look · strike · F eyes · V table · Enter to speak · Ravens
+                  WASD · mouse look · Space jumps · strike · F eyes · V table · Enter to speak · Ravens
                 </p>
               ) : null}
               </div>
@@ -634,6 +634,9 @@ export function AshenHold() {
             <Stick onChange={(x, y) => api.current?.setVirtual(x, y)} />
           </div>
           <div className="absolute right-3 bottom-28 z-10 grid grid-cols-2 gap-2">
+            <TouchBtn label="Jump" onPress={() => api.current?.jump()}>
+              <span className="text-xs font-semibold">Jump</span>
+            </TouchBtn>
             <TouchBtn label="Strike" onPress={() => api.current?.attack()}>
               <Swords className="size-5" />
             </TouchBtn>

@@ -1068,6 +1068,9 @@ export function startGame(opts: {
     attack() {
       input.pokeAttack();
     },
+    jump() {
+      sim.jump();
+    },
     bow() {
       input.pokeBow();
     },
