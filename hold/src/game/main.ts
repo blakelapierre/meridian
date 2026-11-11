@@ -91,7 +91,7 @@ function orient(up: V3, yaw: number, pitch: number): V3 {
   });
 }
 
-const SOFT = new Set([0, 6, 7, 9, 12]);
+const SOFT = new Set([0, 6, 9, 12]);
 
 declare global {
   interface Window {
@@ -149,6 +149,8 @@ export function startGame(opts: {
     { x: CENTER, y: CENTER, z: CENTER },
     { x: 0, y: 1, z: 0 },
   );
+  let chase = 8;
+  const spring = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, on: false, mode: "" };
   const chats: { name: string; text: string }[] = [];
   let qualityLock: number | null = null;
   let lastGold = 0;
@@ -407,14 +409,39 @@ export function startGame(opts: {
     audio.ui();
   }
 
-  function updateCamera() {
+  function smoothCam(ideal: V3, dt: number): V3 {
+    const mode = `${sim.mode}:${sim.playing ? 1 : 0}`;
+    if (!spring.on || spring.mode !== mode || sim.mode === "fps" || dt <= 0) {
+      spring.x = ideal.x;
+      spring.y = ideal.y;
+      spring.z = ideal.z;
+      spring.vx = 0;
+      spring.vy = 0;
+      spring.vz = 0;
+      spring.on = true;
+      spring.mode = mode;
+      return ideal;
+    }
+    const step = Math.min(0.05, dt);
+    const pull = 9;
+    const damp = 6.5;
+    spring.vx += ((ideal.x - spring.x) * pull - spring.vx * damp) * step;
+    spring.vy += ((ideal.y - spring.y) * pull - spring.vy * damp) * step;
+    spring.vz += ((ideal.z - spring.z) * pull - spring.vz * damp) * step;
+    spring.x += spring.vx * step;
+    spring.y += spring.vy * step;
+    spring.z += spring.vz * step;
+    return { x: spring.x, y: spring.y, z: spring.z };
+  }
+
+  function updateCamera(dt = 0) {
     if (!sim.playing || sim.waiting) {
       const ang = reduce ? 0.55 : sim.time * ((Math.PI * 2) / 28);
       const hold = look === "vent" ? sim.world.vent : look === "peak" ? sim.world.peak : sim.world.spawn;
       const up = upOf(hold.x, hold.y, hold.z);
       const { east, north } = tangentFrame(up);
-      const pos = add(add(add(hold, scale(up, 22)), scale(north, Math.cos(ang) * 36)), scale(east, Math.sin(ang) * 36));
-      cam = lookAt(pos, add(hold, scale(up, 3)), up);
+      const pos = add(add(add(hold, scale(up, 18)), scale(north, Math.cos(ang) * 40)), scale(east, Math.sin(ang) * 40));
+      cam = lookAt(pos, add(hold, scale(up, 20)), up);
       return;
     }
     const p = sim.player();
@@ -436,26 +463,34 @@ export function startGame(opts: {
       return;
     }
     const flat = orient(up, sim.lookYaw, 0);
-    const focus = add(add(feet, scale(up, p.height * 1.05)), scale(aim, 14));
-    let pos = add(add(feet, scale(up, 14)), scale(flat, -4));
-    for (const [back, lift] of [
-      [16, 11],
-      [12, 9],
-      [8, 7],
-      [5, 6],
-    ] as const) {
-      const desired = add(add(feet, scale(flat, -back)), scale(up, lift));
-      const mid = add(feet, scale(sub(desired, feet), 0.55));
-      if (
-        SOFT.has(voxelAt(sim.world, desired.x, desired.y, desired.z)) &&
-        SOFT.has(voxelAt(sim.world, mid.x, mid.y, mid.z))
-      ) {
-        pos = desired;
-        break;
-      }
+    const lift = p.height * 0.58;
+    let ideal = add(add(feet, scale(up, lift)), scale(flat, -chase));
+    if (shake > 0) ideal = add(ideal, scale(basisUp(flat, up).right, Math.sin(sim.time * 40) * shake));
+    const anchor = add(add(feet, scale(up, p.height * 0.72)), scale(flat, -1.05));
+    const sprung = smoothCam(seatCamera(ideal, anchor), dt);
+    const framed = orient(up, sim.lookYaw, sim.lookPitch - 0.16);
+    cam = { pos: seatCamera(sprung, anchor), ...basisUp(framed, up) };
+  }
+
+  function seatCamera(ideal: V3, anchor: V3): V3 {
+    const delta = sub(ideal, anchor);
+    const len = Math.hypot(delta.x, delta.y, delta.z);
+    if (len < 0.2) return anchor;
+    const step = 0.4;
+    const n = Math.min(64, Math.ceil(len / step));
+    let best = anchor;
+    let clear = 0;
+    for (let i = 1; i <= n; i++) {
+      const p = add(anchor, scale(delta, (i * step) / len));
+      if (!SOFT.has(voxelAt(sim.world, p.x, p.y, p.z))) break;
+      best = p;
+      clear = i;
     }
-    if (shake > 0) pos = add(pos, scale(basisUp(flat, up).right, Math.sin(sim.time * 40) * shake));
-    cam = lookAt(pos, focus, up);
+    if (clear > 2) {
+      const pulled = add(anchor, scale(delta, ((clear - 2) * step) / len));
+      if (SOFT.has(voxelAt(sim.world, pulled.x, pulled.y, pulled.z))) return pulled;
+    }
+    return best;
   }
 
   function buildDraw(): DrawEnt[] {
@@ -469,6 +504,95 @@ export function startGame(opts: {
       villager: [0.64, 0.52, 0.36],
     };
     const kindN: Record<string, number> = { knight: 0, soldier: 1, bandit: 2, wolf: 3, villager: 4 };
+    const skin: [number, number, number] = [0.76, 0.58, 0.44];
+    const hair: [number, number, number] = [0.16, 0.1, 0.07];
+    const boot: [number, number, number] = [0.16, 0.11, 0.08];
+    const eye: [number, number, number] = [0.08, 0.07, 0.06];
+    const me = sim.player();
+    let detailed = 0;
+    const pushCap = (
+      a: V3,
+      b: V3,
+      radius: number,
+      color: [number, number, number],
+      kind: number,
+      yaw: number,
+      flash = 0,
+      selected = false,
+    ) => {
+      if (list.length >= 40) return;
+      list.push({
+        ax: a.x,
+        ay: a.y,
+        az: a.z,
+        bx: b.x,
+        by: b.y,
+        bz: b.z,
+        radius,
+        kind,
+        flash,
+        selected,
+        yaw,
+        r: color[0],
+        g: color[1],
+        b: color[2],
+      });
+    };
+    const figure = (e: (typeof sim.ents)[number], color: [number, number, number], rich: boolean) => {
+      const feet = { x: e.x, y: e.y, z: e.z };
+      const up = upOf(e.x, e.y, e.z);
+      const { east, north } = tangentFrame(up);
+      const fwd = add(scale(east, -Math.sin(e.yaw)), scale(north, -Math.cos(e.yaw)));
+      const right = add(scale(east, Math.cos(e.yaw)), scale(north, -Math.sin(e.yaw)));
+      const s = e.height / 1.7;
+      const travel = Math.min(1, Math.hypot(e.vx, e.vz) / 8);
+      const gait = sim.time * 7.5 + e.x * 0.04;
+      const stepping = travel > 0.12;
+      const bob = stepping ? -Math.abs(Math.sin(gait)) * 0.03 * s : 0;
+      const reach = (stepping ? 0.3 * travel : 0.02) * s;
+      const hop = (stepping ? 0.1 * travel : 0) * s;
+      const place = (lf: number, lr: number, u: number) =>
+        add(add(add(feet, scale(fwd, lf)), scale(right, lr)), scale(up, u));
+      const kind = kindN[e.kind] ?? 0;
+      const sphere = (lf: number, lr: number, u: number, radius: number, tone: [number, number, number]) => {
+        const p = place(lf, lr, u);
+        pushCap(p, add(p, scale(up, radius * 0.15)), radius, tone, kind, e.yaw);
+      };
+      pushCap(place(0, 0, 0.78 * s + bob), place(0.04 * s, 0, 1.32 * s + bob), 0.15 * s, color, kind, e.yaw, e.flash, e.selected);
+      sphere(0.07 * s, 0, 1.52 * s + bob, 0.12 * s, skin);
+      sphere(0.02 * s, 0, 1.64 * s + bob, 0.09 * s, hair);
+      if (rich) {
+        sphere(0.15 * s, 0.02 * s, 1.54 * s + bob, 0.028 * s, skin);
+        sphere(0.14 * s, 0.045 * s, 1.58 * s + bob, 0.026 * s, eye);
+        sphere(0.14 * s, -0.045 * s, 1.58 * s + bob, 0.026 * s, eye);
+      }
+      for (const sign of [1, -1]) {
+        const phase = gait + (sign > 0 ? 0 : Math.PI);
+        const swing = Math.sin(phase);
+        const lift = Math.max(0, Math.cos(phase));
+        const hip = place(0.02 * s, sign * 0.09 * s, 0.8 * s + bob);
+        const foot = place(swing * reach, sign * 0.09 * s, 0.04 * s + lift * hop);
+        if (rich) {
+          const knee = place(0.08 * s + Math.max(0, swing) * reach * 0.45, sign * 0.1 * s, 0.42 * s + bob * 0.4);
+          pushCap(hip, knee, 0.07 * s, color, kind, e.yaw);
+          pushCap(knee, foot, 0.05 * s, boot, kind, e.yaw);
+          const shoulder = place(0.03 * s, sign * 0.18 * s, 1.3 * s + bob);
+          const hand = place(0.06 * s - swing * reach * 0.75, sign * 0.2 * s, 0.58 * s + bob);
+          pushCap(shoulder, hand, 0.045 * s, color, kind, e.yaw);
+          sphere(0.06 * s - swing * reach * 0.75, sign * 0.2 * s, 0.56 * s + bob, 0.038 * s, skin);
+        } else {
+          pushCap(hip, foot, 0.05 * s, boot, kind, e.yaw);
+          pushCap(
+            place(0.02 * s, sign * 0.14 * s, 1.2 * s),
+            place(0.04 * s, sign * 0.16 * s, 0.55 * s),
+            0.034 * s,
+            color,
+            kind,
+            e.yaw,
+          );
+        }
+      }
+    };
     for (const e of sim.ents) {
       if (e.hp <= 0 && e.kind !== "knight") continue;
       if (sim.mode === "fps" && e.id === sim.selfId && e.state !== "down") continue;
@@ -476,6 +600,12 @@ export function startGame(opts: {
       const h = e.state === "down" ? e.height * 0.28 : e.height;
       const key = e.id === sim.selfId ? "self" : e.kind;
       const c = colors[key] ?? colors.knight;
+      const dist = Math.hypot(e.x - me.x, e.y - me.y, e.z - me.z);
+      if (e.kind !== "wolf" && e.state !== "down" && (e.id === me.id || (detailed < 2 && dist < 46))) {
+        figure(e, c, e.id === me.id);
+        detailed += 1;
+        continue;
+      }
       list.push({
         ax: e.x,
         ay: e.y,
@@ -587,14 +717,14 @@ export function startGame(opts: {
         b: dark[2],
       });
     }
-    if (list.length <= 24) return list;
+    if (list.length <= 36) return list;
     list.sort((a, b) => {
-      const bias = (e: DrawEnt) => (e.kind === 6 ? -40 : 0);
+      const bias = (e: DrawEnt) => (e.kind === 6 ? 30 : 0);
       const da = Math.hypot(a.ax - cam.pos.x, a.ay - cam.pos.y, a.az - cam.pos.z) + bias(a);
       const db = Math.hypot(b.ax - cam.pos.x, b.ay - cam.pos.y, b.az - cam.pos.z) + bias(b);
       return da - db;
     });
-    return list.slice(0, 24);
+    return list.slice(0, 36);
   }
 
   function drawOverlay() {
@@ -937,7 +1067,7 @@ export function startGame(opts: {
       if (sim.isWarden && !sim.waiting) room.broadcast(sim.toSnap());
       else if (sim.playing && !sim.waiting) room.broadcast(sim.pose());
     }
-    updateCamera();
+    updateCamera(dt);
     const t0 = performance.now();
     if (renderer.ok) renderer.setSun(sim.sun);
     renderer.draw(cam, buildDraw(), sim.time);
@@ -985,9 +1115,14 @@ export function startGame(opts: {
   }
 
   function onWheel(e: WheelEvent) {
-    if (sim.mode !== "rts") return;
+    if (sim.mode === "rts") {
+      e.preventDefault();
+      sim.rtsDist += Math.sign(e.deltaY) * 1.4;
+      return;
+    }
+    if (!sim.playing || sim.mode !== "field") return;
     e.preventDefault();
-    sim.rtsDist += Math.sign(e.deltaY) * 1.4;
+    chase = Math.max(4, Math.min(28, chase + Math.sign(e.deltaY) * 1.4));
   }
   opts.view.addEventListener("wheel", onWheel, { passive: false });
 

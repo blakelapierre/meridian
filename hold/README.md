@@ -1,8 +1,8 @@
 # Ashen Hold
 
-The shell is twice the previous vale. Bricks face the planet's heart. The star and the planet are stepped by the n-body integrator from `src/engine` (nbody-raycaster), so the globe spins and the sun crosses the sky. A knight's fall is that same pairwise pull. The ground stays fixed in the planet frame.
+The shell is twice the last vale again. Each block is drawn as smaller masonry, still facing the planet's heart. The star and the planet are stepped by the n-body integrator from `src/engine` (nbody-raycaster), so the globe spins and the sun crosses the sky. A knight's fall is that same pairwise pull. The ground stays fixed in the planet frame.
 
-A snow-capped peak feeds a stream, a lake, and a river. A cave under the peak is veined with gems. A volcano stands on another meridian: ash, a magma throat, and cinders. Clouds drift, rain falls under a thick deck, and fog thickens with the shower. The frame is still the hold raytracer, not the Atoll picture. `?look=peak` and `?look=vent` frame those places from the title.
+Out the gate, banner posts mark a short path to a tall snow peak. A gem cave opens under that peak, a lake sits beside it, and a cinder vent stands off the east road. People are drawn with a head, hair, eyes, and a walking gait. In the field the wheel sets how far behind them the camera rides. Clouds cross a blue sky, and the rain falls downward. The frame is still the hold raytracer, not the Atoll picture. `?look=peak` and `?look=vent` frame those places from the title.
 
 Solo works with no one else connected. A shared banner code is a WebRTC room; the browser that hosts the sim can leave, and another peer takes the warden seat. Carrier ravens and one pigeon fly notes and a sketch of the ground you are standing on between the Hold, the Mill, the Loom, the Camp, and captains in the same room.
 
@@ -18,7 +18,7 @@ npm run dev
 
 Opens on port 8090 so it does not collide with `npm start` at the repository root (the Atoll server, port 8080). Auth is off (`hold/.grok/app-env.json`).
 
-Wasd moves. A turns left, D turns right, and the body follows. Mouse right looks right. Space jumps. Enter the Vale from the menu. Pause spends attribute and skill points. The roost button loosens a raven: pick a town or a connected captain, write a note, and pin a map of the ground under you.
+Wasd moves. A steps left, D steps right, and the body turns to face the walk. Mouse right looks right. The wheel draws the chase camera out or in. Space jumps. Enter the Vale from the menu. Pause spends attribute and skill points. The roost button loosens a raven: pick a town or a connected captain, write a note, and pin a map of the ground under you.
 
 Resolution is in the pause ledger (Auto, or a locked long side from coarse to keen). The sheet is kept in local storage on this device.
 

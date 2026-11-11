@@ -1,12 +1,16 @@
 import { tangentFrame, vadd, vlen, vnorm, vscale, type V3 } from "./math";
 
 /** Cubic lattice. Person-scale voxels on a globe twice the previous vale. */
-export const N = 400;
+export const N = 768;
 export const WORLD_W = N;
 export const WORLD_H = N;
 export const WORLD_D = N;
 export const CENTER = N * 0.5;
-export const SEA = 176;
+export const SEA = 352;
+export const CHUNK = 32;
+export const ATLAS_X = 16;
+export const ATLAS_Y = 16;
+export const ATLAS_Z = 12;
 
 export const AIR = 0;
 export const GRASS = 1;
@@ -28,8 +32,48 @@ export const GEM = 16;
 export const ASH = 17;
 export const SNOW = 18;
 
+/** Sparse 32³ chunks. The hollow inside the globe is never stored. */
+export class ChunkVolume {
+  readonly chunks = new Map<number, Uint8Array>();
+  private lastKey = 0x7fffffff;
+  private last: Uint8Array | null = null;
+
+  keyOf(cx: number, cy: number, cz: number) {
+    return cx | (cy << 6) | (cz << 12);
+  }
+
+  private chunkAt(ix: number, iy: number, iz: number, create: boolean): Uint8Array | null {
+    const k = this.keyOf(ix >> 5, iy >> 5, iz >> 5);
+    if (k === this.lastKey && this.last) return this.last;
+    let chunk = this.chunks.get(k) ?? null;
+    if (!chunk && create) {
+      chunk = new Uint8Array(CHUNK * CHUNK * CHUNK);
+      this.chunks.set(k, chunk);
+    }
+    if (chunk) {
+      this.lastKey = k;
+      this.last = chunk;
+    }
+    return chunk;
+  }
+
+  get(ix: number, iy: number, iz: number): number {
+    if (ix < 0 || iy < 0 || iz < 0 || ix >= N || iy >= N || iz >= N) return 0;
+    const chunk = this.chunkAt(ix, iy, iz, false);
+    if (!chunk) return 0;
+    return chunk[(ix & 31) | ((iy & 31) << 5) | ((iz & 31) << 10)];
+  }
+
+  set(ix: number, iy: number, iz: number, t: number) {
+    if (ix < 0 || iy < 0 || iz < 0 || ix >= N || iy >= N || iz >= N) return;
+    const chunk = this.chunkAt(ix, iy, iz, true);
+    if (!chunk) return;
+    chunk[(ix & 31) | ((iy & 31) << 5) | ((iz & 31) << 10)] = t;
+  }
+}
+
 export type World = {
-  vox: Uint8Array;
+  vox: ChunkVolume;
   spawn: V3;
   steward: V3;
   camp: V3;
@@ -83,10 +127,6 @@ function fbm(x: number, y: number, z: number): number {
   return noise3(x, y, z) * 0.58 + noise3(x * 2.1, y * 2.1, z * 2.1) * 0.27 + noise3(x * 4.2, y * 4.2, z * 4.2) * 0.15;
 }
 
-function vidx(x: number, y: number, z: number): number {
-  return x + y * N + z * N * N;
-}
-
 export function upOf(x: number, y: number, z: number): V3 {
   return vnorm({ x: x - CENTER, y: y - CENTER, z: z - CENTER });
 }
@@ -100,7 +140,7 @@ export function voxelAt(world: World, x: number, y: number, z: number): number {
   const iy = Math.floor(y);
   const iz = Math.floor(z);
   if (ix < 0 || iy < 0 || iz < 0 || ix >= N || iy >= N || iz >= N) return AIR;
-  return world.vox[vidx(ix, iy, iz)];
+  return world.vox.get(ix, iy, iz);
 }
 
 function blocksBody(id: number): boolean {
@@ -163,20 +203,20 @@ export function snapFeet(world: World, x: number, y: number, z: number): V3 | nu
   return { x: CENTER + ux * s, y: CENTER + uy * s, z: CENTER + uz * s };
 }
 
-function setV(vox: Uint8Array, x: number, y: number, z: number, t: number) {
+function setV(vox: ChunkVolume, x: number, y: number, z: number, t: number) {
   const ix = Math.floor(x);
   const iy = Math.floor(y);
   const iz = Math.floor(z);
   if (ix < 1 || iy < 1 || iz < 1 || ix >= N - 1 || iy >= N - 1 || iz >= N - 1) return;
-  vox[vidx(ix, iy, iz)] = t;
+  vox.set(ix, iy, iz, t);
 }
 
-function getV(vox: Uint8Array, x: number, y: number, z: number): number {
+function getV(vox: ChunkVolume, x: number, y: number, z: number): number {
   const ix = Math.floor(x);
   const iy = Math.floor(y);
   const iz = Math.floor(z);
   if (ix < 0 || iy < 0 || iz < 0 || ix >= N || iy >= N || iz >= N) return AIR;
-  return vox[vidx(ix, iy, iz)];
+  return vox.get(ix, iy, iz);
 }
 
 function relief(dx: number, dy: number, dz: number): number {
@@ -191,8 +231,25 @@ function rotY(d: V3, ang: number): V3 {
   return vnorm({ x: d.x * c - d.z * s, y: d.y, z: d.x * s + d.z * c });
 }
 
+function rotAxis(v: V3, axis: V3, ang: number): V3 {
+  const c = Math.cos(ang);
+  const s = Math.sin(ang);
+  const k = vnorm(axis);
+  const cr = {
+    x: k.y * v.z - k.z * v.y,
+    y: k.z * v.x - k.x * v.z,
+    z: k.x * v.y - k.y * v.x,
+  };
+  const dot = k.x * v.x + k.y * v.y + k.z * v.z;
+  return vnorm({
+    x: v.x * c + cr.x * s + k.x * dot * (1 - c),
+    y: v.y * c + cr.y * s + k.y * dot * (1 - c),
+    z: v.z * c + cr.z * s + k.z * dot * (1 - c),
+  });
+}
+
 export function generateWorld(): World {
-  const vox = new Uint8Array(N * N * N);
+  const vox = new ChunkVolume();
   const rHi = SEA + 10;
   const rLo = SEA - 14;
   const rHi2 = rHi * rHi;
@@ -225,7 +282,7 @@ export function generateWorld(): World {
         else if (coast < 0.85) mat = depth < 1 ? SAND : STONE;
         else if (coast < 3.5) mat = depth < 1.05 ? GRASS : STONE;
         else mat = depth < 0.85 ? MOSS : STONE;
-        vox[vidx(x, y, z)] = mat;
+        vox.set(x, y, z, mat);
       }
     }
   }
@@ -247,9 +304,9 @@ export function generateWorld(): World {
     const tz = p.z - up.z * radial;
     const tang = Math.hypot(tx, ty, tz);
     if (tang > 18 || radial < flatR - 6 || radial > flatR + 14) return;
-    if (radial < flatR - 1.05) vox[vidx(x, y, z)] = STONE;
-    else if (radial < flatR) vox[vidx(x, y, z)] = tang < 5 || Math.abs(tx) < 1.2 ? PATH : GRASS;
-    else vox[vidx(x, y, z)] = AIR;
+    if (radial < flatR - 1.05) vox.set(x, y, z, STONE);
+    else if (radial < flatR) vox.set(x, y, z, tang < 5 || Math.abs(tx) < 1.2 ? PATH : GRASS);
+    else vox.set(x, y, z, AIR);
   });
 
   function stamp(e: number, u: number, n: number, t: number) {
@@ -339,16 +396,19 @@ export function generateWorld(): World {
   const loomP = hamlet(vox, loomDir, "loom");
   const campP = hamlet(vox, campDir, "camp");
 
-  const mtnDir = rotY(SPAWN_DIR, 1.35);
-  const lakeDir = rotY(mtnDir, 0.2);
-  const mouthDir = rotY(mtnDir, 0.4);
-  const ventDir = rotY(SPAWN_DIR, -2.35);
+  // Peak is a short walk out the gate (−north). The vent stands off the east road.
+  const mtnDir = rotAxis(SPAWN_DIR, east, 0.11);
+  const lakeDir = rotAxis(mtnDir, east, 0.05);
+  const mouthDir = rotAxis(mtnDir, north, 0.035);
+  const ventDir = rotAxis(SPAWN_DIR, north, -0.2);
   raiseMountain(vox, mtnDir);
   raiseVolcano(vox, ventDir);
   carvePool(vox, lakeDir, 11, 1.7);
-  carveChannel(vox, rotY(mtnDir, 0.06), lakeDir, 2.4, 18);
-  carveChannel(vox, lakeDir, mouthDir, 3.6, 16);
+  carveChannel(vox, rotY(mtnDir, 0.03), lakeDir, 2.6, 14);
+  carveChannel(vox, lakeDir, mouthDir, 3.4, 12);
   digCave(vox, mtnDir);
+  layPath(vox, SPAWN_DIR, mtnDir);
+  layPath(vox, mtnDir, ventDir);
 
   // Scatter trees on dry grass, away from the hold and the outlying roofs.
   const holdP = at(0, 2, 0);
@@ -423,7 +483,7 @@ function forEachNear(c: V3, reach: number, fn: (x: number, y: number, z: number)
   }
 }
 
-function hamlet(vox: Uint8Array, dir: V3, kind: "mill" | "loom" | "camp"): V3 {
+function hamlet(vox: ChunkVolume, dir: V3, kind: "mill" | "loom" | "camp"): V3 {
   const base = SEA + (kind === "camp" ? 0.9 : 1.2);
   flattenPad(vox, dir, base, kind === "camp" ? 9 : 7);
   const fr = tangentFrame(dir);
@@ -479,7 +539,7 @@ function hamlet(vox: Uint8Array, dir: V3, kind: "mill" | "loom" | "camp"): V3 {
   return vadd({ x: CENTER, y: CENTER, z: CENTER }, vscale(dir, base + 1.4));
 }
 
-function flattenPad(vox: Uint8Array, dir: V3, radius: number, tangR: number) {
+function flattenPad(vox: ChunkVolume, dir: V3, radius: number, tangR: number) {
   const c = { x: CENTER + dir.x * radius, y: CENTER + dir.y * radius, z: CENTER + dir.z * radius };
   forEachNear(c, tangR + 12, (x, y, z) => {
     const p = { x: x + 0.5 - CENTER, y: y + 0.5 - CENTER, z: z + 0.5 - CENTER };
@@ -489,9 +549,9 @@ function flattenPad(vox: Uint8Array, dir: V3, radius: number, tangR: number) {
     const tz = p.z - dir.z * radial;
     if (Math.hypot(tx, ty, tz) > tangR) return;
     if (radial < radius - 4 || radial > radius + 8) return;
-    if (radial < radius - 1) vox[vidx(x, y, z)] = STONE;
-    else if (radial < radius) vox[vidx(x, y, z)] = PATH;
-    else vox[vidx(x, y, z)] = AIR;
+    if (radial < radius - 1) vox.set(x, y, z, STONE);
+    else if (radial < radius) vox.set(x, y, z, PATH);
+    else vox.set(x, y, z, AIR);
   });
 }
 
@@ -508,7 +568,7 @@ function surfacePoint(dir: V3, lift: number): V3 {
 
 /** Reshape the shell inside a tangent disc. `lift` is height above the sea. */
 function paintShell(
-  vox: Uint8Array,
+  vox: ChunkVolume,
   dir: V3,
   tangR: number,
   heightAt: (tang: number) => number | null,
@@ -530,17 +590,17 @@ function paintShell(
     const h = SEA + lift;
     const r = Math.hypot(px, py, pz);
     if (r > h + 0.15 && r < SEA + 6.5) {
-      vox[vidx(x, y, z)] = AIR;
+      vox.set(x, y, z, AIR);
       return;
     }
     if (r > h || r < h - 5.5) return;
-    vox[vidx(x, y, z)] = skin(lift, h - r);
+    vox.set(x, y, z, skin(lift, h - r));
   });
 }
 
-function raiseMountain(vox: Uint8Array, dir: V3) {
-  const R = 26;
-  const H = 16;
+function raiseMountain(vox: ChunkVolume, dir: V3) {
+  const R = 22;
+  const H = 32;
   paintShell(
     vox,
     dir,
@@ -557,9 +617,9 @@ function raiseMountain(vox: Uint8Array, dir: V3) {
   );
 }
 
-function raiseVolcano(vox: Uint8Array, dir: V3) {
-  const R = 22;
-  const H = 13;
+function raiseVolcano(vox: ChunkVolume, dir: V3) {
+  const R = 18;
+  const H = 20;
   paintShell(
     vox,
     dir,
@@ -581,14 +641,16 @@ function raiseVolcano(vox: Uint8Array, dir: V3) {
       vscale(fr.east, Math.sin(i * 0.65) * 1.3),
     );
     setV(vox, p.x, p.y, p.z, MAGMA);
-    if (i % 3 === 0) {
-      const spark = vadd(p, vscale(dir, 1 + (i % 2)));
-      setV(vox, spark.x, spark.y, spark.z, EMBER);
-    }
+  }
+  for (let u = 1; u <= 22; u++) {
+    const sway = Math.sin(u * 0.7) * 0.8;
+    const p = vadd(surfacePoint(dir, 6 + u), vscale(fr.east, sway));
+    setV(vox, p.x, p.y, p.z, EMBER);
+    if (u % 3 === 0) setV(vox, p.x, p.y, p.z, MAGMA);
   }
 }
 
-function carvePool(vox: Uint8Array, dir: V3, radius: number, depth: number) {
+function carvePool(vox: ChunkVolume, dir: V3, radius: number, depth: number) {
   paintShell(
     vox,
     dir,
@@ -601,7 +663,7 @@ function carvePool(vox: Uint8Array, dir: V3, radius: number, depth: number) {
   );
 }
 
-function carveChannel(vox: Uint8Array, a: V3, b: V3, width: number, steps: number) {
+function carveChannel(vox: ChunkVolume, a: V3, b: V3, width: number, steps: number) {
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const dir = vnorm(vadd(vscale(a, 1 - t), vscale(b, t)));
@@ -615,26 +677,72 @@ function carveChannel(vox: Uint8Array, a: V3, b: V3, width: number, steps: numbe
   }
 }
 
-function digCave(vox: Uint8Array, dir: V3) {
+function digCave(vox: ChunkVolume, dir: V3) {
   const fr = tangentFrame(dir);
-  for (let i = -6; i <= 16; i++) {
+  const de =
+    SPAWN_DIR.x * fr.east.x + SPAWN_DIR.y * fr.east.y + SPAWN_DIR.z * fr.east.z;
+  const dn =
+    SPAWN_DIR.x * fr.north.x + SPAWN_DIR.y * fr.north.y + SPAWN_DIR.z * fr.north.z;
+  const face = Math.hypot(de, dn) || 1;
+  const me = (de / face) * 11;
+  const mn = (dn / face) * 11;
+  for (let i = -4; i <= 12; i++) {
     for (let u = -3; u <= 3; u++) {
       for (let n = -3; n <= 3; n++) {
-        const bulb = i < -2 ? 2.2 : 0;
-        if (u * u + n * n > 6.5 + bulb) continue;
-        const p = vadd(vadd(vadd(surfacePoint(dir, -7 + u * 0.15), vscale(fr.east, i)), vscale(dir, u)), vscale(fr.north, n));
-        const wall = u * u + n * n > 3.6 + bulb * 0.4;
+        const bulb = i < 0 ? 2.4 : 0;
+        if (u * u + n * n > 7 + bulb) continue;
+        const alongE = me * (i / 12);
+        const alongN = mn * (i / 12);
+        const p = vadd(
+          vadd(vadd(surfacePoint(dir, -8 + u * 0.12), vscale(fr.east, alongE)), vscale(dir, u)),
+          vscale(fr.north, alongN + n),
+        );
+        const wall = u * u + n * n > 3.8 + bulb * 0.35;
         if (!wall) setV(vox, p.x, p.y, p.z, AIR);
-        else if ((i * 3 + n * 5 + u) % 4 === 0) setV(vox, p.x, p.y, p.z, GEM);
+        else if ((i * 3 + n * 5 + u) % 3 === 0) setV(vox, p.x, p.y, p.z, GEM);
         else setV(vox, p.x, p.y, p.z, STONE);
       }
     }
   }
-  for (let u = 0; u <= 9; u++) {
-    for (let e = -1; e <= 1; e++) {
-      for (let n = -1; n <= 1; n++) {
-        const p = vadd(vadd(surfacePoint(dir, -u), vscale(fr.east, 14 + e * 0.2)), vscale(fr.north, n));
+  for (let u = 0; u <= 10; u++) {
+    for (let e = -2; e <= 2; e++) {
+      for (let n = -2; n <= 2; n++) {
+        if (e * e + n * n > 6) continue;
+        const p = vadd(vadd(surfacePoint(dir, 1 - u), vscale(fr.east, me + e)), vscale(fr.north, mn + n));
         setV(vox, p.x, p.y, p.z, AIR);
+      }
+    }
+  }
+  for (let s = -2; s <= 2; s++) {
+    for (let u = 0; u <= 6; u++) {
+      const post = vadd(vadd(surfacePoint(dir, u), vscale(fr.east, me + (s < 0 ? -3 : 3))), vscale(fr.north, mn + s));
+      setV(vox, post.x, post.y, post.z, TIMBER);
+    }
+  }
+  const banner = vadd(vadd(surfacePoint(dir, 7), vscale(fr.east, me)), vscale(fr.north, mn));
+  setV(vox, banner.x, banner.y, banner.z, BANNER);
+  const banner2 = vadd(banner, vscale(dir, 1));
+  setV(vox, banner2.x, banner2.y, banner2.z, BANNER);
+}
+
+function layPath(vox: ChunkVolume, a: V3, b: V3) {
+  const steps = 42;
+  for (let i = 2; i < steps; i++) {
+    const t = i / steps;
+    const dir = vnorm(vadd(vscale(a, 1 - t), vscale(b, t)));
+    const fr = tangentFrame(dir);
+    for (let w = -1; w <= 1; w++) {
+      const p = vadd(surfacePoint(dir, 0.2), vscale(fr.east, w));
+      const under = getV(vox, p.x, p.y, p.z);
+      if (under === WATER || under === MAGMA) continue;
+      setV(vox, p.x, p.y, p.z, PATH);
+      setV(vox, p.x + dir.x, p.y + dir.y, p.z + dir.z, AIR);
+      setV(vox, p.x + dir.x * 2, p.y + dir.y * 2, p.z + dir.z * 2, AIR);
+    }
+    if (i % 8 === 0 && i > 12) {
+      for (let u = 1; u <= 5; u++) {
+        const post = vadd(vadd(surfacePoint(dir, u * 0.85), vscale(fr.east, 3.4)), vscale(dir, 0.2));
+        setV(vox, post.x, post.y, post.z, u >= 4 ? BANNER : TIMBER);
       }
     }
   }
