@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* The GitHub Pages build uses a different Vite root, so name this tree explicitly. */
+@source ".";
 
 @theme {
   --font-display: "Cinzel", Palatino, "Palatino Linotype", serif;

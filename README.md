@@ -22,7 +22,7 @@ Pre-alpha. The Atoll slice is playable solo in the browser; multiplayer, progres
 
 ### Ashen Hold
 
-[`hold/`](hold/) is a second client, not a replacement for the Atoll engine in `src/`. It is a vale on a voxel globe: radial gravity, a skill sheet, chat, and ravens that carry notes and pinned maps between the Hold, the Mill, the Loom, the Camp, and whoever shares your banner. [docs/engineering.md](docs/engineering.md) still governs `src/`. From `hold/`: `npm install`, then `npm run dev` (port 8090, so it does not take the Atoll server's 8080).
+[`hold/`](hold/) is a second client, not a replacement for the Atoll engine in `src/`. It is a vale on a voxel globe: radial gravity, a skill sheet, chat, and ravens that carry notes and pinned maps between the Hold, the Mill, the Loom, the Camp, and whoever shares your banner. [Play it on GitHub Pages](https://blakelapierre.github.io/meridian/hold/play/). That page is the static build in [`hold/play/`](hold/play/): solo works, including the towns and the ravens. A shared banner still needs the herald (`/api/rtc`), which Pages does not run. [docs/engineering.md](docs/engineering.md) still governs `src/`. From `hold/`: `npm install`, then `npm run dev` (port 8090, so it does not take the Atoll server's 8080). Rebuild the page with `PAGES_OUT=play npm run build:pages`.
 
 
 ## Run it

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent, type PointerEvent as React
 import { Copy, Crown, Crosshair, Eye, Swords, Volume2, VolumeX } from "lucide-react";
 import { startGame, type GameApi, type Hud } from "@/game/main";
 
+const staticPage = import.meta.env.BASE_URL !== "/";
+
 function remember(name: string) {
   try {
     localStorage.setItem("ashen-hold-name", name);
@@ -198,6 +200,11 @@ export function AshenHold() {
                 Host a realm
                 <span className="mt-1 block text-sm font-normal text-mist">You are Warden. Share a banner code.</span>
               </button>
+              {staticPage ? (
+                <p className="text-pretty text-xs text-mist">
+                  This page is only the vale. Enter it alone. A shared banner needs the herald, and GitHub Pages does not keep one.
+                </p>
+              ) : null}
               {joinOpen ? (
                 <form onSubmit={join} className="flex flex-col gap-2">
                   <input
