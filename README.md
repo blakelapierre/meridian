@@ -20,6 +20,11 @@ Pre-alpha. The Atoll slice is playable solo in the browser; multiplayer, progres
 | Tests | 341 Node tests; 337 pass. The 4 two-browser WebRTC tests report **KNOWN-BLOCKED** where the machine's WebRTC policy stops peer data channels (a probe checks first), and run where it does not (as of 2 Nov 2026) |
 | Network phases | P0 Link and parts of P2 (signed, witnessed shots) and P3 (dig op hash) are exercised by browser tests; nothing beyond one island yet. Each phase P0–P9 is a [`roadmap` issue](https://github.com/blakelapierre/meridian/labels/roadmap); see [CONTRIBUTING.md](CONTRIBUTING.md) |
 
+### Ashen Hold
+
+[`hold/`](hold/) is a second client, not a replacement for the Atoll engine in `src/`. It is a vale on a voxel globe: radial gravity, a skill sheet, chat, and ravens that carry notes and pinned maps between the Hold, the Mill, the Loom, the Camp, and whoever shares your banner. [docs/engineering.md](docs/engineering.md) still governs `src/`. From `hold/`: `npm install`, then `npm run dev` (port 8090, so it does not take the Atoll server's 8080).
+
+
 ## Run it
 
 ```sh
